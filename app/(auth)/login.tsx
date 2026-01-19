@@ -1,0 +1,301 @@
+import { API_URL } from "@/constants/env";
+import { authService } from "@/services/auth";
+import { useRouter } from "expo-router";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+
+export default function LoginScreen() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [testMessage, setTestMessage] = useState("");
+  const [api, setApi] = useState("");
+
+  const handleLogin = async () => {
+    setError("");
+
+    if (!email.trim() || !password.trim()) {
+      setError("Email et mot de passe requis.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await authService.login({ username: email.trim(), password });
+      router.replace("/(app)");
+    } catch (err: any) {
+      if (err?.message === "UNAUTHORIZED_GROUP") {
+        setError("Groupe non autorise.");
+      } else if (err?.graphQLErrors?.length) {
+        setError(err.graphQLErrors[0]?.message || "Connexion impossible.");
+      } else if (err?.message) {
+        setError(`Erreur reseau: ${err}`);
+      } else {
+        setError("Connexion impossible. Verifie tes identifiants.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const testConnection = async () => {
+    setTestMessage("");
+    try {
+      if (!API_URL) {
+        setTestMessage("EXPO_PUBLIC_API_URL manquante.");
+        return;
+      }
+
+      const response = await fetch(API_URL, { method: "GET" });
+      setTestMessage(`Connexion OK: ${response.status} ${response.statusText}`);
+    } catch (err: any) {
+      setTestMessage(`Connexion echouee: ${err?.message || "Erreur reseau"}`);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.container}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.header}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoText}>PW</Text>
+            </View>
+            <Text style={styles.title}>Pro-Win</Text>
+            <Text style={styles.subtitle}>Module prospection</Text>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Connexion</Text>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {testMessage ? (
+              <Text style={styles.info}>{testMessage}</Text>
+            ) : null}
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Email ou nom d'utilisateur</Text>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Email ou nom d'utilisateur"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                style={styles.input}
+                editable={!isLoading}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <View style={styles.passwordRow}>
+                <Text style={styles.label}>Mot de passe</Text>
+                <Pressable
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  disabled={isLoading}
+                >
+                  <Text style={styles.toggleText}>
+                    {showPassword ? "Masquer" : "Afficher"}
+                  </Text>
+                </Pressable>
+              </View>
+              <TextInput
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Mot de passe"
+                secureTextEntry={!showPassword}
+                style={styles.input}
+                editable={!isLoading}
+              />
+            </View>
+
+            <Pressable
+              onPress={handleLogin}
+              disabled={isLoading}
+              style={({ pressed }) => [
+                styles.button,
+                pressed && !isLoading ? styles.buttonPressed : null,
+                isLoading ? styles.buttonDisabled : null,
+              ]}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.buttonText}>Se connecter</Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              onPress={testConnection}
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                pressed ? styles.buttonPressed : null,
+              ]}
+            >
+              <Text style={styles.secondaryButtonText}>
+                Tester la connexion
+              </Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
+  container: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    padding: 24,
+    justifyContent: "center",
+  },
+  header: {
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  logoBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  logoText: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  subtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    color: "#64748B",
+  },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#0F172A",
+    marginBottom: 16,
+  },
+  error: {
+    marginBottom: 12,
+    color: "#DC2626",
+    backgroundColor: "#FEE2E2",
+    padding: 10,
+    borderRadius: 10,
+    fontSize: 13,
+  },
+  info: {
+    marginBottom: 12,
+    color: "#0F172A",
+    backgroundColor: "#E0F2FE",
+    padding: 10,
+    borderRadius: 10,
+    fontSize: 13,
+  },
+  field: {
+    marginBottom: 14,
+  },
+  label: {
+    fontSize: 14,
+    color: "#0F172A",
+    marginBottom: 6,
+    fontWeight: "500",
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#0F172A",
+    backgroundColor: "#FFFFFF",
+  },
+  passwordRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  toggleText: {
+    fontSize: 13,
+    color: "#2563EB",
+    fontWeight: "600",
+  },
+  button: {
+    marginTop: 6,
+    backgroundColor: "#2563EB",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  buttonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  buttonDisabled: {
+    opacity: 0.7,
+  },
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  secondaryButton: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#CBD5F5",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  secondaryButtonText: {
+    color: "#2563EB",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+});
