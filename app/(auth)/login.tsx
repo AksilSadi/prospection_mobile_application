@@ -1,5 +1,5 @@
-import { API_URL } from "@/constants/env";
 import { authService } from "@/services/auth";
+import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
@@ -22,8 +22,6 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [testMessage, setTestMessage] = useState("");
-  const [api, setApi] = useState("");
 
   const handleLogin = async () => {
     setError("");
@@ -52,21 +50,6 @@ export default function LoginScreen() {
     }
   };
 
-  const testConnection = async () => {
-    setTestMessage("");
-    try {
-      if (!API_URL) {
-        setTestMessage("EXPO_PUBLIC_API_URL manquante.");
-        return;
-      }
-
-      const response = await fetch(API_URL, { method: "GET" });
-      setTestMessage(`Connexion OK: ${response.status} ${response.statusText}`);
-    } catch (err: any) {
-      setTestMessage(`Connexion echouee: ${err?.message || "Erreur reseau"}`);
-    }
-  };
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
@@ -79,7 +62,7 @@ export default function LoginScreen() {
         >
           <View style={styles.header}>
             <View style={styles.logoBadge}>
-              <Text style={styles.logoText}>PW</Text>
+              <Feather name="user" size={32} color="#FFFFFF" />
             </View>
             <Text style={styles.title}>Pro-Win</Text>
             <Text style={styles.subtitle}>Module prospection</Text>
@@ -89,9 +72,6 @@ export default function LoginScreen() {
             <Text style={styles.cardTitle}>Connexion</Text>
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
-            {testMessage ? (
-              <Text style={styles.info}>{testMessage}</Text>
-            ) : null}
 
             <View style={styles.field}>
               <Text style={styles.label}>Email ou nom d'utilisateur</Text>
@@ -143,18 +123,6 @@ export default function LoginScreen() {
               ) : (
                 <Text style={styles.buttonText}>Se connecter</Text>
               )}
-            </Pressable>
-
-            <Pressable
-              onPress={testConnection}
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                pressed ? styles.buttonPressed : null,
-              ]}
-            >
-              <Text style={styles.secondaryButtonText}>
-                Tester la connexion
-              </Text>
             </Pressable>
           </View>
         </ScrollView>
