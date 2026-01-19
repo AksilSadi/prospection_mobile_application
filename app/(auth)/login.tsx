@@ -75,16 +75,19 @@ export default function LoginScreen() {
 
             <View style={styles.field}>
               <Text style={styles.label}>Email ou nom d'utilisateur</Text>
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Email ou nom d'utilisateur"
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                style={styles.input}
-                editable={!isLoading}
-              />
+              <View style={styles.inputRow}>
+                <Feather name="mail" size={18} color="#94A3B8" />
+                <TextInput
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Email ou nom d'utilisateur"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  style={styles.input}
+                  editable={!isLoading}
+                />
+              </View>
             </View>
 
             <View style={styles.field}>
@@ -99,14 +102,17 @@ export default function LoginScreen() {
                   </Text>
                 </Pressable>
               </View>
-              <TextInput
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Mot de passe"
-                secureTextEntry={!showPassword}
-                style={styles.input}
-                editable={!isLoading}
-              />
+              <View style={styles.inputRow}>
+                <Feather name="lock" size={18} color="#94A3B8" />
+                <TextInput
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Mot de passe"
+                  secureTextEntry={!showPassword}
+                  style={styles.input}
+                  editable={!isLoading}
+                />
+              </View>
             </View>
 
             <Pressable
@@ -213,15 +219,21 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     fontWeight: "500",
   },
-  input: {
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderColor: "#E2E8F0",
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: "#0F172A",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 6,
     backgroundColor: "#FFFFFF",
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    color: "#0F172A",
   },
   passwordRow: {
     flexDirection: "row",
