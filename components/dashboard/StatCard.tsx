@@ -1,15 +1,16 @@
 import { Feather } from "@expo/vector-icons";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, ViewStyle } from "react-native";
 
 type StatCardProps = {
   title: string;
   value: string | number;
   icon: keyof typeof Feather.glyphMap;
+  style?: ViewStyle;
 };
 
-export default function StatCard({ title, value, icon }: StatCardProps) {
+export default function StatCard({ title, value, icon, style }: StatCardProps) {
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, style]}>
       <View style={styles.header}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
@@ -25,8 +26,6 @@ export default function StatCard({ title, value, icon }: StatCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    flex: 1,
-    minWidth: 140,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 12,

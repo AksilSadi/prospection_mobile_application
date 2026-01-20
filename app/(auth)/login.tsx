@@ -74,7 +74,7 @@ export default function LoginScreen() {
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             <View style={styles.field}>
-              <Text style={styles.label}>Email ou nom d'utilisateur</Text>
+              <Text style={styles.label}>Email ou nom d&apos;utilisateur</Text>
               <View style={styles.inputRow}>
                 <Feather name="mail" size={18} color="#94A3B8" />
                 <TextInput
@@ -109,6 +109,9 @@ export default function LoginScreen() {
                   onChangeText={setPassword}
                   placeholder="Mot de passe"
                   secureTextEntry={!showPassword}
+                  textContentType="password"
+                  autoComplete="password"
+                  autoCorrect={false}
                   style={styles.input}
                   editable={!isLoading}
                 />

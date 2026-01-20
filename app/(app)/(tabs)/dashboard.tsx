@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { authService } from "@/services/auth";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { calculateRank, RANKS } from "@/utils/business/ranks";
@@ -10,6 +10,7 @@ import StatCard from "@/components/dashboard/StatCard";
 export default function DashboardScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const { width } = useWindowDimensions();
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -77,6 +78,11 @@ export default function DashboardScreen() {
     return map;
   }, [profile]);
 
+  const columns = width >= 900 ? 3 : 2;
+  const horizontalPadding = 16;
+  const gap = 12;
+  const cardWidth = (width - horizontalPadding * 2 - gap * (columns - 1)) / columns;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.pageTitle}>Tableau de bord</Text>
@@ -96,9 +102,24 @@ export default function DashboardScreen() {
 
 
           <View style={styles.statsGrid}>
-            <StatCard title="Contrats signes" value={stats.contratsSignes} icon="check-circle" />
-            <StatCard title="Immeubles visites" value={stats.immeublesVisites} icon="home" />
-            <StatCard title="Rendez-vous pris" value={stats.rendezVousPris} icon="clock" />
+            <StatCard
+              title="Contrats signes"
+              value={stats.contratsSignes}
+              icon="check-circle"
+              style={{ width: cardWidth, alignSelf: "flex-start" }}
+            />
+            <StatCard
+              title="Immeubles visites"
+              value={stats.immeublesVisites}
+              icon="home"
+              style={{ width: cardWidth, alignSelf: "flex-start" }}
+            />
+            <StatCard
+              title="Rendez-vous pris"
+              value={stats.rendezVousPris}
+              icon="clock"
+              style={{ width: cardWidth, alignSelf: "flex-start" }}
+            />
             <StatCard
               title="Taux de refus"
               value={
@@ -107,6 +128,7 @@ export default function DashboardScreen() {
                   : `${Math.round((stats.refus / totalPortesProspectees) * 100)}%`
               }
               icon="trending-down"
+              style={{ width: cardWidth, alignSelf: "flex-start" }}
             />
           </View>
         </>
@@ -142,5 +164,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 12,
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
   },
 });

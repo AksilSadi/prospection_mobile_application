@@ -1,9 +1,10 @@
+import { useProfileMenu } from "@/hooks/use-profile-menu";
+import { authService } from "@/services/auth";
+import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { authService } from "@/services/auth";
-import { useProfileMenu } from "@/hooks/use-profile-menu";
 
 export default function ProfileMenuOverlay() {
   const router = useRouter();
@@ -25,7 +26,10 @@ export default function ProfileMenuOverlay() {
       <Pressable style={styles.backdrop} onPress={close} />
       <View style={[styles.panel, { top: insets.top + 52 }]}>
         <Pressable style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Deconnexion</Text>
+          <View style={styles.logoutContent}>
+            <Feather name="log-out" size={16} color="#FFFFFF" />
+            <Text style={styles.logoutText}>Deconnecter</Text>
+          </View>
         </Pressable>
       </View>
     </View>
@@ -61,6 +65,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 10,
     alignItems: "center",
+  },
+  logoutContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   logoutText: {
     color: "#FFFFFF",
