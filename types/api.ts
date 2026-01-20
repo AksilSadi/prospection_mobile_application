@@ -27,3 +27,73 @@ export class ApiException extends Error {
     this.name = 'ApiException';
   }
 }
+
+export type Statistic = {
+  id: number;
+  commercialId?: number | null;
+  managerId?: number | null;
+  immeubleId?: number | null;
+  zoneId?: number | null;
+  contratsSignes: number;
+  immeublesVisites: number;
+  rendezVousPris: number;
+  refus: number;
+};
+
+export type Porte = {
+  id: number;
+  numero: string;
+  nomPersonnalise?: string | null;
+  etage: number;
+  immeubleId: number;
+  statut: string;
+  rdvDate?: string | null;
+  rdvTime?: string | null;
+  commentaire?: string | null;
+};
+
+export type Immeuble = {
+  id: number;
+  adresse: string;
+  nbEtages: number;
+  nbPortesParEtage: number;
+  ascenseurPresent?: boolean | null;
+  digitalCode?: string | null;
+  commercialId?: number | null;
+  managerId?: number | null;
+  zoneId?: number | null;
+  portes?: Porte[];
+};
+
+export type Commercial = {
+  id: number;
+  nom: string;
+  prenom: string;
+  email?: string | null;
+  numTel?: string | null;
+  managerId?: number | null;
+  immeubles?: Immeuble[];
+  statistics?: Statistic[];
+};
+
+export type Manager = {
+  id: number;
+  nom: string;
+  prenom: string;
+  email?: string | null;
+  numTelephone?: string | null;
+  immeubles?: Immeuble[];
+  statistics?: Statistic[];
+  personalStatistics?: Statistic[];
+};
+
+export type CommercialTeamRanking = {
+  position: number;
+  total: number;
+  points: number;
+  trend?: string | null;
+  managerNom?: string | null;
+  managerPrenom?: string | null;
+  managerEmail?: string | null;
+  managerNumTel?: string | null;
+};

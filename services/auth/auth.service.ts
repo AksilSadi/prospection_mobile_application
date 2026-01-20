@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   accessToken: 'access_token',
   refreshToken: 'refresh_token',
   expiresAt: 'token_expires_at',
+  userId: 'user_id',
 };
 
 const LOGIN_MUTATION = `
@@ -156,6 +157,13 @@ export class AuthService {
     return SecureStore.getItemAsync(STORAGE_KEYS.accessToken);
   }
 
+  async getUserId(): Promise<number | null> {
+    const value = await SecureStore.getItemAsync(STORAGE_KEYS.userId);
+    if (!value) return null;
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
   async getRefreshToken(): Promise<string | null> {
     return SecureStore.getItemAsync(STORAGE_KEYS.refreshToken);
   }
@@ -174,12 +182,14 @@ export class AuthService {
     await SecureStore.setItemAsync(STORAGE_KEYS.refreshToken, authResponse.refresh_token);
     const expiresAt = Math.floor(Date.now() / 1000) + authResponse.expires_in;
     await SecureStore.setItemAsync(STORAGE_KEYS.expiresAt, expiresAt.toString());
+    await SecureStore.setItemAsync(STORAGE_KEYS.userId, String(authResponse.userId));
   }
 
   private async clearAuthData(): Promise<void> {
     await SecureStore.deleteItemAsync(STORAGE_KEYS.accessToken);
     await SecureStore.deleteItemAsync(STORAGE_KEYS.refreshToken);
     await SecureStore.deleteItemAsync(STORAGE_KEYS.expiresAt);
+    await SecureStore.deleteItemAsync(STORAGE_KEYS.userId);
   }
 
   async getUserEmail(): Promise<string | null> {
