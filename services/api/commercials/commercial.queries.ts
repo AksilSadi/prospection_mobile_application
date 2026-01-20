@@ -16,6 +16,7 @@ export const GET_COMMERCIAL_FULL = `
         digitalCode
         commercialId
         zoneId
+        updatedAt
         portes {
           id
           numero

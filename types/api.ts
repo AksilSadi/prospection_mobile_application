@@ -57,6 +57,7 @@ export type Immeuble = {
   adresse: string;
   nbEtages: number;
   nbPortesParEtage: number;
+  updatedAt?: string;
   ascenseurPresent?: boolean | null;
   digitalCode?: string | null;
   commercialId?: number | null;

@@ -14,6 +14,7 @@ export const GET_MANAGER_PERSONAL = `
         ascenseurPresent
         digitalCode
         managerId
+        updatedAt
         portes {
           id
           numero
