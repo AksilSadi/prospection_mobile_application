@@ -1,3 +1,5 @@
+import AddImmeubleSheet from "@/components/immeubles/AddImmeubleSheet";
+import { useCreateImmeuble } from "@/hooks/api/use-create-immeuble";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
 import type { Immeuble } from "@/types/api";
@@ -21,6 +23,7 @@ export default function ImmeublesScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [isAddOpen, setIsAddOpen] = useState(false);
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -33,6 +36,7 @@ export default function ImmeublesScreen() {
   }, []);
 
   const { data: profile, loading, error } = useWorkspaceProfile(userId, role);
+  const { create, loading: creating } = useCreateImmeuble();
 
   const immeubles = useMemo(
     () => (profile?.immeubles || []) as Immeuble[],
@@ -133,9 +137,29 @@ export default function ImmeublesScreen() {
         </View>
       </ScrollView>
 
-      <Pressable style={[styles.fab, { bottom: insets.bottom + 72 }]}>
+      <Pressable
+        style={[styles.fab, { bottom: insets.bottom + 72 }]}
+        onPress={() => setIsAddOpen(true)}
+      >
         <Feather name="plus" size={20} color="#FFFFFF" />
       </Pressable>
+
+      <AddImmeubleSheet
+        open={isAddOpen}
+        onClose={() => setIsAddOpen(false)}
+        loading={creating}
+        ownerId={userId}
+        ownerRole={role}
+        onSave={async payload => {
+          const result = await create(payload);
+          if (result) {
+            console.log("[Immeuble] added", result.id);
+            setIsAddOpen(false);
+          } else {
+            console.log("[Immeuble] add failed");
+          }
+        }}
+      />
     </View>
   );
 }

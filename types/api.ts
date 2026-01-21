@@ -66,6 +66,19 @@ export type Immeuble = {
   portes?: Porte[];
 };
 
+export type CreateImmeubleInput = {
+  adresse: string;
+  nbEtages: number;
+  nbPortesParEtage: number;
+  commercialId?: number;
+  managerId?: number;
+  zoneId?: number;
+  ascenseurPresent?: boolean | null;
+  digitalCode?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
 export type Commercial = {
   id: number;
   nom: string;
