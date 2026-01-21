@@ -45,3 +45,16 @@ export const GET_MANAGER_PERSONAL = `
     }
   }
 `;
+
+export const GET_MANAGERS = `
+  query GetManagers {
+    managers {
+      id
+      nom
+      prenom
+      email
+      numTelephone
+      directeurId
+    }
+  }
+`;

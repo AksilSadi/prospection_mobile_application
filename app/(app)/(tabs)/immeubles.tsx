@@ -50,6 +50,19 @@ export default function ImmeublesScreen() {
         <Text style={styles.title}>Immeubles</Text>
         <Text style={styles.subtitle}>Vue globale de vos immeubles</Text>
 
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryValue}>{immeubles.length}</Text>
+            <Text style={styles.summaryLabel}>Immeubles</Text>
+          </View>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryValue}>
+              {immeubles.reduce((total, imm) => total + imm.nbEtages * imm.nbPortesParEtage, 0)}
+            </Text>
+            <Text style={styles.summaryLabel}>Portes totales</Text>
+          </View>
+        </View>
+
         <View style={styles.searchWrap}>
           <View style={[styles.searchBar, isTablet && styles.searchBarTablet]}>
             <Feather name="search" size={16} color="#94A3B8" />
@@ -172,6 +185,28 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: 12,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  summaryCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  summaryLabel: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#64748B",
   },
   helper: {
     fontSize: 13,

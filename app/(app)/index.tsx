@@ -2,9 +2,12 @@ import SwipeTabs from "@/components/navigation/SwipeTabs";
 import ProfileMenuOverlay from "@/components/ProfileMenuOverlay";
 import { ProfileMenuProvider, useProfileMenu } from "@/hooks/use-profile-menu";
 import { Feather } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
+import { LiveKitRoom } from "@livekit/react-native";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAutoAudio } from "@/hooks/audio/use-auto-audio";
+import { authService } from "@/services/auth";
 
 function Header() {
   const { open } = useProfileMenu();
@@ -21,10 +24,38 @@ function Header() {
 function AppContent() {
   const [index, setIndex] = useState(0);
   const routes = useMemo(() => ["dashboard", "immeubles", "historique"], []);
+  const [userId, setUserId] = useState<number | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadIdentity = async () => {
+      const id = await authService.getUserId();
+      const userRole = await authService.getUserRole();
+      setUserId(id);
+      setRole(userRole);
+    };
+    void loadIdentity();
+  }, []);
+
+  const { connectionDetails } = useAutoAudio(userId, role, true);
 
   return (
     <>
       <Header />
+      {connectionDetails ? (
+        <View style={styles.livekitHost}>
+          <LiveKitRoom
+            serverUrl={connectionDetails.serverUrl}
+            token={connectionDetails.participantToken}
+            connect
+            audio
+            video={false}
+            onConnected={() => console.log("[LiveKit] connected")}
+            onDisconnected={() => console.log("[LiveKit] disconnected")}
+            onError={(err) => console.log("[LiveKit] error", err)}
+          />
+        </View>
+      ) : null}
       <SwipeTabs index={index} onIndexChange={setIndex} />
       <ProfileMenuOverlay />
     </>
@@ -58,5 +89,10 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#0F172A",
+  },
+  livekitHost: {
+    width: 0,
+    height: 0,
+    overflow: "hidden",
   },
 });

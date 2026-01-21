@@ -39,3 +39,17 @@ export const GET_COMMERCIAL_FULL = `
     }
   }
 `;
+
+export const GET_COMMERCIALS = `
+  query GetCommercials {
+    commercials {
+      id
+      nom
+      prenom
+      email
+      numTel
+      managerId
+      directeurId
+    }
+  }
+`;
