@@ -12,6 +12,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -22,6 +23,10 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const { width, height } = useWindowDimensions();
+
+  const verticalSpacing = height * 0.04;
+  const cardPadding = Math.min(30, width * 0.08);
 
   const handleLogin = async () => {
     setError("");
@@ -52,88 +57,122 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={[styles.backgroundShape, { height: height * 0.4 }]} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={0}
         style={styles.container}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { minHeight: height - 100 },
+          ]}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
-            <View style={styles.logoBadge}>
-              <Feather name="user" size={32} color="#FFFFFF" />
-            </View>
-            <Text style={styles.title}>Pro-Win</Text>
-            <Text style={styles.subtitle}>Module prospection</Text>
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Connexion</Text>
-
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <View style={styles.field}>
-              <Text style={styles.label}>Email ou nom d&apos;utilisateur</Text>
-              <View style={styles.inputRow}>
-                <Feather name="mail" size={18} color="#94A3B8" />
-                <TextInput
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="Email ou nom d'utilisateur"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  keyboardType="email-address"
-                  style={styles.input}
-                  editable={!isLoading}
-                />
+          <View style={styles.centerContainer}>
+            <View style={[styles.header, { marginBottom: verticalSpacing }]}>
+              <View style={styles.iconCircle}>
+                <Feather name="shield" size={32} color="#FFFFFF" />
               </View>
+              <Text style={styles.appName}>Pro-Win</Text>
+              <Text style={styles.tagline}>Module Prospection</Text>
             </View>
 
-            <View style={styles.field}>
-              <View style={styles.passwordRow}>
-                <Text style={styles.label}>Mot de passe</Text>
+            <View style={[styles.card, { padding: cardPadding }]}>
+              <Text style={styles.cardTitle}>Connexion</Text>
+              <Text style={styles.cardSubtitle}>Accédez à votre espace</Text>
+
+              {error ? (
+                <View style={styles.errorContainer}>
+                  <Feather name="alert-triangle" size={18} color="#D32F2F" />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+
+              <View style={[styles.form, { gap: verticalSpacing * 0.5 }]}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Identifiant</Text>
+                  <View style={styles.inputWrapper}>
+                    <Feather
+                      name="user"
+                      size={20}
+                      color="#64748B"
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      value={email}
+                      onChangeText={setEmail}
+                      placeholder="Email ou nom d'utilisateur"
+                      placeholderTextColor="#94A3B8"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="email-address"
+                      style={styles.input}
+                      editable={!isLoading}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Mot de passe</Text>
+                  <View style={styles.inputWrapper}>
+                    <Feather
+                      name="lock"
+                      size={20}
+                      color="#64748B"
+                      style={styles.inputIcon}
+                    />
+                    <TextInput
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholder="••••••••"
+                      placeholderTextColor="#94A3B8"
+                      secureTextEntry={!showPassword}
+                      textContentType="password"
+                      autoComplete="password"
+                      autoCorrect={false}
+                      style={styles.input}
+                      editable={!isLoading}
+                    />
+                    <Pressable
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.eyeButton}
+                      hitSlop={10}
+                    >
+                      <Feather
+                        name={showPassword ? "eye-off" : "eye"}
+                        size={20}
+                        color="#0047AB"
+                      />
+                    </Pressable>
+                  </View>
+                </View>
+
                 <Pressable
-                  onPress={() => setShowPassword((prev) => !prev)}
+                  onPress={handleLogin}
                   disabled={isLoading}
+                  style={({ pressed }) => [
+                    styles.loginButton,
+                    pressed && styles.loginButtonPressed,
+                    isLoading && styles.loginButtonDisabled,
+                    { marginTop: verticalSpacing * 0.5 }
+                  ]}
                 >
-                  <Text style={styles.toggleText}>
-                    {showPassword ? "Masquer" : "Afficher"}
-                  </Text>
+                  {isLoading ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.loginButtonText}>Se connecter</Text>
+                  )}
                 </Pressable>
               </View>
-              <View style={styles.inputRow}>
-                <Feather name="lock" size={18} color="#94A3B8" />
-                <TextInput
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Mot de passe"
-                  secureTextEntry={!showPassword}
-                  textContentType="password"
-                  autoComplete="password"
-                  autoCorrect={false}
-                  style={styles.input}
-                  editable={!isLoading}
-                />
-              </View>
             </View>
 
-            <Pressable
-              onPress={handleLogin}
-              disabled={isLoading}
-              style={({ pressed }) => [
-                styles.button,
-                pressed && !isLoading ? styles.buttonPressed : null,
-                isLoading ? styles.buttonDisabled : null,
-              ]}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.buttonText}>Se connecter</Text>
-              )}
-            </Pressable>
+            <View style={[styles.footer, { marginTop: verticalSpacing }]}>
+              <Text style={styles.footerText}>
+                Besoin d'aide ? Contactez votre administrateur.
+              </Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -144,142 +183,157 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F1F5F9",
+  },
+  backgroundShape: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#0047AB",
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
   },
   container: {
     flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
-    padding: 24,
     justifyContent: "center",
+    padding: 20,
+  },
+  centerContainer: {
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
   },
   header: {
     alignItems: "center",
-    marginBottom: 24,
   },
-  logoBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: "#2563EB",
+  iconCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "rgba(255,255,255,0.2)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
   },
-  logoText: {
+  appName: {
+    fontSize: 32,
+    fontWeight: "800",
     color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "700",
+    letterSpacing: 0.5,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-  subtitle: {
-    marginTop: 6,
-    fontSize: 14,
-    color: "#64748B",
+  tagline: {
+    fontSize: 16,
+    color: "#E0E7FF",
+    marginTop: 4,
+    fontWeight: "500",
   },
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 24,
     shadowColor: "#0F172A",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 10,
   },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#0F172A",
-    marginBottom: 16,
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#1E293B",
+    marginBottom: 8,
+    textAlign: "center",
   },
-  error: {
-    marginBottom: 12,
-    color: "#DC2626",
-    backgroundColor: "#FEE2E2",
-    padding: 10,
-    borderRadius: 10,
-    fontSize: 13,
+  cardSubtitle: {
+    fontSize: 15,
+    color: "#64748B",
+    textAlign: "center",
+    marginBottom: 24,
   },
-  info: {
-    marginBottom: 12,
-    color: "#0F172A",
-    backgroundColor: "#E0F2FE",
-    padding: 10,
-    borderRadius: 10,
-    fontSize: 13,
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 20,
+    gap: 10,
   },
-  field: {
-    marginBottom: 14,
+  errorText: {
+    color: "#B91C1C",
+    fontSize: 14,
+    flex: 1,
+    fontWeight: "500",
+  },
+  form: {
+  },
+  inputGroup: {
+    gap: 8,
   },
   label: {
     fontSize: 14,
-    color: "#0F172A",
-    marginBottom: 6,
-    fontWeight: "500",
+    fontWeight: "600",
+    color: "#334155",
+    marginLeft: 4,
   },
-  inputRow: {
+  inputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: "#E2E8F0",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    gap: 6,
-    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    backgroundColor: "#F8FAFC",
+    height: 52,
+    paddingHorizontal: 12,
+  },
+  inputIcon: {
+    marginRight: 10,
   },
   input: {
     flex: 1,
-    fontSize: 14,
-    color: "#0F172A",
+    fontSize: 16,
+    color: "#1E293B",
   },
-  passwordRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  eyeButton: {
+    padding: 8,
+  },
+  loginButton: {
+    backgroundColor: "#0047AB",
+    height: 54,
+    borderRadius: 14,
     alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0047AB",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  toggleText: {
-    fontSize: 13,
-    color: "#2563EB",
-    fontWeight: "600",
-  },
-  button: {
-    marginTop: 6,
-    backgroundColor: "#2563EB",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  buttonPressed: {
+  loginButtonPressed: {
     opacity: 0.9,
     transform: [{ scale: 0.98 }],
   },
-  buttonDisabled: {
+  loginButtonDisabled: {
     opacity: 0.7,
+    backgroundColor: "#94A3B8",
   },
-  buttonText: {
+  loginButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
   },
-  secondaryButton: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#CBD5F5",
-    paddingVertical: 12,
-    borderRadius: 12,
+  footer: {
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
   },
-  secondaryButtonText: {
-    color: "#2563EB",
-    fontSize: 14,
-    fontWeight: "600",
+  footerText: {
+    color: "#94A3B8",
+    fontSize: 13,
   },
 });
