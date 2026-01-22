@@ -1,13 +1,13 @@
 import SwipeTabs from "@/components/navigation/SwipeTabs";
 import ProfileMenuOverlay from "@/components/ProfileMenuOverlay";
+import { useAutoAudio } from "@/hooks/audio/use-auto-audio";
 import { ProfileMenuProvider, useProfileMenu } from "@/hooks/use-profile-menu";
+import { authService } from "@/services/auth";
 import { Feather } from "@expo/vector-icons";
 import { LiveKitRoom } from "@livekit/react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAutoAudio } from "@/hooks/audio/use-auto-audio";
-import { authService } from "@/services/auth";
 
 function Header() {
   const { open } = useProfileMenu();
@@ -23,7 +23,6 @@ function Header() {
 
 function AppContent() {
   const [index, setIndex] = useState(0);
-  const routes = useMemo(() => ["dashboard", "immeubles", "historique"], []);
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
 

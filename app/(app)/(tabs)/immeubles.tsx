@@ -6,8 +6,8 @@ import type { Immeuble } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
 import {
+  FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,7 +16,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-export default function ImmeublesScreen() {
+type ImmeublesScreenProps = {
+  isActive?: boolean;
+};
+
+export default function ImmeublesScreen({
+  isActive = true,
+}: ImmeublesScreenProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
@@ -36,9 +42,20 @@ export default function ImmeublesScreen() {
     void loadIdentity();
   }, []);
 
-  const { data: profile, loading, error, refetch } = useWorkspaceProfile(userId, role);
+  useEffect(() => {
+    if (!isActive && isAddOpen) {
+      setIsAddOpen(false);
+    }
+  }, [isActive, isAddOpen]);
+
+  const {
+    data: profile,
+    loading,
+    error,
+    refetch,
+  } = useWorkspaceProfile(userId, role);
   const { create, loading: creating } = useCreateImmeuble();
-  
+
   useEffect(() => {
     if (refreshTick === 0) return;
     setQuery("");
@@ -57,95 +74,103 @@ export default function ImmeublesScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Immeubles</Text>
-        <Text style={styles.subtitle}>Vue globale de vos immeubles</Text>
+      <FlatList
+        data={filteredImmeubles}
+        keyExtractor={(item) => String(item.id)}
+        contentContainerStyle={styles.content}
+        ListHeaderComponent={
+          <View style={styles.headerBlock}>
+            <Text style={styles.title}>Immeubles</Text>
+            <Text style={styles.subtitle}>Vue globale de vos immeubles</Text>
 
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{immeubles.length}</Text>
-            <Text style={styles.summaryLabel}>Immeubles</Text>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryValue}>{immeubles.length}</Text>
+                <Text style={styles.summaryLabel}>Immeubles</Text>
+              </View>
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryValue}>
+                  {immeubles.reduce(
+                    (total, imm) => total + imm.nbEtages * imm.nbPortesParEtage,
+                    0,
+                  )}
+                </Text>
+                <Text style={styles.summaryLabel}>Portes totales</Text>
+              </View>
+            </View>
+
+            <View style={styles.searchWrap}>
+              <View
+                style={[styles.searchBar, isTablet && styles.searchBarTablet]}
+              >
+                <Feather name="search" size={16} color="#94A3B8" />
+                <TextInput
+                  placeholder="Rechercher un immeuble"
+                  placeholderTextColor="#94A3B8"
+                  style={styles.searchInput}
+                  value={query}
+                  onChangeText={setQuery}
+                />
+              </View>
+            </View>
+
+            {loading && <Text style={styles.helper}>Chargement...</Text>}
+            {error && <Text style={styles.error}>{error}</Text>}
           </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>
-              {immeubles.reduce(
-                (total, imm) => total + imm.nbEtages * imm.nbPortesParEtage,
-                0,
-              )}
-            </Text>
-            <Text style={styles.summaryLabel}>Portes totales</Text>
-          </View>
-        </View>
-
-        <View style={styles.searchWrap}>
-          <View style={[styles.searchBar, isTablet && styles.searchBarTablet]}>
-            <Feather name="search" size={16} color="#94A3B8" />
-            <TextInput
-              placeholder="Rechercher un immeuble"
-              placeholderTextColor="#94A3B8"
-              style={styles.searchInput}
-              value={query}
-              onChangeText={setQuery}
-            />
-          </View>
-        </View>
-
-        <View style={styles.list}>
-          {loading && <Text style={styles.helper}>Chargement...</Text>}
-          {error && <Text style={styles.error}>{error}</Text>}
-
-          {!loading && !error && filteredImmeubles.length === 0 && (
+        }
+        ListEmptyComponent={
+          !loading && !error ? (
             <View style={styles.emptyCard}>
               <Feather name="home" size={32} color="#94A3B8" />
               <Text style={styles.emptyText}>Aucun immeuble trouve</Text>
             </View>
-          )}
-
-          {filteredImmeubles.map((item) => {
-            const totalPortes = item.nbEtages * item.nbPortesParEtage;
-            return (
-              <View key={item.id} style={styles.card}>
-                <View style={styles.cardIcon}>
-                  <Feather name="home" size={18} color="#FFFFFF" />
-                </View>
-                <View style={styles.cardBody}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>
-                    {item.adresse}
-                  </Text>
-                  <View style={styles.cardMetaRow}>
-                    <Text style={styles.cardMeta}>{item.nbEtages} etages</Text>
-                    <Text style={styles.cardMeta}>•</Text>
-                    <Text style={styles.cardMeta}>
-                      {item.nbPortesParEtage} portes/etage
-                    </Text>
-                    <Text style={styles.cardMeta}>•</Text>
-                    <Text style={styles.cardMeta}>{totalPortes} portes</Text>
-                  </View>
-                  <View style={styles.cardMetaRow}>
-                    <Feather
-                      name={item.ascenseurPresent ? "check-circle" : "x-circle"}
-                      size={12}
-                      color={item.ascenseurPresent ? "#16A34A" : "#EF4444"}
-                    />
-                    <Text style={styles.cardMeta}>
-                      {item.ascenseurPresent ? "Ascenseur" : "Sans ascenseur"}
-                    </Text>
-                    {item.digitalCode ? (
-                      <>
-                        <Text style={styles.cardMeta}>•</Text>
-                        <Text style={styles.cardMeta}>
-                          Code {item.digitalCode}
-                        </Text>
-                      </>
-                    ) : null}
-                  </View>
-                </View>
-                <Feather name="chevron-right" size={18} color="#CBD5F5" />
+          ) : null
+        }
+        ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+        renderItem={({ item }) => {
+          const totalPortes = item.nbEtages * item.nbPortesParEtage;
+          return (
+            <View style={styles.card}>
+              <View style={styles.cardIcon}>
+                <Feather name="home" size={18} color="#FFFFFF" />
               </View>
-            );
-          })}
-        </View>
-      </ScrollView>
+              <View style={styles.cardBody}>
+                <Text style={styles.cardTitle} numberOfLines={1}>
+                  {item.adresse}
+                </Text>
+                <View style={styles.cardMetaRow}>
+                  <Text style={styles.cardMeta}>{item.nbEtages} etages</Text>
+                  <Text style={styles.cardMeta}>{"\u2022"}</Text>
+                  <Text style={styles.cardMeta}>
+                    {item.nbPortesParEtage} portes/etage
+                  </Text>
+                  <Text style={styles.cardMeta}>{"\u2022"}</Text>
+                  <Text style={styles.cardMeta}>{totalPortes} portes</Text>
+                </View>
+                <View style={styles.cardMetaRow}>
+                  <Feather
+                    name={item.ascenseurPresent ? "check-circle" : "x-circle"}
+                    size={12}
+                    color={item.ascenseurPresent ? "#16A34A" : "#EF4444"}
+                  />
+                  <Text style={styles.cardMeta}>
+                    {item.ascenseurPresent ? "Ascenseur" : "Sans ascenseur"}
+                  </Text>
+                  {item.digitalCode ? (
+                    <>
+                      <Text style={styles.cardMeta}>{"\u2022"}</Text>
+                      <Text style={styles.cardMeta}>
+                        Code {item.digitalCode}
+                      </Text>
+                    </>
+                  ) : null}
+                </View>
+              </View>
+              <Feather name="chevron-right" size={18} color="#CBD5F5" />
+            </View>
+          );
+        }}
+      />
 
       <Pressable
         style={[styles.fab, { bottom: insets.bottom + 72 }]}
@@ -182,8 +207,11 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 14,
     paddingBottom: 24,
+  },
+  headerBlock: {
+    gap: 12,
+    marginBottom: 12,
   },
   title: {
     fontSize: 20,
@@ -217,9 +245,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: "#0F172A",
-  },
-  list: {
-    gap: 12,
   },
   summaryRow: {
     flexDirection: "row",
@@ -299,6 +324,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: 6,
+  },
+  itemSeparator: {
+    height: 8,
   },
   fab: {
     position: "absolute",

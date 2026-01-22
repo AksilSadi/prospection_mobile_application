@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Feather } from "@expo/vector-icons";
 import {
+  FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -66,68 +66,79 @@ export default function HistoriqueScreen() {
   const visibleImmeubles = filteredImmeubles.slice(0, visibleCount);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.pageTitle}>Historique</Text>
-      <Text style={styles.subtitle}>Immeubles recents</Text>
+    <View style={styles.container}>
+      <FlatList
+        data={visibleImmeubles}
+        keyExtractor={(item) => String(item.id)}
+        contentContainerStyle={styles.content}
+        ListHeaderComponent={
+          <View style={styles.headerBlock}>
+            <Text style={styles.pageTitle}>Historique</Text>
+            <Text style={styles.subtitle}>Immeubles recents</Text>
 
-      <View style={styles.filtersRow}>
-        {FILTERS.map(item => {
-          const selected = item.key === filter;
-          return (
-            <Pressable
-              key={item.key}
-              onPress={() => setFilter(item.key)}
-              style={[styles.filterChip, selected && styles.filterChipActive]}
-            >
-              <Text style={[styles.filterText, selected && styles.filterTextActive]}>
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {loading && <Text style={styles.helper}>Chargement...</Text>}
-      {error && <Text style={styles.error}>{error}</Text>}
-
-      {!loading && !error && filteredImmeubles.length === 0 && (
-        <View style={styles.emptyCard}>
-          <Feather name="home" size={32} color="#94A3B8" />
-          <Text style={styles.emptyText}>Aucun immeuble pour cette periode</Text>
-        </View>
-      )}
-
-      {visibleImmeubles.map(immeuble => (
-        <View key={immeuble.id} style={styles.card}>
-          <View style={styles.cardIcon}>
-            <Feather name="home" size={18} color="#FFFFFF" />
-          </View>
-          <View style={styles.cardBody}>
-            <Text style={styles.cardTitle} numberOfLines={1}>
-              {immeuble.adresse}
-            </Text>
-            <View style={styles.cardMeta}>
-              <Feather name="clock" size={12} color="#94A3B8" />
-              <Text style={styles.cardDate}>
-                {immeuble.updatedAt
-                  ? new Date(immeuble.updatedAt).toLocaleDateString("fr-FR")
-                  : "Date inconnue"}
-              </Text>
+            <View style={styles.filtersRow}>
+              {FILTERS.map((item) => {
+                const selected = item.key === filter;
+                return (
+                  <Pressable
+                    key={item.key}
+                    onPress={() => setFilter(item.key)}
+                    style={[styles.filterChip, selected && styles.filterChipActive]}
+                  >
+                    <Text style={[styles.filterText, selected && styles.filterTextActive]}>
+                      {item.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
-          </View>
-          <Feather name="chevron-right" size={18} color="#CBD5F5" />
-        </View>
-      ))}
 
-      {visibleCount < filteredImmeubles.length && (
-        <Pressable
-          style={styles.loadMoreButton}
-          onPress={() => setVisibleCount(prev => prev + PAGE_SIZE)}
-        >
-          <Text style={styles.loadMoreText}>Afficher plus</Text>
-        </Pressable>
-      )}
-    </ScrollView>
+            {loading && <Text style={styles.helper}>Chargement...</Text>}
+            {error && <Text style={styles.error}>{error}</Text>}
+          </View>
+        }
+        ListEmptyComponent={
+          !loading && !error ? (
+            <View style={styles.emptyCard}>
+              <Feather name="home" size={32} color="#94A3B8" />
+              <Text style={styles.emptyText}>Aucun immeuble pour cette periode</Text>
+            </View>
+          ) : null
+        }
+        ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+        renderItem={({ item: immeuble }) => (
+          <View style={styles.card}>
+            <View style={styles.cardIcon}>
+              <Feather name="home" size={18} color="#FFFFFF" />
+            </View>
+            <View style={styles.cardBody}>
+              <Text style={styles.cardTitle} numberOfLines={1}>
+                {immeuble.adresse}
+              </Text>
+              <View style={styles.cardMeta}>
+                <Feather name="clock" size={12} color="#94A3B8" />
+                <Text style={styles.cardDate}>
+                  {immeuble.updatedAt
+                    ? new Date(immeuble.updatedAt).toLocaleDateString("fr-FR")
+                    : "Date inconnue"}
+                </Text>
+              </View>
+            </View>
+            <Feather name="chevron-right" size={18} color="#CBD5F5" />
+          </View>
+        )}
+        ListFooterComponent={
+          visibleCount < filteredImmeubles.length ? (
+            <Pressable
+              style={styles.loadMoreButton}
+              onPress={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+            >
+              <Text style={styles.loadMoreText}>Afficher plus</Text>
+            </Pressable>
+          ) : null
+        }
+      />
+    </View>
   );
 }
 
@@ -138,8 +149,11 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
-    gap: 14,
     paddingBottom: 24,
+  },
+  headerBlock: {
+    gap: 12,
+    marginBottom: 12,
   },
   pageTitle: {
     fontSize: 20,
@@ -242,5 +256,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#0F172A",
+  },
+  itemSeparator: {
+    height: 8,
   },
 });
