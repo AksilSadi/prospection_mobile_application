@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+﻿import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View, ViewStyle } from "react-native";
 
 type StatCardProps = {

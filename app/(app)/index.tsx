@@ -1,4 +1,4 @@
-import SwipeTabs from "@/components/navigation/SwipeTabs";
+﻿import SwipeTabs from "@/components/navigation/SwipeTabs";
 import ProfileMenuOverlay from "@/components/ProfileMenuOverlay";
 import { useAutoAudio } from "@/hooks/audio/use-auto-audio";
 import { ProfileMenuProvider, useProfileMenu } from "@/hooks/use-profile-menu";

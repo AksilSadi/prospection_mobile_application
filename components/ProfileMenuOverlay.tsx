@@ -1,4 +1,4 @@
-import { useProfileMenu } from "@/hooks/use-profile-menu";
+﻿import { useProfileMenu } from "@/hooks/use-profile-menu";
 import { authService } from "@/services/auth";
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";

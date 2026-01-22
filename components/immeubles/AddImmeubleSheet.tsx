@@ -1,19 +1,22 @@
-import { MAPBOX_ACCESS_TOKEN } from "@/constants/env";
+﻿import { MAPBOX_ACCESS_TOKEN } from "@/constants/env";
 import type { CreateImmeubleInput } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
-import { BlurView } from "expo-blur";
-import { useEffect, useMemo, useState } from "react";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetScrollView,
+} from "@gorhom/bottom-sheet";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -41,6 +44,12 @@ const STEPS = [
   { id: "access", title: "Acces", icon: "key" },
 ];
 
+const STEP_HINTS = [
+  "Precise l'adresse pour retrouver l'immeuble facilement.",
+  "Complete les etages et portes pour calculer les stats.",
+  "Ajoute les acces pour gagner du temps sur le terrain.",
+];
+
 export default function AddImmeubleSheet({
   open,
   onClose,
@@ -50,6 +59,9 @@ export default function AddImmeubleSheet({
   ownerRole,
 }: AddImmeubleSheetProps) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 700;
+  const sheetRef = useRef<BottomSheetModal>(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({
     adresse: "",
@@ -62,9 +74,7 @@ export default function AddImmeubleSheet({
     longitude: null as number | null,
   });
   const [errors, setErrors] = useState<Record<string, string | null>>({});
-  const [addressSuggestions, setAddressSuggestions] = useState<MapboxFeature[]>(
-    [],
-  );
+  const [addressSuggestions, setAddressSuggestions] = useState<MapboxFeature[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [isAddressSelected, setIsAddressSelected] = useState(false);
 
@@ -95,6 +105,23 @@ export default function AddImmeubleSheet({
     return etages * portes;
   }, [formData.nbEtages, formData.nbPortesParEtage]);
 
+  const snapPoints = useMemo(() => {
+    if (isTablet) return ["65%", "90%"];
+    return ["70%", "92%"];
+  }, [isTablet]);
+
+  const sheetContainerStyle = isTablet
+    ? { alignSelf: "center" as const, width: Math.min(width * 0.9, 980) }
+    : undefined;
+
+  useEffect(() => {
+    if (open) {
+      sheetRef.current?.present();
+    } else {
+      sheetRef.current?.dismiss();
+    }
+  }, [open]);
+
   const reset = () => {
     setCurrentStep(0);
     setErrors({});
@@ -113,8 +140,7 @@ export default function AddImmeubleSheet({
   };
 
   const close = () => {
-    reset();
-    onClose();
+    sheetRef.current?.dismiss();
   };
 
   const handleChange = (field: string, value: string | boolean) => {
@@ -225,23 +251,42 @@ export default function AddImmeubleSheet({
     close();
   };
 
-  if (!open) return null;
+  const handleDismiss = () => {
+    reset();
+    onClose();
+  };
+
+  const renderBackdrop = useCallback(
+    (props: any) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+        opacity={0.5}
+      />
+    ),
+    [],
+  );
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 24}
-      style={styles.overlay}
+    <BottomSheetModal
+      ref={sheetRef}
+      index={1}
+      snapPoints={snapPoints}
+      backdropComponent={renderBackdrop}
+      enablePanDownToClose
+      onDismiss={handleDismiss}
+      keyboardBehavior={Platform.OS === "ios" ? "extend" : "interactive"}
+      keyboardBlurBehavior="restore"
+      android_keyboardInputMode="adjustResize"
+      detached={isTablet}
+      bottomInset={insets.bottom + 12}
+      style={sheetContainerStyle}
+      backgroundStyle={[styles.sheetBackground, isTablet && { borderRadius: 28 }]}
+      handleIndicatorStyle={styles.handleIndicator}
     >
-      <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
-      <Pressable style={styles.backdrop} onPress={close} />
-
-      <View
-        style={[
-          styles.sheet,
-          { paddingBottom: Math.max(insets.bottom, 12) + 12 },
-        ]}
-      >
+      <View style={[styles.sheet, isTablet && styles.sheetTablet]}>
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Ajouter un immeuble</Text>
@@ -288,12 +333,9 @@ export default function AddImmeubleSheet({
           })}
         </View>
 
-        <ScrollView
+        <BottomSheetScrollView
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={
-            Platform.OS === "ios" ? "interactive" : "on-drag"
-          }
         >
           {currentStep === 0 && (
             <>
@@ -436,9 +478,15 @@ export default function AddImmeubleSheet({
               />
             </>
           )}
-        </ScrollView>
+        </BottomSheetScrollView>
 
         <View style={styles.footer}>
+          <View style={styles.footerHint}>
+            <Text style={styles.footerHintTitle}>Conseils</Text>
+            <Text style={styles.footerHintText}>
+              {STEP_HINTS[currentStep]}
+            </Text>
+          </View>
           <Pressable
             style={styles.ghostButton}
             onPress={currentStep === 0 ? close : prevStep}
@@ -458,26 +506,31 @@ export default function AddImmeubleSheet({
           </Pressable>
         </View>
       </View>
-    </KeyboardAvoidingView>
+    </BottomSheetModal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "flex-end",
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  sheet: {
+  sheetBackground: {
     backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+  },
+  handleIndicator: {
+    width: 44,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#CBD5F5",
+  },
+  sheet: {
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 24,
-    maxHeight: "85%",
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  sheetTablet: {
+    paddingHorizontal: 24,
+    paddingTop: 18,
+    paddingBottom: 20,
   },
   header: {
     flexDirection: "row",
@@ -682,6 +735,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
     marginTop: 8,
+    flexWrap: "wrap",
+  },
+  footerHint: {
+    width: "100%",
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+  },
+  footerHintTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  footerHintText: {
+    marginTop: 4,
+    fontSize: 12,
+    color: "#475569",
   },
   ghostButton: {
     flex: 1,

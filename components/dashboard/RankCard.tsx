@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+﻿import { StyleSheet, Text, View } from "react-native";
 import type { Rank } from "@/utils/business/ranks";
 
 type RankCardProps = {

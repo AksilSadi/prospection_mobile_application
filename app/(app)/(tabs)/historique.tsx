@@ -1,12 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Feather } from "@expo/vector-icons";
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { authService } from "@/services/auth";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import type { Immeuble } from "@/types/api";
@@ -18,13 +12,10 @@ const FILTERS = [
   { key: "30d", label: "30j" },
 ];
 
-const PAGE_SIZE = 8;
-
 export default function HistoriqueScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -59,11 +50,7 @@ export default function HistoriqueScreen() {
     });
   }, [sortedImmeubles, filter]);
 
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [filter]);
-
-  const visibleImmeubles = filteredImmeubles.slice(0, visibleCount);
+  const visibleImmeubles = filteredImmeubles;
 
   return (
     <View style={styles.container}>
@@ -127,16 +114,7 @@ export default function HistoriqueScreen() {
             <Feather name="chevron-right" size={18} color="#CBD5F5" />
           </View>
         )}
-        ListFooterComponent={
-          visibleCount < filteredImmeubles.length ? (
-            <Pressable
-              style={styles.loadMoreButton}
-              onPress={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
-            >
-              <Text style={styles.loadMoreText}>Afficher plus</Text>
-            </Pressable>
-          ) : null
-        }
+        ListFooterComponent={null}
       />
     </View>
   );
@@ -243,19 +221,6 @@ const styles = StyleSheet.create({
   cardDate: {
     fontSize: 12,
     color: "#94A3B8",
-  },
-  loadMoreButton: {
-    marginTop: 8,
-    alignSelf: "center",
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: "#E2E8F0",
-  },
-  loadMoreText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#0F172A",
   },
   itemSeparator: {
     height: 8,
