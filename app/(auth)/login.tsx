@@ -37,7 +37,7 @@ export default function LoginScreen() {
       router.replace("/(app)");
     } catch (err: any) {
       if (err?.message === "UNAUTHORIZED_GROUP") {
-        setError("Groupe non autorise.");
+        setError("Compte non autorise (commercial ou manager uniquement).");
       } else if (err?.graphQLErrors?.length) {
         setError(err.graphQLErrors[0]?.message || "Connexion impossible.");
       } else if (err?.message) {

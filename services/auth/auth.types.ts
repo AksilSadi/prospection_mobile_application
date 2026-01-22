@@ -32,8 +32,6 @@ export const GROUP_TO_ROLE_MAP: Record<string, string> = {
 };
 
 export const ALLOWED_GROUPS = [
-  'Prospection-Admin',
-  'Prospection-Directeur',
   'Prospection-Manager',
   'Prospection-Commercial',
 ];
