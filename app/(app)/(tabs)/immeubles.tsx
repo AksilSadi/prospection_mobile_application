@@ -24,6 +24,7 @@ export default function ImmeublesScreen() {
   const [role, setRole] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -35,8 +36,14 @@ export default function ImmeublesScreen() {
     void loadIdentity();
   }, []);
 
-  const { data: profile, loading, error } = useWorkspaceProfile(userId, role);
+  const { data: profile, loading, error, refetch } = useWorkspaceProfile(userId, role);
   const { create, loading: creating } = useCreateImmeuble();
+  
+  useEffect(() => {
+    if (refreshTick === 0) return;
+    setQuery("");
+    void refetch();
+  }, [refreshTick, refetch]);
 
   const immeubles = useMemo(
     () => (profile?.immeubles || []) as Immeuble[],
@@ -61,7 +68,10 @@ export default function ImmeublesScreen() {
           </View>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryValue}>
-              {immeubles.reduce((total, imm) => total + imm.nbEtages * imm.nbPortesParEtage, 0)}
+              {immeubles.reduce(
+                (total, imm) => total + imm.nbEtages * imm.nbPortesParEtage,
+                0,
+              )}
             </Text>
             <Text style={styles.summaryLabel}>Portes totales</Text>
           </View>
@@ -150,11 +160,12 @@ export default function ImmeublesScreen() {
         loading={creating}
         ownerId={userId}
         ownerRole={role}
-        onSave={async payload => {
+        onSave={async (payload) => {
           const result = await create(payload);
           if (result) {
             console.log("[Immeuble] added", result.id);
             setIsAddOpen(false);
+            setRefreshTick((prev) => prev + 1);
           } else {
             console.log("[Immeuble] add failed");
           }
