@@ -4,7 +4,6 @@
     "slug": "prospection",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/images/icon.png",
     "scheme": "prospection",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -28,8 +27,7 @@
       "package": "com.aksilsadi.prospection"
     },
     "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "static"
     },
     "plugins": [
       "expo-router",
