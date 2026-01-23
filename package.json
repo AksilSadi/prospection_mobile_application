@@ -16,6 +16,7 @@
     "@livekit/react-native": "^2.9.6",
     "@livekit/react-native-expo-plugin": "^1.0.1",
     "@livekit/react-native-webrtc": "^137.0.2",
+    "@react-native-community/datetimepicker": "8.4.4",
     "@react-navigation/native": "^7.1.8",
     "buffer": "^6.0.3",
     "expo": "~54.0.31",

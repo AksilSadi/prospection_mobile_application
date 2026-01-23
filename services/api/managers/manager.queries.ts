@@ -21,9 +21,12 @@ export const GET_MANAGER_PERSONAL = `
           nomPersonnalise
           etage
           statut
+          nbRepassages
+          nbContrats
           rdvDate
           rdvTime
           commentaire
+          derniereVisite
         }
       }
       statistics {

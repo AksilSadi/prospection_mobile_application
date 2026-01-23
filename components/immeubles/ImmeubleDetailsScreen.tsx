@@ -1,15 +1,26 @@
-import type { Immeuble, Porte } from "@/types/api";
+import type { Immeuble, Porte, UpdatePorteInput } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
+import type { ComponentType } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Platform,
+  Keyboard,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetScrollView,
+} from "@gorhom/bottom-sheet";
+import { useUpdatePorte } from "@/hooks/api/use-update-porte";
+type DateTimePickerType = ComponentType<any> | null;
 
 type StatusOption = {
   value: string;
@@ -154,9 +165,33 @@ export default function ImmeubleDetailsView({
     title: string;
     subtitle: string;
   } | null>(null);
+  const DateTimePicker = useMemo<DateTimePickerType>(() => {
+    try {
+      return require("@react-native-community/datetimepicker").default;
+    } catch {
+      return null;
+    }
+  }, []);
+  const hasNativePicker = DateTimePicker !== null;
   const toastOpacity = useRef(new Animated.Value(0)).current;
   const toastTranslate = useRef(new Animated.Value(-12)).current;
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { update: updatePorte, loading: savingPorte } = useUpdatePorte();
+  const editSheetRef = useRef<BottomSheetModal>(null);
+  const editSnapPoints = useMemo(() => ["55%", "75%"], []);
+  const [editMode, setEditMode] = useState<
+    "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | null
+  >(null);
+  const [editPorte, setEditPorte] = useState<Porte | null>(null);
+  const [editForm, setEditForm] = useState({
+    rdvDate: "",
+    rdvTime: "",
+    nbContrats: 1,
+    commentaire: "",
+    nomPersonnalise: "",
+  });
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
     if (immeuble.portes?.length) {
@@ -209,6 +244,106 @@ export default function ImmeubleDetailsView({
         setActionToast(null);
       });
     }, 1400);
+  };
+
+  const updateLocalPorte = (porteId: number, changes: Partial<Porte>) => {
+    setPortesState((prev) =>
+      prev.map((porte) => (porte.id === porteId ? { ...porte, ...changes } : porte)),
+    );
+  };
+
+  const getTodayDate = () => new Date().toISOString().split("T")[0];
+  const getNowTime = () => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, "0")}:${String(
+      now.getMinutes(),
+    ).padStart(2, "0")}`;
+  };
+  const formatDateLabel = (value: string) => {
+    if (!value) return "Choisir une date";
+    const [y, m, d] = value.split("-");
+    if (!y || !m || !d) return value;
+    return `${d}/${m}/${y}`;
+  };
+  const formatTimeLabel = (value: string) => {
+    if (!value) return "Choisir une heure";
+    return value;
+  };
+  const getDateValue = (value: string) =>
+    value ? new Date(`${value}T00:00:00`) : new Date();
+  const getTimeValue = (value: string) => {
+    if (!value) return new Date();
+    const [hh, mm] = value.split(":");
+    const now = new Date();
+    now.setHours(Number(hh) || 0);
+    now.setMinutes(Number(mm) || 0);
+    now.setSeconds(0);
+    return now;
+  };
+
+  const openEditSheet = (
+    porte: Porte,
+    mode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE",
+  ) => {
+    setEditPorte(porte);
+    setEditMode(mode);
+    setEditForm({
+      rdvDate: porte.rdvDate || getTodayDate(),
+      rdvTime: porte.rdvTime || getNowTime(),
+      nbContrats: porte.nbContrats || 1,
+      commentaire: porte.commentaire || "",
+      nomPersonnalise: porte.nomPersonnalise || "",
+    });
+    editSheetRef.current?.present();
+  };
+
+  const closeEditSheet = () => {
+    editSheetRef.current?.dismiss();
+    setEditPorte(null);
+    setEditMode(null);
+  };
+
+  const saveEditSheet = async () => {
+    if (!editPorte || !editMode || savingPorte) return;
+    const payload: UpdatePorteInput = {
+      id: editPorte.id,
+      statut: editMode,
+      commentaire: editForm.commentaire.trim() || null,
+      nomPersonnalise: editForm.nomPersonnalise.trim() || null,
+      derniereVisite: new Date().toISOString(),
+    };
+    if (editMode === "RENDEZ_VOUS_PRIS") {
+      payload.rdvDate = editForm.rdvDate || getTodayDate();
+      payload.rdvTime = editForm.rdvTime || null;
+    }
+    if (editMode === "CONTRAT_SIGNE") {
+      payload.nbContrats = editForm.nbContrats || 1;
+    }
+
+    updateLocalPorte(editPorte.id, {
+      statut: editMode,
+      commentaire: payload.commentaire || null,
+      nomPersonnalise: payload.nomPersonnalise || null,
+      rdvDate: payload.rdvDate ?? editPorte.rdvDate,
+      rdvTime: payload.rdvTime ?? editPorte.rdvTime,
+      nbContrats: payload.nbContrats ?? editPorte.nbContrats,
+      derniereVisite: payload.derniereVisite,
+    });
+
+    const result = await updatePorte(payload);
+    if (!result) {
+      showToast("Erreur", "Mise a jour impossible");
+      return;
+    }
+
+    showToast(
+      `Porte ${editPorte.nomPersonnalise || editPorte.numero}`,
+      editMode === "RENDEZ_VOUS_PRIS" ? "Rendez-vous enregistre" : "Contrat signe",
+    );
+    closeEditSheet();
+    if (currentIndex < sortedPortes.length - 1) {
+      setCurrentIndex((prev) => Math.min(prev + 1, sortedPortes.length - 1));
+    }
   };
 
   const sortedPortes = useMemo(
@@ -321,8 +456,12 @@ export default function ImmeubleDetailsView({
 
   const noop = () => {};
 
-  const handleStatusSelect = (statut: string) => {
+  const handleStatusSelect = async (statut: string) => {
     if (!currentPorte) return;
+    if (statut === "RENDEZ_VOUS_PRIS" || statut === "CONTRAT_SIGNE") {
+      openEditSheet(currentPorte, statut);
+      return;
+    }
     const selectedStatus =
       STATUS_OPTIONS.find((option) => option.value === statut)?.label ??
       "Mis a jour";
@@ -330,11 +469,20 @@ export default function ImmeubleDetailsView({
       `Porte ${currentPorte.nomPersonnalise || currentPorte.numero}`,
       `Statut: ${selectedStatus}`,
     );
-    setPortesState((prev) =>
-      prev.map((porte) =>
-        porte.id === currentPorte.id ? { ...porte, statut } : porte,
-      ),
-    );
+    const visitedAt = new Date().toISOString();
+    updateLocalPorte(currentPorte.id, {
+      statut,
+      derniereVisite: visitedAt,
+    });
+    const result = await updatePorte({
+      id: currentPorte.id,
+      statut,
+      derniereVisite: visitedAt,
+      commentaire: currentPorte.commentaire || null,
+    });
+    if (!result) {
+      showToast("Erreur", "Mise a jour impossible");
+    }
     if (currentIndex < sortedPortes.length - 1) {
       setCurrentIndex((prev) => Math.min(prev + 1, sortedPortes.length - 1));
     }
@@ -599,6 +747,244 @@ export default function ImmeubleDetailsView({
           </View>
         </View>
       </ScrollView>
+
+      <BottomSheetModal
+        ref={editSheetRef}
+        index={1}
+        snapPoints={editSnapPoints}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop
+            {...props}
+            appearsOnIndex={0}
+            disappearsOnIndex={-1}
+            pressBehavior="close"
+            opacity={0.45}
+          />
+        )}
+        enablePanDownToClose
+        onDismiss={closeEditSheet}
+        keyboardBehavior="interactive"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        backgroundStyle={styles.sheetBackground}
+        handleIndicatorStyle={styles.handleIndicator}
+      >
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
+          <View
+            style={[
+              styles.sheetHero,
+              editMode === "RENDEZ_VOUS_PRIS"
+                ? styles.sheetHeroRdv
+                : styles.sheetHeroContract,
+            ]}
+          >
+            <View
+              style={[
+                styles.sheetHeroIcon,
+                editMode === "RENDEZ_VOUS_PRIS"
+                  ? styles.sheetHeroIconBlue
+                  : styles.sheetHeroIconGreen,
+              ]}
+            >
+              <Feather
+                name={editMode === "RENDEZ_VOUS_PRIS" ? "calendar" : "award"}
+                size={18}
+                color={editMode === "RENDEZ_VOUS_PRIS" ? "#1D4ED8" : "#047857"}
+              />
+            </View>
+            <View style={styles.sheetHeroText}>
+              <Text style={styles.sheetTitle}>
+                {editMode === "RENDEZ_VOUS_PRIS"
+                  ? "Rendez-vous"
+                  : "Contrat signe"}
+              </Text>
+              <Text style={styles.sheetSubtitle}>
+                {editPorte?.nomPersonnalise || `Porte ${editPorte?.numero || ""}`}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.sheetCard}>
+            <Text style={styles.sheetLabel}>Nom personnalise</Text>
+            <View style={styles.inputRow}>
+              <Feather name="edit-3" size={16} color="#6B7280" />
+              <TextInput
+                placeholder={`Porte ${editPorte?.numero || ""}`}
+                value={editForm.nomPersonnalise}
+                onChangeText={(value) =>
+                  setEditForm((prev) => ({ ...prev, nomPersonnalise: value }))
+                }
+                style={styles.inputInline}
+              />
+            </View>
+          </View>
+
+          {editMode === "RENDEZ_VOUS_PRIS" && (
+            <View style={[styles.sheetCard, styles.sheetCardRdv]}>
+              <Text style={styles.sheetLabel}>Quand</Text>
+              {hasNativePicker ? (
+                <>
+                  <Pressable
+                    style={styles.pickerRow}
+                    onPress={() => setShowDatePicker(true)}
+                  >
+                    <View style={styles.pickerIcon}>
+                      <Feather name="calendar" size={16} color="#1D4ED8" />
+                    </View>
+                    <View style={styles.pickerText}>
+                      <Text style={styles.pickerTitle}>Date</Text>
+                      <Text style={styles.pickerValue}>
+                        {formatDateLabel(editForm.rdvDate)}
+                      </Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color="#94A3B8" />
+                  </Pressable>
+                  <Pressable
+                    style={styles.pickerRow}
+                    onPress={() => setShowTimePicker(true)}
+                  >
+                    <View style={styles.pickerIcon}>
+                      <Feather name="clock" size={16} color="#1D4ED8" />
+                    </View>
+                    <View style={styles.pickerText}>
+                      <Text style={styles.pickerTitle}>Heure</Text>
+                      <Text style={styles.pickerValue}>
+                        {formatTimeLabel(editForm.rdvTime)}
+                      </Text>
+                    </View>
+                    <Feather name="chevron-right" size={16} color="#94A3B8" />
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.sheetHint}>
+                    Activez le DatePicker natif pour une meilleure experience.
+                  </Text>
+                  <View style={styles.inputRow}>
+                    <Feather name="calendar" size={16} color="#6B7280" />
+                    <TextInput
+                      placeholder="YYYY-MM-DD"
+                      value={editForm.rdvDate}
+                      onChangeText={(value) =>
+                        setEditForm((prev) => ({ ...prev, rdvDate: value }))
+                      }
+                      style={styles.inputInline}
+                      keyboardType="numbers-and-punctuation"
+                    />
+                  </View>
+                  <View style={[styles.inputRow, styles.inputRowSpacing]}>
+                    <Feather name="clock" size={16} color="#6B7280" />
+                    <TextInput
+                      placeholder="HH:mm"
+                      value={editForm.rdvTime}
+                      onChangeText={(value) =>
+                        setEditForm((prev) => ({ ...prev, rdvTime: value }))
+                      }
+                      style={styles.inputInline}
+                      keyboardType="numbers-and-punctuation"
+                    />
+                  </View>
+                </>
+              )}
+            </View>
+          )}
+
+          {editMode === "CONTRAT_SIGNE" && (
+            <View style={[styles.sheetCard, styles.sheetCardContract]}>
+              <Text style={styles.sheetLabel}>Contrats signes</Text>
+              <View style={styles.counterRow}>
+                <Pressable
+                  style={styles.counterButton}
+                  onPress={() =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      nbContrats: Math.max(1, prev.nbContrats - 1),
+                    }))
+                  }
+                >
+                  <Feather name="minus" size={16} color="#111827" />
+                </Pressable>
+                <Text style={styles.counterValue}>{editForm.nbContrats}</Text>
+                <Pressable
+                  style={[styles.counterButton, styles.counterButtonPrimary]}
+                  onPress={() =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      nbContrats: prev.nbContrats + 1,
+                    }))
+                  }
+                >
+                  <Feather name="plus" size={16} color="#111827" />
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          <View style={[styles.sheetCard, styles.sheetCardComment]}>
+            <Text style={styles.sheetLabel}>Commentaire</Text>
+            <TextInput
+              placeholder="Ajouter un commentaire..."
+              value={editForm.commentaire}
+              onChangeText={(value) =>
+                setEditForm((prev) => ({ ...prev, commentaire: value }))
+              }
+              style={[styles.sheetInput, styles.sheetTextarea]}
+              multiline
+            />
+          </View>
+
+          <View style={styles.sheetFooter}>
+            <Pressable style={styles.sheetGhost} onPress={closeEditSheet}>
+              <Text style={styles.sheetGhostText}>Annuler</Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.sheetPrimary,
+                savingPorte && styles.sheetPrimaryDisabled,
+              ]}
+              onPress={() => {
+                Keyboard.dismiss();
+                void saveEditSheet();
+              }}
+              disabled={savingPorte}
+            >
+              <Text style={styles.sheetPrimaryText}>
+                {savingPorte ? "..." : "Enregistrer"}
+              </Text>
+            </Pressable>
+          </View>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
+
+      {hasNativePicker && showDatePicker && DateTimePicker ? (
+        <DateTimePicker
+          value={getDateValue(editForm.rdvDate || getTodayDate())}
+          mode="date"
+          display={Platform.OS === "ios" ? "inline" : "default"}
+          onChange={(_, selected) => {
+            setShowDatePicker(false);
+            if (selected) {
+              const value = selected.toISOString().split("T")[0];
+              setEditForm((prev) => ({ ...prev, rdvDate: value }));
+            }
+          }}
+        />
+      ) : null}
+      {hasNativePicker && showTimePicker && DateTimePicker ? (
+        <DateTimePicker
+          value={getTimeValue(editForm.rdvTime || getNowTime())}
+          mode="time"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={(_, selected) => {
+            setShowTimePicker(false);
+            if (selected) {
+              const hh = String(selected.getHours()).padStart(2, "0");
+              const mm = String(selected.getMinutes()).padStart(2, "0");
+              setEditForm((prev) => ({ ...prev, rdvTime: `${hh}:${mm}` }));
+            }
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -1005,5 +1391,223 @@ const styles = StyleSheet.create({
   doorChipText: {
     fontSize: 11,
     fontWeight: "700",
+  },
+  sheetBackground: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  handleIndicator: {
+    width: 44,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#D1D5DB",
+  },
+  sheetContent: {
+    padding: 16,
+    paddingBottom: 24,
+    gap: 14,
+  },
+  sheetHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  sheetHeroRdv: {
+    backgroundColor: "#EEF5FF",
+    borderColor: "#D6E4FF",
+  },
+  sheetHeroContract: {
+    backgroundColor: "#EAFBF3",
+    borderColor: "#C9F2DD",
+  },
+  sheetHeroIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#DBEAFE",
+  },
+  sheetHeroIconBlue: {
+    backgroundColor: "#DBEAFE",
+  },
+  sheetHeroIconGreen: {
+    backgroundColor: "#DCFCE7",
+  },
+  sheetHeroText: {
+    flex: 1,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  sheetSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  sheetCard: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    gap: 10,
+  },
+  sheetCardRdv: {
+    backgroundColor: "#EFF6FF",
+    borderColor: "#DBEAFE",
+  },
+  sheetCardContract: {
+    backgroundColor: "#ECFDF3",
+    borderColor: "#D1FAE5",
+  },
+  sheetCardComment: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#FFFFFF",
+  },
+  inputInline: {
+    flex: 1,
+    fontSize: 13,
+    color: "#111827",
+  },
+  inputRowSpacing: {
+    marginTop: 10,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  pickerIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: "#DBEAFE",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pickerText: {
+    flex: 1,
+  },
+  pickerTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#1E3A8A",
+  },
+  pickerValue: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  sheetLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  sheetHint: {
+    fontSize: 11,
+    color: "#64748B",
+  },
+  sheetLabelSpacing: {
+    marginTop: 8,
+  },
+  sheetInput: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#FFFFFF",
+    fontSize: 13,
+    color: "#111827",
+  },
+  sheetTextarea: {
+    minHeight: 90,
+    textAlignVertical: "top",
+  },
+  counterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  counterButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  counterButtonPrimary: {
+    backgroundColor: "#D1FAE5",
+  },
+  counterValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  sheetFooter: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 6,
+  },
+  sheetGhost: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  sheetGhostText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+  },
+  sheetPrimary: {
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: "#111827",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  sheetPrimaryDisabled: {
+    opacity: 0.6,
+  },
+  sheetPrimaryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });

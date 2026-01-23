@@ -23,9 +23,12 @@ export const GET_COMMERCIAL_FULL = `
           nomPersonnalise
           etage
           statut
+          nbRepassages
+          nbContrats
           rdvDate
           rdvTime
           commentaire
+          derniereVisite
         }
       }
       statistics {

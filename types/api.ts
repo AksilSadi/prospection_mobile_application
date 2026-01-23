@@ -47,9 +47,12 @@ export type Porte = {
   etage: number;
   immeubleId: number;
   statut: string;
+  nbRepassages?: number | null;
+  nbContrats?: number | null;
   rdvDate?: string | null;
   rdvTime?: string | null;
   commentaire?: string | null;
+  derniereVisite?: string | null;
 };
 
 export type Immeuble = {
@@ -110,4 +113,18 @@ export type CommercialTeamRanking = {
   managerPrenom?: string | null;
   managerEmail?: string | null;
   managerNumTel?: string | null;
+};
+
+export type UpdatePorteInput = {
+  id: number;
+  numero?: string;
+  nomPersonnalise?: string | null;
+  etage?: number;
+  statut?: string;
+  nbRepassages?: number | null;
+  nbContrats?: number | null;
+  rdvDate?: string | null;
+  rdvTime?: string | null;
+  commentaire?: string | null;
+  derniereVisite?: string | null;
 };
