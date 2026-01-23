@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { TabView } from "react-native-tab-view";
 import BottomTabs from "@/components/navigation/BottomTabs";
@@ -19,6 +19,7 @@ type SwipeTabsProps = {
 
 export default function SwipeTabs({ index, onIndexChange }: SwipeTabsProps) {
   const tabRoutes = useMemo(() => routes, []);
+  const [swipeEnabled, setSwipeEnabled] = useState(true);
 
   return (
     <View style={styles.container}>
@@ -26,7 +27,12 @@ export default function SwipeTabs({ index, onIndexChange }: SwipeTabsProps) {
         navigationState={{ index, routes: tabRoutes }}
         renderScene={({ route }) => {
           if (route.key === "immeubles") {
-            return <ImmeublesScreen isActive={index === 1} />;
+            return (
+              <ImmeublesScreen
+                isActive={index === 1}
+                onSwipeLockChange={(locked) => setSwipeEnabled(!locked)}
+              />
+            );
           }
           if (route.key === "historique") {
             return <HistoriqueScreen />;
@@ -35,7 +41,7 @@ export default function SwipeTabs({ index, onIndexChange }: SwipeTabsProps) {
         }}
         onIndexChange={onIndexChange}
         renderTabBar={() => null}
-        swipeEnabled
+        swipeEnabled={swipeEnabled}
         lazy
       />
       <BottomTabs routes={tabRoutes} index={index} onTabPress={onIndexChange} />

@@ -19,10 +19,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type ImmeublesScreenProps = {
   isActive?: boolean;
+  onSwipeLockChange?: (locked: boolean) => void;
 };
 
 export default function ImmeublesScreen({
   isActive = true,
+  onSwipeLockChange,
 }: ImmeublesScreenProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -51,6 +53,11 @@ export default function ImmeublesScreen({
       setIsAddOpen(false);
     }
   }, [isActive, isAddOpen]);
+
+  useEffect(() => {
+    if (!onSwipeLockChange) return;
+    onSwipeLockChange(isActive && !!selectedImmeuble);
+  }, [isActive, onSwipeLockChange, selectedImmeuble]);
 
   const {
     data: profile,
