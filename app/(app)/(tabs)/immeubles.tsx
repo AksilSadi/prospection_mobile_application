@@ -1,4 +1,5 @@
 ﻿import AddImmeubleSheet from "@/components/immeubles/AddImmeubleSheet";
+import ImmeubleDetailsView from "@/components/immeubles/ImmeubleDetailsScreen";
 import { useCreateImmeuble } from "@/hooks/api/use-create-immeuble";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
@@ -31,6 +32,9 @@ export default function ImmeublesScreen({
   const [query, setQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [selectedImmeuble, setSelectedImmeuble] = useState<Immeuble | null>(
+    null,
+  );
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -71,6 +75,15 @@ export default function ImmeublesScreen({
     const lower = query.toLowerCase();
     return immeubles.filter((imm) => imm.adresse.toLowerCase().includes(lower));
   }, [immeubles, query]);
+
+  if (selectedImmeuble) {
+    return (
+      <ImmeubleDetailsView
+        immeuble={selectedImmeuble}
+        onBack={() => setSelectedImmeuble(null)}
+      />
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -130,7 +143,10 @@ export default function ImmeublesScreen({
         renderItem={({ item }) => {
           const totalPortes = item.nbEtages * item.nbPortesParEtage;
           return (
-            <View style={styles.card}>
+            <Pressable
+              style={styles.card}
+              onPress={() => setSelectedImmeuble(item)}
+            >
               <View style={styles.cardIcon}>
                 <Feather name="home" size={18} color="#FFFFFF" />
               </View>
@@ -167,7 +183,7 @@ export default function ImmeublesScreen({
                 </View>
               </View>
               <Feather name="chevron-right" size={18} color="#CBD5F5" />
-            </View>
+            </Pressable>
           );
         }}
       />

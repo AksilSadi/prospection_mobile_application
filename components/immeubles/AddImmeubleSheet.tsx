@@ -63,6 +63,7 @@ export default function AddImmeubleSheet({
   const isTablet = width >= 700;
   const sheetRef = useRef<BottomSheetModal>(null);
   const [currentStep, setCurrentStep] = useState(0);
+  const adresseInputRef = useRef<TextInput>(null);
   const [formData, setFormData] = useState({
     adresse: "",
     complementAdresse: "",
@@ -340,9 +341,13 @@ export default function AddImmeubleSheet({
           {currentStep === 0 && (
             <>
               <Text style={styles.label}>Adresse de l&apos;immeuble</Text>
-              <View style={styles.inputRow}>
+              <Pressable
+                style={styles.inputRow}
+                onPress={() => adresseInputRef.current?.focus()}
+              >
                 <Feather name="map-pin" size={16} color="#94A3B8" />
                 <TextInput
+                  ref={adresseInputRef}
                   placeholder="Tape une adresse..."
                   style={[
                     styles.input,
@@ -355,7 +360,7 @@ export default function AddImmeubleSheet({
                 {loadingSuggestions ? (
                   <ActivityIndicator size="small" color="#2563EB" />
                 ) : null}
-              </View>
+              </Pressable>
               {errors.adresse ? (
                 <Text style={styles.error}>{errors.adresse}</Text>
               ) : null}
