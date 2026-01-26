@@ -5,8 +5,9 @@ import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
 import type { Immeuble } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   FlatList,
   Pressable,
   StyleSheet,
@@ -34,9 +35,12 @@ export default function ImmeublesScreen({
   const [query, setQuery] = useState("");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
-  const [selectedImmeuble, setSelectedImmeuble] = useState<Immeuble | null>(
+  const [selectedImmeubleId, setSelectedImmeubleId] = useState<number | null>(
     null,
   );
+  const [detailsDirty, setDetailsDirty] = useState(false);
+  const listOpacity = useRef(new Animated.Value(1)).current;
+  const listTranslate = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -53,6 +57,24 @@ export default function ImmeublesScreen({
       setIsAddOpen(false);
     }
   }, [isActive, isAddOpen]);
+
+  useEffect(() => {
+    if (selectedImmeubleId !== null) return;
+    listOpacity.setValue(0);
+    listTranslate.setValue(8);
+    Animated.parallel([
+      Animated.timing(listOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(listTranslate, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [listOpacity, listTranslate, selectedImmeubleId]);
 
   useEffect(() => {
     if (!onSwipeLockChange) return;
@@ -83,17 +105,39 @@ export default function ImmeublesScreen({
     return immeubles.filter((imm) => imm.adresse.toLowerCase().includes(lower));
   }, [immeubles, query]);
 
+  const selectedImmeuble = useMemo(
+    () =>
+      selectedImmeubleId
+        ? immeubles.find((imm) => imm.id === selectedImmeubleId) || null
+        : null,
+    [immeubles, selectedImmeubleId],
+  );
+
   if (selectedImmeuble) {
     return (
       <ImmeubleDetailsView
         immeuble={selectedImmeuble}
-        onBack={() => setSelectedImmeuble(null)}
+        onBack={() => {
+          setSelectedImmeubleId(null);
+          if (detailsDirty) {
+            void refetch();
+            setDetailsDirty(false);
+          }
+        }}
+        onDirtyChange={setDetailsDirty}
       />
     );
   }
 
   return (
     <View style={styles.container}>
+      <Animated.View
+        style={{
+          flex: 1,
+          opacity: listOpacity,
+          transform: [{ translateY: listTranslate }],
+        }}
+      >
       <FlatList
         data={filteredImmeubles}
         keyExtractor={(item) => String(item.id)}
@@ -152,7 +196,7 @@ export default function ImmeublesScreen({
           return (
             <Pressable
               style={styles.card}
-              onPress={() => setSelectedImmeuble(item)}
+              onPress={() => setSelectedImmeubleId(item.id)}
             >
               <View style={styles.cardIcon}>
                 <Feather name="home" size={18} color="#FFFFFF" />
@@ -219,6 +263,7 @@ export default function ImmeublesScreen({
           }
         }}
       />
+      </Animated.View>
     </View>
   );
 }
