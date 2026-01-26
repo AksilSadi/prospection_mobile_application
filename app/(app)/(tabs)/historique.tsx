@@ -52,6 +52,27 @@ export default function HistoriqueScreen() {
 
   const visibleImmeubles = filteredImmeubles;
 
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.skeletonHeader}>
+          <View style={styles.skeletonTitle} />
+          <View style={styles.skeletonSubtitle} />
+          <View style={styles.skeletonFiltersRow}>
+            {Array.from({ length: 4 }).map((_, index) => (
+              <View key={index} style={styles.skeletonFilter} />
+            ))}
+          </View>
+        </View>
+        <View style={styles.skeletonList}>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <View key={index} style={styles.skeletonCard} />
+          ))}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -185,6 +206,44 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 12,
     color: "#94A3B8",
+  },
+  skeletonHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 10,
+  },
+  skeletonTitle: {
+    width: "35%",
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonSubtitle: {
+    width: "50%",
+    height: 14,
+    borderRadius: 8,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonFiltersRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  skeletonFilter: {
+    width: 54,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonList: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 12,
+  },
+  skeletonCard: {
+    height: 88,
+    borderRadius: 16,
+    backgroundColor: "#E5E7EB",
   },
   card: {
     flexDirection: "row",

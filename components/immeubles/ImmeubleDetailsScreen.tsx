@@ -188,6 +188,7 @@ export default function ImmeubleDetailsView({
   const cardTranslate = useRef(new Animated.Value(0)).current;
   const statusOpacity = useRef(new Animated.Value(1)).current;
   const statusTranslate = useRef(new Animated.Value(0)).current;
+  const doorPulse = useRef(new Animated.Value(1)).current;
   const { update: updatePorte, loading: savingPorte } = useUpdatePorte();
   const editSheetRef = useRef<BottomSheetModal>(null);
   const editSnapPoints = useMemo(
@@ -285,7 +286,6 @@ export default function ImmeubleDetailsView({
       });
     }, 1400);
   };
-
 
   const updateLocalPorte = (porteId: number, changes: Partial<Porte>) => {
     setPortesState((prev) =>
@@ -439,6 +439,17 @@ export default function ImmeubleDetailsView({
       }),
     ]).start();
   }, [currentIndex, sortedPortes.length, statusOpacity, statusTranslate]);
+
+  useEffect(() => {
+    if (!currentPorte?.id) return;
+    doorPulse.setValue(0.92);
+    Animated.spring(doorPulse, {
+      toValue: 1,
+      friction: 6,
+      tension: 140,
+      useNativeDriver: true,
+    }).start();
+  }, [currentPorte?.id, doorPulse]);
 
   const currentPorte = sortedPortes[currentIndex];
   const currentStatus = STATUS_OPTIONS.find(
@@ -645,14 +656,17 @@ export default function ImmeubleDetailsView({
             </View>
           </View>
 
-        <Animated.View
-          style={[
-            styles.currentCard,
-            { opacity: cardOpacity, transform: [{ translateY: cardTranslate }] },
-          ]}
-        >
-          <View style={styles.currentBackdrop} />
-          <View style={styles.currentHeader}>
+          <Animated.View
+            style={[
+              styles.currentCard,
+              {
+                opacity: cardOpacity,
+                transform: [{ translateY: cardTranslate }],
+              },
+            ]}
+          >
+            <View style={styles.currentBackdrop} />
+            <View style={styles.currentHeader}>
               <View>
                 <Text style={styles.currentLabel}>Porte courante</Text>
                 <Text style={styles.currentTitle}>
@@ -717,7 +731,7 @@ export default function ImmeubleDetailsView({
                 <Feather name="chevron-right" size={18} color="#1E293B" />
               </Pressable>
             </View>
-        </Animated.View>
+          </Animated.View>
 
           <View style={styles.section}>
             <View>
@@ -834,27 +848,38 @@ export default function ImmeubleDetailsView({
                       const chipBorder = "transparent";
                       const chipText = isVisited ? "#FFFFFF" : "#64748B";
                       return (
-                        <Pressable
+                        <Animated.View
                           key={porte.id}
-                          style={[
-                            styles.doorChip,
-                            {
-                              backgroundColor: chipBg,
-                              borderColor: chipBorder,
-                            },
-                            isActive && styles.doorChipActive,
-                          ]}
-                          onPress={() => goToPorte(porte.id)}
+                          style={{
+                            transform: [{ scale: isActive ? doorPulse : 1 }],
+                          }}
                         >
-                          <View style={styles.doorChipContent}>
-                            <Text
-                              style={[styles.doorChipText, { color: chipText }]}
-                            >
-                              {porte.nomPersonnalise || porte.numero}
-                            </Text>
-                            {isActive ? <View style={styles.activeDot} /> : null}
-                          </View>
-                        </Pressable>
+                          <Pressable
+                            style={[
+                              styles.doorChip,
+                              {
+                                backgroundColor: chipBg,
+                                borderColor: chipBorder,
+                              },
+                              isActive && styles.doorChipActive,
+                            ]}
+                            onPress={() => goToPorte(porte.id)}
+                          >
+                            <View style={styles.doorChipContent}>
+                              <Text
+                                style={[
+                                  styles.doorChipText,
+                                  { color: chipText },
+                                ]}
+                              >
+                                {porte.nomPersonnalise || porte.numero}
+                              </Text>
+                              {isActive ? (
+                                <View style={styles.activeDot} />
+                              ) : null}
+                            </View>
+                          </Pressable>
+                        </Animated.View>
                       );
                     })}
                   </View>
@@ -1080,7 +1105,7 @@ export default function ImmeubleDetailsView({
             value={getDateValue(editForm.rdvDate || getTodayDate())}
             mode="date"
             display="spinner"
-            onChange={(_, selected) => {
+            onChange={(_, selected: any) => {
               setShowDatePicker(false);
               if (selected) {
                 const value = selected.toISOString().split("T")[0];
@@ -1112,6 +1137,7 @@ export default function ImmeubleDetailsView({
           />
         </View>
       ) : null}
+
     </View>
   );
 }

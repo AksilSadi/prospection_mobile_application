@@ -75,7 +75,9 @@ export default function AddImmeubleSheet({
     longitude: null as number | null,
   });
   const [errors, setErrors] = useState<Record<string, string | null>>({});
-  const [addressSuggestions, setAddressSuggestions] = useState<MapboxFeature[]>([]);
+  const [addressSuggestions, setAddressSuggestions] = useState<MapboxFeature[]>(
+    [],
+  );
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [isAddressSelected, setIsAddressSelected] = useState(false);
 
@@ -284,7 +286,10 @@ export default function AddImmeubleSheet({
       detached={isTablet}
       bottomInset={insets.bottom + 12}
       style={sheetContainerStyle}
-      backgroundStyle={[styles.sheetBackground, isTablet && { borderRadius: 28 }]}
+      backgroundStyle={[
+        styles.sheetBackground,
+        isTablet && { borderRadius: 28 },
+      ]}
       handleIndicatorStyle={styles.handleIndicator}
     >
       <View style={[styles.sheet, isTablet && styles.sheetTablet]}>
@@ -293,9 +298,6 @@ export default function AddImmeubleSheet({
             <Text style={styles.title}>Ajouter un immeuble</Text>
             <Text style={styles.subtitle}>{STEPS[currentStep].title}</Text>
           </View>
-          <Pressable style={styles.close} onPress={close}>
-            <Feather name="x" size={18} color="#64748B" />
-          </Pressable>
         </View>
 
         <View style={styles.stepRow}>
@@ -488,9 +490,7 @@ export default function AddImmeubleSheet({
         <View style={styles.footer}>
           <View style={styles.footerHint}>
             <Text style={styles.footerHintTitle}>Conseils</Text>
-            <Text style={styles.footerHintText}>
-              {STEP_HINTS[currentStep]}
-            </Text>
+            <Text style={styles.footerHintText}>{STEP_HINTS[currentStep]}</Text>
           </View>
           <Pressable
             style={styles.ghostButton}

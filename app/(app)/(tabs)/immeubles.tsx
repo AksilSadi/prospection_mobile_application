@@ -78,8 +78,8 @@ export default function ImmeublesScreen({
 
   useEffect(() => {
     if (!onSwipeLockChange) return;
-    onSwipeLockChange(isActive && !!selectedImmeuble);
-  }, [isActive, onSwipeLockChange, selectedImmeuble]);
+    onSwipeLockChange(isActive && selectedImmeubleId !== null);
+  }, [isActive, onSwipeLockChange, selectedImmeubleId]);
 
   const {
     data: profile,
@@ -126,6 +126,27 @@ export default function ImmeublesScreen({
         }}
         onDirtyChange={setDetailsDirty}
       />
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.skeletonHeader}>
+          <View style={styles.skeletonTitle} />
+          <View style={styles.skeletonSubtitle} />
+          <View style={styles.skeletonSummaryRow}>
+            <View style={styles.skeletonSummaryCard} />
+            <View style={styles.skeletonSummaryCard} />
+          </View>
+          <View style={styles.skeletonSearch} />
+        </View>
+        <View style={styles.skeletonList}>
+          {Array.from({ length: 5 }).map((_, index) => (
+            <View key={index} style={styles.skeletonCard} />
+          ))}
+        </View>
+      </View>
     );
   }
 
@@ -354,6 +375,48 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 12,
     color: "#94A3B8",
+  },
+  skeletonHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 10,
+  },
+  skeletonTitle: {
+    width: "45%",
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonSubtitle: {
+    width: "60%",
+    height: 14,
+    borderRadius: 8,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonSummaryRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  skeletonSummaryCard: {
+    flex: 1,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonSearch: {
+    height: 44,
+    borderRadius: 18,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonList: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    gap: 12,
+  },
+  skeletonCard: {
+    height: 96,
+    borderRadius: 18,
+    backgroundColor: "#E5E7EB",
   },
   card: {
     flexDirection: "row",
