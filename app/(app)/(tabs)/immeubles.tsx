@@ -125,6 +125,7 @@ export default function ImmeublesScreen({
           }
         }}
         onDirtyChange={setDetailsDirty}
+        onRefreshImmeuble={() => void refetch()}
       />
     );
   }

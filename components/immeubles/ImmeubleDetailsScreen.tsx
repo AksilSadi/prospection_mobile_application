@@ -2,7 +2,9 @@ import AddPorteSheet, {
   type AddPortePayload,
 } from "@/components/immeubles/AddPorteSheet";
 import ConfirmActionOverlay from "@/components/immeubles/ConfirmActionOverlay";
+import { useAddEtageToImmeuble } from "@/hooks/api/use-add-etage-to-immeuble";
 import { useCreatePorte } from "@/hooks/api/use-create-porte";
+import { useRemoveEtageFromImmeuble } from "@/hooks/api/use-remove-etage-from-immeuble";
 import { useRemovePorteFromEtage } from "@/hooks/api/use-remove-porte-from-etage";
 import { useUpdatePorte } from "@/hooks/api/use-update-porte";
 import type {
@@ -140,6 +142,11 @@ const getLastDoorOnFloor = (portes: Porte[], etage: number) => {
   }, floorDoors[0]);
 };
 
+const getMaxEtage = (portes: Porte[], fallback: number) => {
+  if (portes.length === 0) return fallback;
+  return portes.reduce((max, porte) => Math.max(max, porte.etage), fallback);
+};
+
 const buildFallbackPortes = (immeuble: Immeuble | null) => {
   if (!immeuble) return [];
   const portes: Porte[] = [];
@@ -205,12 +212,14 @@ type ImmeubleDetailsViewProps = {
   immeuble: Immeuble;
   onBack: () => void;
   onDirtyChange?: (dirty: boolean) => void;
+  onRefreshImmeuble?: () => void | Promise<void>;
 };
 
 export default function ImmeubleDetailsView({
   immeuble,
   onBack,
   onDirtyChange,
+  onRefreshImmeuble,
 }: ImmeubleDetailsViewProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -241,8 +250,12 @@ export default function ImmeubleDetailsView({
   const statusOpacity = useRef(new Animated.Value(1)).current;
   const statusTranslate = useRef(new Animated.Value(0)).current;
   const doorPulse = useRef(new Animated.Value(1)).current;
+  const { add: addEtageToImmeuble, loading: addingEtage } =
+    useAddEtageToImmeuble();
+  const { create: createPorte, loading: creatingPorte } = useCreatePorte();
   const { update: updatePorte, loading: savingPorte } = useUpdatePorte();
-  const { create: createPorte } = useCreatePorte();
+  const { remove: removeEtageFromImmeuble, loading: removingEtage } =
+    useRemoveEtageFromImmeuble();
   const { remove: removePorteFromEtage } = useRemovePorteFromEtage();
   const editSheetRef = useRef<BottomSheetModal>(null);
   const editSnapPoints = useMemo(
@@ -266,8 +279,8 @@ export default function ImmeubleDetailsView({
   const [addPorteDefaults, setAddPorteDefaults] = useState({
     etage: 1,
     numero: "",
-  });
-  const [deleteTarget, setDeleteTarget] = useState<Porte | null>(null);
+  });  const [deleteTarget, setDeleteTarget] = useState<Porte | null>(null);
+  const [deleteFloor, setDeleteFloor] = useState<number | null>(null);
 
   useEffect(() => {
     if (immeuble.portes?.length) {
@@ -309,7 +322,7 @@ export default function ImmeubleDetailsView({
       ]).start();
     }, 120);
     return () => clearTimeout(timeoutId);
-  }, [portesState.length, contentOpacity, contentTranslate]);
+  }, [portesState, contentOpacity, contentTranslate]);
 
   const showToast = (title: string, subtitle: string) => {
     setActionToast({ title, subtitle });
@@ -457,6 +470,10 @@ export default function ImmeubleDetailsView({
     () => [...portesState].sort(comparePortesDesc),
     [portesState],
   );
+  const displayNbEtages = useMemo(
+    () => getMaxEtage(portesState, immeuble.nbEtages ?? 0),
+    [portesState, immeuble.nbEtages],
+  );
 
   useEffect(() => {
     if (currentIndex >= sortedPortes.length) {
@@ -564,6 +581,7 @@ export default function ImmeubleDetailsView({
 
   const canGoPreviousFloor = previousFloorTarget !== null;
   const canGoNextFloor = nextFloorTarget !== null;
+  const canRemoveEtage = displayNbEtages > 0;
 
   const goToPrevious = () => {
     setCurrentIndex((prev) => Math.max(0, prev - 1));
@@ -620,13 +638,14 @@ export default function ImmeubleDetailsView({
   };
 
   const openAddPorte = () => {
-    const etage = currentPorte?.etage ?? immeuble.nbEtages ?? 1;
+    const etage = (currentPorte?.etage ?? displayNbEtages) || 1;
     const numero = getNextDoorNumber(etage);
     setAddPorteDefaults({ etage, numero });
     setIsAddPorteOpen(true);
   };
 
   const handleAddPorte = async (payload: AddPortePayload) => {
+    if (creatingPorte) return;
     const tempId = -Date.now();
     const newPorte: Porte = {
       id: tempId,
@@ -647,7 +666,7 @@ export default function ImmeubleDetailsView({
     if (onDirtyChange) onDirtyChange(true);
     showToast(
       "Porte ajoutee",
-      `Etage ${payload.etage} • Porte ${payload.numero}`,
+      `Etage ${payload.etage} � Porte ${payload.numero}`,
     );
     const createPayload: CreatePorteInput = {
       immeubleId: immeuble.id,
@@ -668,6 +687,37 @@ export default function ImmeubleDetailsView({
     setIsAddPorteOpen(false);
   };
 
+  const handleAddEtage = async () => {
+    if (addingEtage) return;
+    const nextEtage = Math.max(1, displayNbEtages + 1);
+    const tempIdBase = -Date.now();
+    const tempDoors: Porte[] = Array.from(
+      { length: immeuble.nbPortesParEtage || 0 },
+      (_, index) => ({
+        id: tempIdBase - index - 1,
+        numero: String(index + 1),
+        etage: nextEtage,
+        immeubleId: immeuble.id,
+        statut: "NON_VISITE",
+      }),
+    );
+    const tempIds = tempDoors.map((porte) => porte.id);
+    setPortesState((prev) => [...prev, ...tempDoors]);
+    setHasLocalUpdates(true);
+    if (onDirtyChange) onDirtyChange(true);
+    showToast("Etage ajoute", `Etage ${nextEtage}`);
+    const added = await addEtageToImmeuble(immeuble.id);
+    if (!added) {
+      setPortesState((prev) => prev.filter((porte) => !tempIds.includes(porte.id)));
+      showToast("Erreur", "Ajout etage impossible");
+      return;
+    }
+
+    if (onRefreshImmeuble) {
+      void onRefreshImmeuble();
+    }
+  };
+
   const openDeletePorte = () => {
     if (!currentPorte) {
       showToast("Aucune porte", "Impossible de supprimer");
@@ -681,6 +731,7 @@ export default function ImmeubleDetailsView({
     if (lastDoor.id !== currentPorte.id) {
       showToast("Information", "Seule la derniere porte de l'etage est supprimee");
     }
+    setDeleteFloor(null);
     setDeleteTarget(lastDoor);
   };
 
@@ -717,7 +768,36 @@ export default function ImmeubleDetailsView({
     }
   };
 
-  const noop = () => {};
+  const openDeleteEtage = () => {
+    if (removingEtage) return;
+    const lastFloor = getMaxEtage(portesState, immeuble.nbEtages ?? 0);
+    if (!lastFloor) {
+      showToast("Aucun etage", "Impossible de supprimer");
+      return;
+    }
+    setDeleteTarget(null);
+    setDeleteFloor(lastFloor);
+  };
+
+  const confirmDeleteEtage = async () => {
+    if (deleteFloor === null) return;
+    const targetFloor = deleteFloor;
+    const previous = portesState;
+    const nextPortes = previous.filter((porte) => porte.etage !== targetFloor);
+    setPortesState(nextPortes);
+    setHasLocalUpdates(true);
+    if (onDirtyChange) onDirtyChange(true);
+    setCurrentIndex((prev) =>
+      Math.max(0, Math.min(prev, Math.max(0, nextPortes.length - 1))),
+    );
+    showToast("Etage supprime", `Etage ${targetFloor}`);
+    setDeleteFloor(null);
+    const removed = await removeEtageFromImmeuble(immeuble.id);
+    if (!removed) {
+      setPortesState(previous);
+      showToast("Erreur", "Suppression impossible");
+    }
+  };
 
   const applyStatus = async (
     porte: Porte,
@@ -790,7 +870,7 @@ export default function ImmeubleDetailsView({
             {immeuble.adresse}
           </Text>
           <Text style={styles.headerSubtitle}>
-            {immeuble.nbEtages} etages • {immeuble.nbPortesParEtage}{" "}
+            {displayNbEtages} etages • {immeuble.nbPortesParEtage}{" "}
             portes/etage
           </Text>
         </View>
@@ -1014,13 +1094,28 @@ export default function ImmeubleDetailsView({
                 </View>
                 <Text style={styles.manageTitle}>Supprimer porte</Text>
               </Pressable>
-              <Pressable style={styles.manageButton} onPress={noop}>
+              <Pressable
+                style={[
+                  styles.manageButton,
+                  addingEtage && styles.manageButtonDisabled,
+                ]}
+                onPress={handleAddEtage}
+                disabled={addingEtage}
+              >
                 <View style={styles.manageIcon}>
                   <Feather name="layers" size={18} color="#0F172A" />
                 </View>
                 <Text style={styles.manageTitle}>Ajouter etage</Text>
               </Pressable>
-              <Pressable style={styles.manageButton} onPress={noop}>
+              <Pressable
+                style={[
+                  styles.manageButton,
+                  (!canRemoveEtage || removingEtage) &&
+                    styles.manageButtonDisabled,
+                ]}
+                onPress={openDeleteEtage}
+                disabled={!canRemoveEtage || removingEtage}
+              >
                 <View style={styles.manageIconDanger}>
                   <Feather name="trash-2" size={18} color="#9F1239" />
                 </View>
@@ -1353,21 +1448,40 @@ export default function ImmeubleDetailsView({
       />
 
       <ConfirmActionOverlay
-        key={deleteTarget?.id ?? "delete-sheet"}
-        open={!!deleteTarget}
-        title="Supprimer la derniere porte ?"
+        key={
+          deleteFloor !== null
+            ? `delete-floor-${deleteFloor}`
+            : deleteTarget?.id ?? "delete-sheet"
+        }
+        open={!!deleteTarget || deleteFloor !== null}
+        title={
+          deleteFloor !== null
+            ? "Supprimer le dernier etage ?"
+            : "Supprimer la derniere porte ?"
+        }
         description={
-          deleteTarget
-            ? `Etage ${deleteTarget.etage} - Porte ${
-                deleteTarget.nomPersonnalise || deleteTarget.numero
-              }`
-            : undefined
+          deleteFloor !== null
+            ? `Etage ${deleteFloor} (toutes les portes seront supprimees)`
+            : deleteTarget
+              ? `Etage ${deleteTarget.etage} - Porte ${
+                  deleteTarget.nomPersonnalise || deleteTarget.numero
+                }`
+              : undefined
         }
         confirmLabel="Supprimer"
         cancelLabel="Annuler"
         tone="danger"
-        onConfirm={confirmDeletePorte}
-        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteFloor !== null) {
+            void confirmDeleteEtage();
+            return;
+          }
+          void confirmDeletePorte();
+        }}
+        onClose={() => {
+          setDeleteTarget(null);
+          setDeleteFloor(null);
+        }}
       />
 
       {hasNativePicker && showDatePicker && DateTimePicker ? (
@@ -2149,3 +2263,13 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 });
+
+
+
+
+
+
+
+
+
+
