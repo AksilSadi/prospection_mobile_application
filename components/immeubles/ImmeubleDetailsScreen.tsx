@@ -2,8 +2,15 @@ import AddPorteSheet, {
   type AddPortePayload,
 } from "@/components/immeubles/AddPorteSheet";
 import ConfirmActionOverlay from "@/components/immeubles/ConfirmActionOverlay";
+import { useCreatePorte } from "@/hooks/api/use-create-porte";
+import { useRemovePorteFromEtage } from "@/hooks/api/use-remove-porte-from-etage";
 import { useUpdatePorte } from "@/hooks/api/use-update-porte";
-import type { Immeuble, Porte, UpdatePorteInput } from "@/types/api";
+import type {
+  CreatePorteInput,
+  Immeuble,
+  Porte,
+  UpdatePorteInput,
+} from "@/types/api";
 import { Feather } from "@expo/vector-icons";
 import {
   BottomSheetBackdrop,
@@ -120,6 +127,19 @@ const comparePortesDesc = (a: Porte, b: Porte) => {
   });
 };
 
+const getLastDoorOnFloor = (portes: Porte[], etage: number) => {
+  const floorDoors = portes.filter((porte) => porte.etage === etage);
+  if (floorDoors.length === 0) return null;
+  return floorDoors.reduce((last, porte) => {
+    const cmp = String(porte.numero ?? "").localeCompare(
+      String(last.numero ?? ""),
+      "fr",
+      { numeric: true, sensitivity: "base" },
+    );
+    return cmp > 0 ? porte : last;
+  }, floorDoors[0]);
+};
+
 const buildFallbackPortes = (immeuble: Immeuble | null) => {
   if (!immeuble) return [];
   const portes: Porte[] = [];
@@ -222,6 +242,8 @@ export default function ImmeubleDetailsView({
   const statusTranslate = useRef(new Animated.Value(0)).current;
   const doorPulse = useRef(new Animated.Value(1)).current;
   const { update: updatePorte, loading: savingPorte } = useUpdatePorte();
+  const { create: createPorte } = useCreatePorte();
+  const { remove: removePorteFromEtage } = useRemovePorteFromEtage();
   const editSheetRef = useRef<BottomSheetModal>(null);
   const editSnapPoints = useMemo(
     () => (isTablet ? ["60%", "85%"] : ["55%", "75%"]),
@@ -604,7 +626,7 @@ export default function ImmeubleDetailsView({
     setIsAddPorteOpen(true);
   };
 
-  const handleAddPorte = (payload: AddPortePayload) => {
+  const handleAddPorte = async (payload: AddPortePayload) => {
     const tempId = -Date.now();
     const newPorte: Porte = {
       id: tempId,
@@ -627,6 +649,22 @@ export default function ImmeubleDetailsView({
       "Porte ajoutee",
       `Etage ${payload.etage} • Porte ${payload.numero}`,
     );
+    const createPayload: CreatePorteInput = {
+      immeubleId: immeuble.id,
+      numero: payload.numero,
+      nomPersonnalise: payload.nomPersonnalise || null,
+      etage: payload.etage,
+      statut: "NON_VISITE",
+    };
+    const created = await createPorte(createPayload);
+    if (!created) {
+      setPortesState((prev) => prev.filter((porte) => porte.id !== tempId));
+      showToast("Erreur", "Ajout de porte impossible");
+    } else {
+      setPortesState((prev) =>
+        prev.map((porte) => (porte.id === tempId ? created : porte)),
+      );
+    }
     setIsAddPorteOpen(false);
   };
 
@@ -635,19 +673,35 @@ export default function ImmeubleDetailsView({
       showToast("Aucune porte", "Impossible de supprimer");
       return;
     }
-    setDeleteTarget(currentPorte);
+    const lastDoor = getLastDoorOnFloor(portesState, currentPorte.etage);
+    if (!lastDoor) {
+      showToast("Aucune porte", "Impossible de supprimer");
+      return;
+    }
+    if (lastDoor.id !== currentPorte.id) {
+      showToast("Information", "Seule la derniere porte de l'etage est supprimee");
+    }
+    setDeleteTarget(lastDoor);
   };
 
-  const confirmDeletePorte = () => {
+  const confirmDeletePorte = async () => {
     if (!deleteTarget) return;
-    setPortesState((prev) =>
-      prev.filter((porte) => porte.id !== deleteTarget.id),
+    const targetId = deleteTarget.id;
+    const targetFloor = deleteTarget.etage;
+    const previous = portesState;
+    const removedIndex = sortedPortes.findIndex(
+      (porte) => porte.id === targetId,
     );
+    const nextPortes = previous.filter((porte) => porte.id !== targetId);
+    setPortesState(nextPortes);
     setHasLocalUpdates(true);
     if (onDirtyChange) onDirtyChange(true);
-    setCurrentIndex((prev) =>
-      Math.max(0, Math.min(prev, sortedPortes.length - 2)),
-    );
+    setCurrentIndex((prev) => {
+      const nextLength = Math.max(0, sortedPortes.length - 1);
+      if (nextLength === 0) return 0;
+      const base = removedIndex >= 0 && removedIndex < prev ? prev - 1 : prev;
+      return Math.max(0, Math.min(base, nextLength - 1));
+    });
     showToast(
       "Porte supprimee",
       deleteTarget.nomPersonnalise
@@ -655,6 +709,12 @@ export default function ImmeubleDetailsView({
         : `Porte ${deleteTarget.numero}`,
     );
     setDeleteTarget(null);
+    if (targetId < 0) return;
+    const removed = await removePorteFromEtage(immeuble.id, targetFloor);
+    if (!removed) {
+      setPortesState(previous);
+      showToast("Erreur", "Suppression impossible");
+    }
   };
 
   const noop = () => {};
@@ -1295,10 +1355,12 @@ export default function ImmeubleDetailsView({
       <ConfirmActionOverlay
         key={deleteTarget?.id ?? "delete-sheet"}
         open={!!deleteTarget}
-        title="Supprimer cette porte ?"
+        title="Supprimer la derniere porte ?"
         description={
           deleteTarget
-            ? `Porte ${deleteTarget.nomPersonnalise || deleteTarget.numero}`
+            ? `Etage ${deleteTarget.etage} - Porte ${
+                deleteTarget.nomPersonnalise || deleteTarget.numero
+              }`
             : undefined
         }
         confirmLabel="Supprimer"

@@ -55,6 +55,20 @@ export type Porte = {
   derniereVisite?: string | null;
 };
 
+export type CreatePorteInput = {
+  numero: string;
+  nomPersonnalise?: string | null;
+  etage: number;
+  immeubleId: number;
+  statut?: string;
+  nbRepassages?: number | null;
+  nbContrats?: number | null;
+  rdvDate?: string | null;
+  rdvTime?: string | null;
+  commentaire?: string | null;
+  derniereVisite?: string | null;
+};
+
 export type Immeuble = {
   id: number;
   adresse: string;

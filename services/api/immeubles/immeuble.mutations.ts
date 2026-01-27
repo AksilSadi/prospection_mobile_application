@@ -14,3 +14,15 @@ export const CREATE_IMMEUBLE = `
     }
   }
 `;
+
+export const REMOVE_PORTE_FROM_ETAGE = `
+  mutation RemovePorteFromEtage($immeubleId: Int!, $etage: Int!) {
+    removePorteFromEtage(immeubleId: $immeubleId, etage: $etage) {
+      id
+      adresse
+      nbEtages
+      nbPortesParEtage
+      updatedAt
+    }
+  }
+`;
