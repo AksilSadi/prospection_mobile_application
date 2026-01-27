@@ -219,7 +219,7 @@ export default function AddImmeubleSheet({
     }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
-  };
+  }; 
 
   const nextStep = () => {
     if (!validateStep(currentStep)) return;

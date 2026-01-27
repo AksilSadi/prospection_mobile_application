@@ -1,3 +1,7 @@
+import AddPorteSheet, {
+  type AddPortePayload,
+} from "@/components/immeubles/AddPorteSheet";
+import ConfirmActionOverlay from "@/components/immeubles/ConfirmActionOverlay";
 import { useUpdatePorte } from "@/hooks/api/use-update-porte";
 import type { Immeuble, Porte, UpdatePorteInput } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
@@ -34,13 +38,22 @@ type StatusOption = {
 
 const STATUS_OPTIONS: StatusOption[] = [
   {
-    value: "ABSENT",
-    label: "Absent",
-    description: "Pas repondu",
-    bg: "#F8FAFC",
-    fg: "#0F172A",
+    value: "ABSENT_MATIN",
+    label: "Absent matin",
+    description: "1er passage",
+    bg: "#FFFBEB",
+    fg: "#92400E",
     accent: "#F59E0B",
-    icon: "alert-circle",
+    icon: "sun",
+  },
+  {
+    value: "ABSENT_SOIR",
+    label: "Absent soir",
+    description: "2eme passage",
+    bg: "#EFF6FF",
+    fg: "#1E3A8A",
+    accent: "#2563EB",
+    icon: "moon",
   },
   {
     value: "REFUS",
@@ -80,6 +93,24 @@ const STATUS_OPTIONS: StatusOption[] = [
   },
 ];
 
+const STATUS_DISPLAY: Record<string, StatusOption> = {
+  ...Object.fromEntries(STATUS_OPTIONS.map((option) => [option.value, option])),
+};
+
+const getDisplayStatusKey = (porte?: Porte | null) => {
+  if (!porte?.statut) return null;
+  if (porte.statut === "ABSENT") {
+    const repassages = porte.nbRepassages ?? 1;
+    return repassages >= 2 ? "ABSENT_SOIR" : "ABSENT_MATIN";
+  }
+  return porte.statut;
+};
+
+const getDisplayStatus = (porte?: Porte | null) => {
+  const key = getDisplayStatusKey(porte);
+  return key ? (STATUS_DISPLAY[key] ?? null) : null;
+};
+
 const comparePortesDesc = (a: Porte, b: Porte) => {
   const etageDiff = b.etage - a.etage;
   if (etageDiff !== 0) return etageDiff;
@@ -114,10 +145,11 @@ function StatusGrid({
   currentPorte: Porte | undefined;
   onSelect: (statut: string) => void;
 }) {
+  const activeKey = getDisplayStatusKey(currentPorte);
   return (
     <View style={styles.statusGrid}>
       {STATUS_OPTIONS.map((option) => {
-        const isActive = currentPorte?.statut === option.value;
+        const isActive = activeKey === option.value;
         const cardBg = isActive ? option.accent : option.bg;
         const cardBorder = isActive ? option.accent : "#E5E5EA";
         const labelColor = isActive ? "#FFFFFF" : option.fg;
@@ -208,6 +240,12 @@ export default function ImmeubleDetailsView({
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [isAddPorteOpen, setIsAddPorteOpen] = useState(false);
+  const [addPorteDefaults, setAddPorteDefaults] = useState({
+    etage: 1,
+    numero: "",
+  });
+  const [deleteTarget, setDeleteTarget] = useState<Porte | null>(null);
 
   useEffect(() => {
     if (immeuble.portes?.length) {
@@ -452,9 +490,7 @@ export default function ImmeubleDetailsView({
   }, [currentPorte?.id, doorPulse]);
 
   const currentPorte = sortedPortes[currentIndex];
-  const currentStatus = STATUS_OPTIONS.find(
-    (option) => option.value === currentPorte?.statut,
-  ) ?? {
+  const currentStatus = getDisplayStatus(currentPorte) ?? {
     value: "NON_VISITE",
     label: "Non visite",
     description: "Par defaut",
@@ -550,7 +586,118 @@ export default function ImmeubleDetailsView({
     }
   };
 
+  const getNextDoorNumber = (etage: number) => {
+    const portesOnFloor = portesState.filter((porte) => porte.etage === etage);
+    const numbers = portesOnFloor
+      .map((porte) => Number(porte.numero))
+      .filter((value) => !Number.isNaN(value));
+    if (numbers.length > 0) {
+      return String(Math.max(...numbers) + 1);
+    }
+    return String(portesOnFloor.length + 1);
+  };
+
+  const openAddPorte = () => {
+    const etage = currentPorte?.etage ?? immeuble.nbEtages ?? 1;
+    const numero = getNextDoorNumber(etage);
+    setAddPorteDefaults({ etage, numero });
+    setIsAddPorteOpen(true);
+  };
+
+  const handleAddPorte = (payload: AddPortePayload) => {
+    const tempId = -Date.now();
+    const newPorte: Porte = {
+      id: tempId,
+      numero: payload.numero,
+      nomPersonnalise: payload.nomPersonnalise || null,
+      etage: payload.etage,
+      immeubleId: immeuble.id,
+      statut: "NON_VISITE",
+      nbRepassages: 0,
+      nbContrats: 0,
+      rdvDate: null,
+      rdvTime: null,
+      commentaire: null,
+      derniereVisite: null,
+    };
+    setPortesState((prev) => [...prev, newPorte]);
+    setHasLocalUpdates(true);
+    if (onDirtyChange) onDirtyChange(true);
+    showToast(
+      "Porte ajoutee",
+      `Etage ${payload.etage} • Porte ${payload.numero}`,
+    );
+    setIsAddPorteOpen(false);
+  };
+
+  const openDeletePorte = () => {
+    if (!currentPorte) {
+      showToast("Aucune porte", "Impossible de supprimer");
+      return;
+    }
+    setDeleteTarget(currentPorte);
+  };
+
+  const confirmDeletePorte = () => {
+    if (!deleteTarget) return;
+    setPortesState((prev) =>
+      prev.filter((porte) => porte.id !== deleteTarget.id),
+    );
+    setHasLocalUpdates(true);
+    if (onDirtyChange) onDirtyChange(true);
+    setCurrentIndex((prev) =>
+      Math.max(0, Math.min(prev, sortedPortes.length - 2)),
+    );
+    showToast(
+      "Porte supprimee",
+      deleteTarget.nomPersonnalise
+        ? deleteTarget.nomPersonnalise
+        : `Porte ${deleteTarget.numero}`,
+    );
+    setDeleteTarget(null);
+  };
+
   const noop = () => {};
+
+  const applyStatus = async (
+    porte: Porte,
+    statut: string,
+    extra?: { nbRepassages?: number },
+  ) => {
+    const displayKey =
+      statut === "ABSENT" && typeof extra?.nbRepassages === "number"
+        ? extra.nbRepassages >= 2
+          ? "ABSENT_SOIR"
+          : "ABSENT_MATIN"
+        : statut;
+    const selectedStatus = STATUS_DISPLAY[displayKey]?.label ?? "Mis a jour";
+    showToast(
+      `Porte ${porte.nomPersonnalise || porte.numero}`,
+      `Statut: ${selectedStatus}`,
+    );
+    const visitedAt = new Date().toISOString();
+    updateLocalPorte(porte.id, {
+      statut,
+      nbRepassages: extra?.nbRepassages,
+      derniereVisite: visitedAt,
+    });
+    const payload: UpdatePorteInput = {
+      id: porte.id,
+      statut,
+      derniereVisite: visitedAt,
+      commentaire: porte.commentaire || null,
+    };
+    if (typeof extra?.nbRepassages === "number") {
+      payload.nbRepassages = extra.nbRepassages;
+    }
+    const result = await updatePorte(payload);
+    if (!result) {
+      showToast("Erreur", "Mise a jour impossible");
+    }
+    if (currentIndex < sortedPortes.length - 1) {
+      setCurrentIndex((prev) => Math.min(prev + 1, sortedPortes.length - 1));
+    }
+  };
 
   const handleStatusSelect = async (statut: string) => {
     if (!currentPorte) return;
@@ -558,30 +705,18 @@ export default function ImmeubleDetailsView({
       openEditSheet(currentPorte, statut);
       return;
     }
-    const selectedStatus =
-      STATUS_OPTIONS.find((option) => option.value === statut)?.label ??
-      "Mis a jour";
-    showToast(
-      `Porte ${currentPorte.nomPersonnalise || currentPorte.numero}`,
-      `Statut: ${selectedStatus}`,
-    );
-    const visitedAt = new Date().toISOString();
-    updateLocalPorte(currentPorte.id, {
-      statut,
-      derniereVisite: visitedAt,
-    });
-    const result = await updatePorte({
-      id: currentPorte.id,
-      statut,
-      derniereVisite: visitedAt,
-      commentaire: currentPorte.commentaire || null,
-    });
-    if (!result) {
-      showToast("Erreur", "Mise a jour impossible");
+    if (statut === "ABSENT_MATIN") {
+      await applyStatus(currentPorte, "ABSENT", { nbRepassages: 1 });
+      return;
     }
-    if (currentIndex < sortedPortes.length - 1) {
-      setCurrentIndex((prev) => Math.min(prev + 1, sortedPortes.length - 1));
+    if (statut === "ABSENT_SOIR") {
+      const nextRepassage = Math.max(2, currentPorte.nbRepassages ?? 0);
+      await applyStatus(currentPorte, "ABSENT", {
+        nbRepassages: nextRepassage,
+      });
+      return;
     }
+    await applyStatus(currentPorte, statut);
   };
 
   return (
@@ -800,13 +935,20 @@ export default function ImmeubleDetailsView({
               <Text style={styles.sectionTitle}>Gestion portes & etages</Text>
             </View>
             <View style={styles.manageGrid}>
-              <Pressable style={styles.manageButton} onPress={noop}>
+              <Pressable style={styles.manageButton} onPress={openAddPorte}>
                 <View style={styles.manageIcon}>
                   <Feather name="plus-square" size={18} color="#0F172A" />
                 </View>
                 <Text style={styles.manageTitle}>Ajouter porte</Text>
               </Pressable>
-              <Pressable style={styles.manageButton} onPress={noop}>
+              <Pressable
+                style={[
+                  styles.manageButton,
+                  !currentPorte && styles.manageButtonDisabled,
+                ]}
+                onPress={openDeletePorte}
+                disabled={!currentPorte}
+              >
                 <View style={styles.manageIconDanger}>
                   <Feather name="minus-square" size={18} color="#9F1239" />
                 </View>
@@ -838,10 +980,7 @@ export default function ImmeubleDetailsView({
                   <Text style={styles.mapEtageTitle}>Etage {etage}</Text>
                   <View style={styles.mapDoors}>
                     {portes.map((porte) => {
-                      const status =
-                        STATUS_OPTIONS.find(
-                          (option) => option.value === porte.statut,
-                        ) ?? null;
+                      const status = getDisplayStatus(porte);
                       const isActive = porte.id === currentPorte?.id;
                       const isVisited = status !== null;
                       const chipBg = isVisited ? status.accent : "#E2E8F0";
@@ -911,193 +1050,263 @@ export default function ImmeubleDetailsView({
         backgroundStyle={styles.sheetBackground}
         handleIndicatorStyle={styles.handleIndicator}
       >
-        <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
-          <View
-            style={[
-              styles.sheetHero,
-              editMode === "RENDEZ_VOUS_PRIS"
-                ? styles.sheetHeroRdv
-                : styles.sheetHeroContract,
-            ]}
-          >
+        <BottomSheetScrollView
+          contentContainerStyle={[
+            styles.sheetContent,
+            isTablet && styles.sheetContentTablet,
+          ]}
+        >
+          <>
             <View
               style={[
-                styles.sheetHeroIcon,
+                styles.sheetHero,
                 editMode === "RENDEZ_VOUS_PRIS"
-                  ? styles.sheetHeroIconBlue
-                  : styles.sheetHeroIconGreen,
+                  ? styles.sheetHeroRdv
+                  : styles.sheetHeroContract,
+                isTablet && styles.sheetHeroTablet,
               ]}
             >
-              <Feather
-                name={editMode === "RENDEZ_VOUS_PRIS" ? "calendar" : "award"}
-                size={18}
-                color={editMode === "RENDEZ_VOUS_PRIS" ? "#1D4ED8" : "#047857"}
-              />
-            </View>
-            <View style={styles.sheetHeroText}>
-              <Text style={styles.sheetTitle}>
-                {editMode === "RENDEZ_VOUS_PRIS"
-                  ? "Rendez-vous"
-                  : "Contrat signe"}
-              </Text>
-              <Text style={styles.sheetSubtitle}>
-                {editPorte?.nomPersonnalise ||
-                  `Porte ${editPorte?.numero || ""}`}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.sheetCard}>
-            <Text style={styles.sheetLabel}>Nom personnalise</Text>
-            <View style={styles.inputRow}>
-              <Feather name="edit-3" size={16} color="#6B7280" />
-              <TextInput
-                placeholder={`Porte ${editPorte?.numero || ""}`}
-                value={editForm.nomPersonnalise}
-                onChangeText={(value) =>
-                  setEditForm((prev) => ({ ...prev, nomPersonnalise: value }))
-                }
-                style={styles.inputInline}
-              />
-            </View>
-          </View>
-
-          {editMode === "RENDEZ_VOUS_PRIS" && (
-            <View style={[styles.sheetCard, styles.sheetCardRdv]}>
-              <Text style={styles.sheetLabel}>Quand</Text>
-              {hasNativePicker ? (
-                <>
-                  <Pressable
-                    style={styles.pickerRow}
-                    onPress={() => setShowDatePicker(true)}
-                  >
-                    <View style={styles.pickerIcon}>
-                      <Feather name="calendar" size={16} color="#1D4ED8" />
-                    </View>
-                    <View style={styles.pickerText}>
-                      <Text style={styles.pickerTitle}>Date</Text>
-                      <Text style={styles.pickerValue}>
-                        {formatDateLabel(editForm.rdvDate)}
-                      </Text>
-                    </View>
-                    <Feather name="chevron-right" size={16} color="#94A3B8" />
-                  </Pressable>
-                  <Pressable
-                    style={styles.pickerRow}
-                    onPress={() => setShowTimePicker(true)}
-                  >
-                    <View style={styles.pickerIcon}>
-                      <Feather name="clock" size={16} color="#1D4ED8" />
-                    </View>
-                    <View style={styles.pickerText}>
-                      <Text style={styles.pickerTitle}>Heure</Text>
-                      <Text style={styles.pickerValue}>
-                        {formatTimeLabel(editForm.rdvTime)}
-                      </Text>
-                    </View>
-                    <Feather name="chevron-right" size={16} color="#94A3B8" />
-                  </Pressable>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.sheetHint}>
-                    Activez le DatePicker natif pour une meilleure experience.
-                  </Text>
-                  <View style={styles.inputRow}>
-                    <Feather name="calendar" size={16} color="#6B7280" />
-                    <TextInput
-                      placeholder="YYYY-MM-DD"
-                      value={editForm.rdvDate}
-                      onChangeText={(value) =>
-                        setEditForm((prev) => ({ ...prev, rdvDate: value }))
-                      }
-                      style={styles.inputInline}
-                      keyboardType="numbers-and-punctuation"
-                    />
-                  </View>
-                  <View style={[styles.inputRow, styles.inputRowSpacing]}>
-                    <Feather name="clock" size={16} color="#6B7280" />
-                    <TextInput
-                      placeholder="HH:mm"
-                      value={editForm.rdvTime}
-                      onChangeText={(value) =>
-                        setEditForm((prev) => ({ ...prev, rdvTime: value }))
-                      }
-                      style={styles.inputInline}
-                      keyboardType="numbers-and-punctuation"
-                    />
-                  </View>
-                </>
-              )}
-            </View>
-          )}
-
-          {editMode === "CONTRAT_SIGNE" && (
-            <View style={[styles.sheetCard, styles.sheetCardContract]}>
-              <Text style={styles.sheetLabel}>Contrats signes</Text>
-              <View style={styles.counterRow}>
-                <Pressable
-                  style={styles.counterButton}
-                  onPress={() =>
-                    setEditForm((prev) => ({
-                      ...prev,
-                      nbContrats: Math.max(1, prev.nbContrats - 1),
-                    }))
+              <View
+                style={[
+                  styles.sheetHeroIcon,
+                  editMode === "RENDEZ_VOUS_PRIS"
+                    ? styles.sheetHeroIconBlue
+                    : styles.sheetHeroIconGreen,
+                ]}
+              >
+                <Feather
+                  name={editMode === "RENDEZ_VOUS_PRIS" ? "calendar" : "award"}
+                  size={18}
+                  color={
+                    editMode === "RENDEZ_VOUS_PRIS" ? "#1D4ED8" : "#047857"
                   }
+                />
+              </View>
+              <View style={styles.sheetHeroText}>
+                <Text
+                  style={[
+                    styles.sheetTitle,
+                    isTablet && styles.sheetTitleTablet,
+                  ]}
                 >
-                  <Feather name="minus" size={16} color="#111827" />
-                </Pressable>
-                <Text style={styles.counterValue}>{editForm.nbContrats}</Text>
-                <Pressable
-                  style={[styles.counterButton, styles.counterButtonPrimary]}
-                  onPress={() =>
-                    setEditForm((prev) => ({
-                      ...prev,
-                      nbContrats: prev.nbContrats + 1,
-                    }))
-                  }
+                  {editMode === "RENDEZ_VOUS_PRIS"
+                    ? "Rendez-vous"
+                    : "Contrat signe"}
+                </Text>
+                <Text
+                  style={[
+                    styles.sheetSubtitle,
+                    isTablet && styles.sheetSubtitleTablet,
+                  ]}
                 >
-                  <Feather name="plus" size={16} color="#111827" />
-                </Pressable>
+                  {editPorte?.nomPersonnalise ||
+                    `Porte ${editPorte?.numero || ""}`}
+                </Text>
               </View>
             </View>
-          )}
 
-          <View style={[styles.sheetCard, styles.sheetCardComment]}>
-            <Text style={styles.sheetLabel}>Commentaire</Text>
-            <TextInput
-              placeholder="Ajouter un commentaire..."
-              value={editForm.commentaire}
-              onChangeText={(value) =>
-                setEditForm((prev) => ({ ...prev, commentaire: value }))
-              }
-              style={[styles.sheetInput, styles.sheetTextarea]}
-              multiline
-            />
-          </View>
-
-          <View style={styles.sheetFooter}>
-            <Pressable style={styles.sheetGhost} onPress={closeEditSheet}>
-              <Text style={styles.sheetGhostText}>Annuler</Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.sheetPrimary,
-                savingPorte && styles.sheetPrimaryDisabled,
-              ]}
-              onPress={() => {
-                Keyboard.dismiss();
-                void saveEditSheet();
-              }}
-              disabled={savingPorte}
+            <View
+              style={[styles.sheetCard, isTablet && styles.sheetCardTablet]}
             >
-              <Text style={styles.sheetPrimaryText}>
-                {savingPorte ? "..." : "Enregistrer"}
-              </Text>
-            </Pressable>
-          </View>
+              <Text style={styles.sheetLabel}>Nom personnalise</Text>
+              <View style={styles.inputRow}>
+                <Feather name="edit-3" size={16} color="#6B7280" />
+                <TextInput
+                  placeholder={`Porte ${editPorte?.numero || ""}`}
+                  value={editForm.nomPersonnalise}
+                  onChangeText={(value) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      nomPersonnalise: value,
+                    }))
+                  }
+                  style={styles.inputInline}
+                />
+              </View>
+            </View>
+
+            {editMode === "RENDEZ_VOUS_PRIS" && (
+              <View
+                style={[
+                  styles.sheetCard,
+                  styles.sheetCardRdv,
+                  isTablet && styles.sheetCardTablet,
+                ]}
+              >
+                <Text style={styles.sheetLabel}>Quand</Text>
+                {hasNativePicker ? (
+                  <>
+                    <Pressable
+                      style={styles.pickerRow}
+                      onPress={() => setShowDatePicker(true)}
+                    >
+                      <View style={styles.pickerIcon}>
+                        <Feather name="calendar" size={16} color="#1D4ED8" />
+                      </View>
+                      <View style={styles.pickerText}>
+                        <Text style={styles.pickerTitle}>Date</Text>
+                        <Text style={styles.pickerValue}>
+                          {formatDateLabel(editForm.rdvDate)}
+                        </Text>
+                      </View>
+                      <Feather name="chevron-right" size={16} color="#94A3B8" />
+                    </Pressable>
+                    <Pressable
+                      style={styles.pickerRow}
+                      onPress={() => setShowTimePicker(true)}
+                    >
+                      <View style={styles.pickerIcon}>
+                        <Feather name="clock" size={16} color="#1D4ED8" />
+                      </View>
+                      <View style={styles.pickerText}>
+                        <Text style={styles.pickerTitle}>Heure</Text>
+                        <Text style={styles.pickerValue}>
+                          {formatTimeLabel(editForm.rdvTime)}
+                        </Text>
+                      </View>
+                      <Feather name="chevron-right" size={16} color="#94A3B8" />
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.sheetHint}>
+                      Activez le DatePicker natif pour une meilleure experience.
+                    </Text>
+                    <View style={styles.inputRow}>
+                      <Feather name="calendar" size={16} color="#6B7280" />
+                      <TextInput
+                        placeholder="YYYY-MM-DD"
+                        value={editForm.rdvDate}
+                        onChangeText={(value) =>
+                          setEditForm((prev) => ({ ...prev, rdvDate: value }))
+                        }
+                        style={styles.inputInline}
+                        keyboardType="numbers-and-punctuation"
+                      />
+                    </View>
+                    <View style={[styles.inputRow, styles.inputRowSpacing]}>
+                      <Feather name="clock" size={16} color="#6B7280" />
+                      <TextInput
+                        placeholder="HH:mm"
+                        value={editForm.rdvTime}
+                        onChangeText={(value) =>
+                          setEditForm((prev) => ({ ...prev, rdvTime: value }))
+                        }
+                        style={styles.inputInline}
+                        keyboardType="numbers-and-punctuation"
+                      />
+                    </View>
+                  </>
+                )}
+              </View>
+            )}
+
+            {editMode === "CONTRAT_SIGNE" && (
+              <View
+                style={[
+                  styles.sheetCard,
+                  styles.sheetCardContract,
+                  isTablet && styles.sheetCardTablet,
+                ]}
+              >
+                <Text style={styles.sheetLabel}>Contrats signes</Text>
+                <View style={styles.counterRow}>
+                  <Pressable
+                    style={styles.counterButton}
+                    onPress={() =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        nbContrats: Math.max(1, prev.nbContrats - 1),
+                      }))
+                    }
+                  >
+                    <Feather name="minus" size={16} color="#111827" />
+                  </Pressable>
+                  <Text style={styles.counterValue}>{editForm.nbContrats}</Text>
+                  <Pressable
+                    style={[styles.counterButton, styles.counterButtonPrimary]}
+                    onPress={() =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        nbContrats: prev.nbContrats + 1,
+                      }))
+                    }
+                  >
+                    <Feather name="plus" size={16} color="#111827" />
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            <View
+              style={[
+                styles.sheetCard,
+                styles.sheetCardComment,
+                isTablet && styles.sheetCardTablet,
+              ]}
+            >
+              <Text style={styles.sheetLabel}>Commentaire</Text>
+              <TextInput
+                placeholder="Ajouter un commentaire..."
+                value={editForm.commentaire}
+                onChangeText={(value) =>
+                  setEditForm((prev) => ({ ...prev, commentaire: value }))
+                }
+                style={[styles.sheetInput, styles.sheetTextarea]}
+                multiline
+              />
+            </View>
+
+            <View
+              style={[styles.sheetFooter, isTablet && styles.sheetFooterTablet]}
+            >
+              <Pressable style={styles.sheetGhost} onPress={closeEditSheet}>
+                <Text style={styles.sheetGhostText}>Annuler</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.sheetPrimary,
+                  savingPorte && styles.sheetPrimaryDisabled,
+                  isTablet && styles.sheetPrimaryTablet,
+                ]}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  void saveEditSheet();
+                }}
+                disabled={savingPorte}
+              >
+                <Text style={styles.sheetPrimaryText}>
+                  {savingPorte ? "..." : "Enregistrer"}
+                </Text>
+              </Pressable>
+            </View>
+          </>
         </BottomSheetScrollView>
       </BottomSheetModal>
+
+      <AddPorteSheet
+        open={isAddPorteOpen}
+        defaultEtage={addPorteDefaults.etage}
+        defaultNumero={addPorteDefaults.numero}
+        onClose={() => setIsAddPorteOpen(false)}
+        onSubmit={handleAddPorte}
+      />
+
+      <ConfirmActionOverlay
+        key={deleteTarget?.id ?? "delete-sheet"}
+        open={!!deleteTarget}
+        title="Supprimer cette porte ?"
+        description={
+          deleteTarget
+            ? `Porte ${deleteTarget.nomPersonnalise || deleteTarget.numero}`
+            : undefined
+        }
+        confirmLabel="Supprimer"
+        cancelLabel="Annuler"
+        tone="danger"
+        onConfirm={confirmDeletePorte}
+        onClose={() => setDeleteTarget(null)}
+      />
 
       {hasNativePicker && showDatePicker && DateTimePicker ? (
         <View style={styles.pickerWrapper}>
@@ -1137,7 +1346,6 @@ export default function ImmeubleDetailsView({
           />
         </View>
       ) : null}
-
     </View>
   );
 }
@@ -1506,6 +1714,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 8,
   },
+  manageButtonDisabled: {
+    opacity: 0.5,
+  },
   manageIcon: {
     width: 36,
     height: 36,
@@ -1586,10 +1797,62 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#D1D5DB",
   },
+  absentOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  absentOptionMorning: {
+    backgroundColor: "#FFFBEB",
+    borderColor: "#FDE68A",
+  },
+  absentOptionEvening: {
+    backgroundColor: "#EFF6FF",
+    borderColor: "#BFDBFE",
+  },
+  absentOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  absentOptionText: {
+    flex: 1,
+  },
+  absentOptionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  absentOptionDesc: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
   sheetContent: {
     padding: 16,
     paddingBottom: 24,
     gap: 14,
+  },
+  sheetContentTablet: {
+    paddingHorizontal: 32,
+    paddingBottom: 32,
+    maxWidth: 560,
+    alignSelf: "center",
+    width: "100%",
   },
   sheetHero: {
     flexDirection: "row",
@@ -1600,6 +1863,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#EFF6FF",
     borderWidth: 1,
     borderColor: "#E2E8F0",
+  },
+  sheetHeroTablet: {
+    padding: 16,
   },
   sheetHeroRdv: {
     backgroundColor: "#DBEAFE",
@@ -1631,9 +1897,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
   },
+  sheetTitleTablet: {
+    fontSize: 18,
+  },
   sheetSubtitle: {
     fontSize: 12,
     color: "#6B7280",
+  },
+  sheetSubtitleTablet: {
+    fontSize: 13,
   },
   sheetCard: {
     backgroundColor: "#FFFFFF",
@@ -1642,6 +1914,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
     gap: 10,
+  },
+  sheetCardTablet: {
+    padding: 16,
   },
   sheetCardRdv: {
     backgroundColor: "#EFF6FF",
@@ -1777,6 +2052,9 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 6,
   },
+  sheetFooterTablet: {
+    marginTop: 10,
+  },
   sheetGhost: {
     flex: 1,
     borderRadius: 14,
@@ -1796,6 +2074,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
     paddingVertical: 12,
     alignItems: "center",
+  },
+  sheetPrimaryTablet: {
+    paddingVertical: 14,
   },
   sheetPrimaryDisabled: {
     opacity: 0.6,
