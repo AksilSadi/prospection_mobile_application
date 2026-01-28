@@ -1,4 +1,4 @@
-import AddPorteSheet, {
+﻿import AddPorteSheet, {
   type AddPortePayload,
 } from "@/components/immeubles/AddPorteSheet";
 import ConfirmActionOverlay from "@/components/immeubles/ConfirmActionOverlay";
@@ -23,6 +23,8 @@ import type { ComponentType } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Easing,
+  FlatList,
   Keyboard,
   Pressable,
   ScrollView,
@@ -30,6 +32,7 @@ import {
   Text,
   TextInput,
   useWindowDimensions,
+  Vibration,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -231,6 +234,7 @@ export default function ImmeubleDetailsView({
     subtitle: string;
   } | null>(null);
   const [hasLocalUpdates, setHasLocalUpdates] = useState(false);
+  const immeubleIdRef = useRef<number | null>(null);
   const DateTimePicker = useMemo<DateTimePickerType>(() => {
     try {
       return require("@react-native-community/datetimepicker").default;
@@ -245,11 +249,18 @@ export default function ImmeubleDetailsView({
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const contentTranslate = useRef(new Animated.Value(12)).current;
   const [isReady, setIsReady] = useState(false);
-  const cardOpacity = useRef(new Animated.Value(1)).current;
-  const cardTranslate = useRef(new Animated.Value(0)).current;
-  const statusOpacity = useRef(new Animated.Value(1)).current;
-  const statusTranslate = useRef(new Animated.Value(0)).current;
   const doorPulse = useRef(new Animated.Value(1)).current;
+  const doorPagerRef = useRef<FlatList<Porte>>(null);
+  const swipeShake = useRef(new Animated.Value(0)).current;
+  const swipeLockRef = useRef(false);
+  const forwardBlockRef = useRef(false);
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const progressFill = useRef(new Animated.Value(0)).current;
+  const manageSheetRef = useRef<BottomSheetModal>(null);
+  const manageSheetSnapPoints = useMemo(
+    () => (isTablet ? ["52%"] : ["62%"]),
+    [isTablet],
+  );
   const { add: addEtageToImmeuble, loading: addingEtage } =
     useAddEtageToImmeuble();
   const { create: createPorte, loading: creatingPorte } = useCreatePorte();
@@ -279,22 +290,36 @@ export default function ImmeubleDetailsView({
   const [addPorteDefaults, setAddPorteDefaults] = useState({
     etage: 1,
     numero: "",
-  });  const [deleteTarget, setDeleteTarget] = useState<Porte | null>(null);
+  });
+  const [deleteTarget, setDeleteTarget] = useState<Porte | null>(null);
   const [deleteFloor, setDeleteFloor] = useState<number | null>(null);
 
   useEffect(() => {
-    if (immeuble.portes?.length) {
-      setPortesState(immeuble.portes);
-    } else {
-      setPortesState(buildFallbackPortes(immeuble));
+    const nextPortes = immeuble.portes?.length
+      ? immeuble.portes
+      : buildFallbackPortes(immeuble);
+    const isNewImmeuble = immeubleIdRef.current !== immeuble.id;
+    immeubleIdRef.current = immeuble.id;
+    setPortesState(nextPortes);
+    setCurrentIndex((prev) => {
+      if (isNewImmeuble) return 0;
+      if (nextPortes.length === 0) return 0;
+      return Math.min(prev, nextPortes.length - 1);
+    });
+    if (isNewImmeuble) {
+      setHasLocalUpdates(false);
+      if (onDirtyChange) onDirtyChange(false);
+      if (nextPortes.length > 0) {
+        setIsReady(true);
+        contentOpacity.setValue(1);
+        contentTranslate.setValue(0);
+      } else {
+        setIsReady(false);
+        contentOpacity.setValue(0);
+        contentTranslate.setValue(12);
+      }
     }
-    setCurrentIndex(0);
-    setIsReady(false);
-    contentOpacity.setValue(0);
-    contentTranslate.setValue(12);
-    setHasLocalUpdates(false);
-    if (onDirtyChange) onDirtyChange(false);
-  }, [immeuble]);
+  }, [immeuble, onDirtyChange, contentOpacity, contentTranslate]);
 
   useEffect(() => {
     return () => {
@@ -305,24 +330,24 @@ export default function ImmeubleDetailsView({
   }, []);
 
   useEffect(() => {
-    if (portesState.length === 0) return;
+    if (isReady) return;
     const timeoutId = setTimeout(() => {
       setIsReady(true);
       Animated.parallel([
         Animated.timing(contentOpacity, {
           toValue: 1,
-          duration: 260,
+          duration: 200,
           useNativeDriver: true,
         }),
         Animated.timing(contentTranslate, {
           toValue: 0,
-          duration: 260,
+          duration: 200,
           useNativeDriver: true,
         }),
       ]).start();
-    }, 120);
+    }, 60);
     return () => clearTimeout(timeoutId);
-  }, [portesState, contentOpacity, contentTranslate]);
+  }, [contentOpacity, contentTranslate, isReady]);
 
   const showToast = (title: string, subtitle: string) => {
     setActionToast({ title, subtitle });
@@ -479,43 +504,7 @@ export default function ImmeubleDetailsView({
     if (currentIndex >= sortedPortes.length) {
       setCurrentIndex(Math.max(0, sortedPortes.length - 1));
     }
-  }, [currentIndex, sortedPortes.length]);
-
-  useEffect(() => {
-    if (sortedPortes.length === 0) return;
-    cardOpacity.setValue(0);
-    cardTranslate.setValue(10);
-    Animated.parallel([
-      Animated.timing(cardOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(cardTranslate, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [cardOpacity, cardTranslate, currentIndex, sortedPortes.length]);
-
-  useEffect(() => {
-    if (sortedPortes.length === 0) return;
-    statusOpacity.setValue(0);
-    statusTranslate.setValue(10);
-    Animated.parallel([
-      Animated.timing(statusOpacity, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(statusTranslate, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [currentIndex, sortedPortes.length, statusOpacity, statusTranslate]);
+  }, [currentIndex, doorCardWidth, sortedPortes.length]);
 
   useEffect(() => {
     if (!currentPorte?.id) return;
@@ -538,6 +527,117 @@ export default function ImmeubleDetailsView({
     accent: "#CBD5F5",
     icon: "circle" as const,
   };
+  const defaultStatus = currentStatus;
+
+  const hasSelectedStatus = (porte?: Porte | null) => {
+    const key = getDisplayStatusKey(porte);
+    return Boolean(key && STATUS_DISPLAY[key]);
+  };
+
+  const triggerSwipeLock = () => {
+    Vibration.vibrate(12);
+    swipeShake.stopAnimation();
+    swipeShake.setValue(0);
+    Animated.sequence([
+      Animated.timing(swipeShake, {
+        toValue: 8,
+        duration: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(swipeShake, {
+        toValue: -8,
+        duration: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(swipeShake, {
+        toValue: 6,
+        duration: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(swipeShake, {
+        toValue: -6,
+        duration: 40,
+        useNativeDriver: true,
+      }),
+      Animated.timing(swipeShake, {
+        toValue: 0,
+        duration: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const contentPadding = 16;
+  const sectionPadding = 16;
+  const doorCardWidth = Math.max(
+    1,
+    width - contentPadding * 2 - sectionPadding * 2,
+  );
+
+  useEffect(() => {
+    if (!doorPagerRef.current || sortedPortes.length === 0) return;
+    const safeIndex = Math.min(
+      Math.max(0, currentIndex),
+      sortedPortes.length - 1,
+    );
+    doorPagerRef.current.scrollToIndex({
+      index: safeIndex,
+      animated: true,
+    });
+  }, [currentIndex, sortedPortes.length]);
+
+  const handleDoorScrollEnd = (event: any) => {
+    if (!doorCardWidth) return;
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const rawIndex = Math.min(
+      Math.max(0, Math.round(offsetX / doorCardWidth)),
+      Math.max(0, sortedPortes.length - 1),
+    );
+    const maxIndex = Math.max(0, sortedPortes.length - 1);
+    let desiredIndex = currentIndex;
+    if (rawIndex > currentIndex) {
+      if (hasSelectedStatus(sortedPortes[currentIndex])) {
+        desiredIndex = Math.min(currentIndex + 1, maxIndex);
+      } else {
+        triggerSwipeLock();
+        desiredIndex = currentIndex;
+      }
+    } else if (rawIndex < currentIndex) {
+      desiredIndex = Math.max(currentIndex - 1, 0);
+    }
+    if (desiredIndex !== currentIndex) {
+      setCurrentIndex(desiredIndex);
+    }
+    if (rawIndex !== desiredIndex && doorPagerRef.current) {
+      doorPagerRef.current.scrollToIndex({
+        index: desiredIndex,
+        animated: true,
+      });
+    }
+  };
+
+  const handleDoorScroll = (event: any) => {
+    if (!doorCardWidth || swipeLockRef.current) return;
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const currentOffset = currentIndex * doorCardWidth;
+    if (
+      offsetX > currentOffset + 4 &&
+      !hasSelectedStatus(sortedPortes[currentIndex])
+    ) {
+      if (!forwardBlockRef.current) {
+        triggerSwipeLock();
+        forwardBlockRef.current = true;
+      }
+      if (doorPagerRef.current) {
+        doorPagerRef.current.scrollToIndex({
+          index: currentIndex,
+          animated: false,
+        });
+      }
+      return;
+    }
+    forwardBlockRef.current = false;
+  };
 
   const progress = useMemo(() => {
     const total = sortedPortes.length;
@@ -547,6 +647,15 @@ export default function ImmeubleDetailsView({
     const percentage = total ? Math.round((visited / total) * 100) : 0;
     return { total, visited, percentage };
   }, [sortedPortes]);
+
+  useEffect(() => {
+    Animated.timing(progressFill, {
+      toValue: progress.percentage,
+      duration: 820,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [progress.percentage, progressFill]);
 
   const portesParEtage = useMemo(() => {
     const grouped = new Map<number, Porte[]>();
@@ -579,51 +688,15 @@ export default function ImmeubleDetailsView({
     return null;
   }, [currentIndex, currentPorte, sortedPortes]);
 
-  const canGoPreviousFloor = previousFloorTarget !== null;
-  const canGoNextFloor = nextFloorTarget !== null;
   const canRemoveEtage = displayNbEtages > 0;
-
-  const goToPrevious = () => {
-    setCurrentIndex((prev) => Math.max(0, prev - 1));
-  };
-
-  const goToNext = () => {
-    setCurrentIndex((prev) => Math.min(prev + 1, sortedPortes.length - 1));
-  };
 
   const goToPorte = (porteId: number) => {
     const index = sortedPortes.findIndex((porte) => porte.id === porteId);
     if (index >= 0) setCurrentIndex(index);
   };
 
-  const goToPreviousFloor = () => {
-    if (!currentPorte) return;
-    const currentFloor = currentPorte.etage;
-    for (let i = currentIndex - 1; i >= 0; i -= 1) {
-      if (sortedPortes[i].etage !== currentFloor) {
-        const targetFloor = sortedPortes[i].etage;
-        let targetIndex = i;
-        while (
-          targetIndex > 0 &&
-          sortedPortes[targetIndex - 1].etage === targetFloor
-        ) {
-          targetIndex -= 1;
-        }
-        setCurrentIndex(targetIndex);
-        return;
-      }
-    }
-  };
-
-  const goToNextFloor = () => {
-    if (!currentPorte) return;
-    const currentFloor = currentPorte.etage;
-    for (let i = currentIndex + 1; i < sortedPortes.length; i += 1) {
-      if (sortedPortes[i].etage !== currentFloor) {
-        setCurrentIndex(i);
-        return;
-      }
-    }
+  const openManageSheet = () => {
+    manageSheetRef.current?.present();
   };
 
   const getNextDoorNumber = (etage: number) => {
@@ -666,7 +739,7 @@ export default function ImmeubleDetailsView({
     if (onDirtyChange) onDirtyChange(true);
     showToast(
       "Porte ajoutee",
-      `Etage ${payload.etage} � Porte ${payload.numero}`,
+      `Etage ${payload.etage} • Porte ${payload.numero}`,
     );
     const createPayload: CreatePorteInput = {
       immeubleId: immeuble.id,
@@ -708,7 +781,9 @@ export default function ImmeubleDetailsView({
     showToast("Etage ajoute", `Etage ${nextEtage}`);
     const added = await addEtageToImmeuble(immeuble.id);
     if (!added) {
-      setPortesState((prev) => prev.filter((porte) => !tempIds.includes(porte.id)));
+      setPortesState((prev) =>
+        prev.filter((porte) => !tempIds.includes(porte.id)),
+      );
       showToast("Erreur", "Ajout etage impossible");
       return;
     }
@@ -729,7 +804,10 @@ export default function ImmeubleDetailsView({
       return;
     }
     if (lastDoor.id !== currentPorte.id) {
-      showToast("Information", "Seule la derniere porte de l'etage est supprimee");
+      showToast(
+        "Information",
+        "Seule la derniere porte de l'etage est supprimee",
+      );
     }
     setDeleteFloor(null);
     setDeleteTarget(lastDoor);
@@ -834,29 +912,58 @@ export default function ImmeubleDetailsView({
     if (!result) {
       showToast("Erreur", "Mise a jour impossible");
     }
-    if (currentIndex < sortedPortes.length - 1) {
-      setCurrentIndex((prev) => Math.min(prev + 1, sortedPortes.length - 1));
-    }
   };
 
-  const handleStatusSelect = async (statut: string) => {
-    if (!currentPorte) return;
+  const handleStatusSelect = async (statut: string, target?: Porte) => {
+    const porte = target ?? currentPorte;
+    if (!porte) return;
     if (statut === "RENDEZ_VOUS_PRIS" || statut === "CONTRAT_SIGNE") {
-      openEditSheet(currentPorte, statut);
+      openEditSheet(porte, statut);
       return;
     }
     if (statut === "ABSENT_MATIN") {
-      await applyStatus(currentPorte, "ABSENT", { nbRepassages: 1 });
+      void applyStatus(porte, "ABSENT", { nbRepassages: 1 });
+      const targetIndex = sortedPortes.findIndex(
+        (item) => item.id === porte.id,
+      );
+      if (targetIndex >= 0 && targetIndex < sortedPortes.length - 1) {
+        setTimeout(() => {
+          doorPagerRef.current?.scrollToIndex({
+            index: targetIndex + 1,
+            animated: true,
+          });
+        }, 80);
+      }
       return;
     }
     if (statut === "ABSENT_SOIR") {
-      const nextRepassage = Math.max(2, currentPorte.nbRepassages ?? 0);
-      await applyStatus(currentPorte, "ABSENT", {
+      const nextRepassage = Math.max(2, porte.nbRepassages ?? 0);
+      void applyStatus(porte, "ABSENT", {
         nbRepassages: nextRepassage,
       });
+      const targetIndex = sortedPortes.findIndex(
+        (item) => item.id === porte.id,
+      );
+      if (targetIndex >= 0 && targetIndex < sortedPortes.length - 1) {
+        setTimeout(() => {
+          doorPagerRef.current?.scrollToIndex({
+            index: targetIndex + 1,
+            animated: true,
+          });
+        }, 80);
+      }
       return;
     }
-    await applyStatus(currentPorte, statut);
+    void applyStatus(porte, statut);
+    const targetIndex = sortedPortes.findIndex((item) => item.id === porte.id);
+    if (targetIndex >= 0 && targetIndex < sortedPortes.length - 1) {
+      setTimeout(() => {
+        doorPagerRef.current?.scrollToIndex({
+          index: targetIndex + 1,
+          animated: true,
+        });
+      }, 80);
+    }
   };
 
   return (
@@ -870,10 +977,16 @@ export default function ImmeubleDetailsView({
             {immeuble.adresse}
           </Text>
           <Text style={styles.headerSubtitle}>
-            {displayNbEtages} etages • {immeuble.nbPortesParEtage}{" "}
-            portes/etage
+            {displayNbEtages} etages - {immeuble.nbPortesParEtage} portes/etage
           </Text>
         </View>
+        <Pressable
+          style={styles.headerAction}
+          onPress={openManageSheet}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Feather name="more-horizontal" size={20} color="#1E293B" />
+        </Pressable>
       </View>
 
       {actionToast ? (
@@ -916,269 +1029,286 @@ export default function ImmeubleDetailsView({
         ]}
       >
         <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.progressCard}>
-            <View style={styles.progressGlow} />
-            <View>
-              <Text style={styles.progressLabel}>Portes visitees</Text>
-              <Text style={styles.progressValue}>
-                {progress.visited} / {progress.total}
-              </Text>
-            </View>
-            <View style={styles.progressBadge}>
-              <Text style={styles.progressBadgeText}>
-                {progress.percentage}%
-              </Text>
-            </View>
-          </View>
-
-          <Animated.View
-            style={[
-              styles.currentCard,
-              {
-                opacity: cardOpacity,
-                transform: [{ translateY: cardTranslate }],
-              },
-            ]}
+          <View
+            style={[styles.progressCard, isTablet && styles.progressCardTablet]}
           >
-            <View style={styles.currentBackdrop} />
-            <View style={styles.currentHeader}>
+            <View style={styles.progressHeader}>
               <View>
-                <Text style={styles.currentLabel}>Porte courante</Text>
-                <Text style={styles.currentTitle}>
-                  {currentPorte?.nomPersonnalise ||
-                    currentPorte?.numero ||
-                    "--"}
+                <Text
+                  style={[
+                    styles.progressTitle,
+                    isTablet && styles.progressTitleTablet,
+                  ]}
+                >
+                  Progression
+                </Text>
+                <Text
+                  style={[
+                    styles.progressSubtitle,
+                    isTablet && styles.progressSubtitleTablet,
+                  ]}
+                >
+                  Portes visitees
                 </Text>
               </View>
-              <View
+              <View style={styles.progressPercentPill}>
+                <Text
+                  style={[
+                    styles.progressPercentText,
+                    isTablet && styles.progressPercentTextTablet,
+                  ]}
+                >
+                  {progress.percentage}%
+                </Text>
+              </View>
+            </View>
+            <View style={[styles.progressBar, isTablet && styles.progressBarTablet]}>
+              <Animated.View
                 style={[
-                  styles.statusPill,
+                  styles.progressBarFill,
                   {
-                    backgroundColor: currentStatus.bg,
-                    borderColor: currentStatus.accent,
+                    width: progressFill.interpolate({
+                      inputRange: [0, 100],
+                      outputRange: ["0%", "100%"],
+                    }),
                   },
                 ]}
-              >
-                <View
-                  style={[
-                    styles.statusDot,
-                    { backgroundColor: currentStatus.accent },
-                  ]}
-                />
+              />
+            </View>
+            <View style={styles.progressStatsRow}>
+              <View style={styles.progressStat}>
                 <Text
-                  style={[styles.statusPillText, { color: currentStatus.fg }]}
+                  style={[
+                    styles.progressStatValue,
+                    isTablet && styles.progressStatValueTablet,
+                  ]}
                 >
-                  {currentStatus.label}
+                  {progress.visited}
+                </Text>
+                <Text
+                  style={[
+                    styles.progressStatLabel,
+                    isTablet && styles.progressStatLabelTablet,
+                  ]}
+                >
+                  Visitees
+                </Text>
+              </View>
+              <View style={styles.progressDivider} />
+              <View style={styles.progressStat}>
+                <Text
+                  style={[
+                    styles.progressStatValue,
+                    isTablet && styles.progressStatValueTablet,
+                  ]}
+                >
+                  {progress.total}
+                </Text>
+                <Text
+                  style={[
+                    styles.progressStatLabel,
+                    isTablet && styles.progressStatLabelTablet,
+                  ]}
+                >
+                  Total portes
                 </Text>
               </View>
             </View>
-            <View style={styles.currentMeta}>
-              <Text style={styles.currentMetaText}>
-                Etage {currentPorte?.etage ?? "--"}
-              </Text>
-              <Text style={styles.currentMetaText}>•</Text>
-              <Text style={styles.currentMetaText}>
-                Statut: {currentStatus.label}
-              </Text>
-            </View>
-            <View style={styles.navRow}>
-              <Pressable
-                style={[
-                  styles.navButton,
-                  currentIndex === 0 && styles.navButtonDisabled,
-                ]}
-                onPress={goToPrevious}
-                disabled={currentIndex === 0}
-              >
-                <Feather name="chevron-left" size={18} color="#1E293B" />
-                <Text style={styles.navButtonText}>Precedent</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.navButton,
-                  currentIndex >= sortedPortes.length - 1 &&
-                    styles.navButtonDisabled,
-                ]}
-                onPress={goToNext}
-                disabled={currentIndex >= sortedPortes.length - 1}
-              >
-                <Text style={styles.navButtonText}>Suivant</Text>
-                <Feather name="chevron-right" size={18} color="#1E293B" />
-              </Pressable>
-            </View>
-          </Animated.View>
-
-          <View style={styles.section}>
-            <View>
-              <Text style={styles.sectionTitle}>Statut de la porte</Text>
-              <Text style={styles.sectionHint}>
-                Un tap passe automatiquement a la porte suivante.
-              </Text>
-            </View>
-            <Animated.View
-              style={{
-                opacity: statusOpacity,
-                transform: [{ translateY: statusTranslate }],
-              }}
-            >
-              <StatusGrid
-                currentPorte={currentPorte}
-                onSelect={handleStatusSelect}
-              />
-            </Animated.View>
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Navigation etages</Text>
-            <View style={styles.floorNav}>
-              <Pressable
+          <View style={styles.sectionCard}>
+            <View style={styles.section}>
+              <View>
+                <Text style={styles.sectionTitle}>Statut de la porte</Text>
+              </View>
+              <Animated.View
                 style={[
-                  styles.floorButton,
-                  !canGoPreviousFloor && styles.floorButtonDisabled,
+                  styles.doorPagerWrap,
+                  { transform: [{ translateX: swipeShake }] },
                 ]}
-                onPress={goToPreviousFloor}
-                disabled={!canGoPreviousFloor}
               >
-                <Feather name="chevrons-left" size={18} color="#1E293B" />
-                <View>
-                  <Text style={styles.floorLabel}>Precedent</Text>
-                  <Text style={styles.floorValue}>
-                    {previousFloorTarget !== null
-                      ? `Etage ${previousFloorTarget}`
-                      : "--"}
-                  </Text>
-                </View>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.floorButton,
-                  !canGoNextFloor && styles.floorButtonDisabled,
-                ]}
-                onPress={goToNextFloor}
-                disabled={!canGoNextFloor}
-              >
-                <View style={styles.floorButtonRight}>
-                  <Text style={styles.floorLabel}>Suivant</Text>
-                  <Text style={styles.floorValue}>
-                    {nextFloorTarget !== null
-                      ? `Etage ${nextFloorTarget}`
-                      : "--"}
-                  </Text>
-                </View>
-                <Feather name="chevrons-right" size={18} color="#1E293B" />
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <View style={styles.manageHeaderRow}>
-              <Text style={styles.sectionTitle}>Gestion portes & etages</Text>
-            </View>
-            <View style={styles.manageGrid}>
-              <Pressable style={styles.manageButton} onPress={openAddPorte}>
-                <View style={styles.manageIcon}>
-                  <Feather name="plus-square" size={18} color="#0F172A" />
-                </View>
-                <Text style={styles.manageTitle}>Ajouter porte</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.manageButton,
-                  !currentPorte && styles.manageButtonDisabled,
-                ]}
-                onPress={openDeletePorte}
-                disabled={!currentPorte}
-              >
-                <View style={styles.manageIconDanger}>
-                  <Feather name="minus-square" size={18} color="#9F1239" />
-                </View>
-                <Text style={styles.manageTitle}>Supprimer porte</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.manageButton,
-                  addingEtage && styles.manageButtonDisabled,
-                ]}
-                onPress={handleAddEtage}
-                disabled={addingEtage}
-              >
-                <View style={styles.manageIcon}>
-                  <Feather name="layers" size={18} color="#0F172A" />
-                </View>
-                <Text style={styles.manageTitle}>Ajouter etage</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.manageButton,
-                  (!canRemoveEtage || removingEtage) &&
-                    styles.manageButtonDisabled,
-                ]}
-                onPress={openDeleteEtage}
-                disabled={!canRemoveEtage || removingEtage}
-              >
-                <View style={styles.manageIconDanger}>
-                  <Feather name="trash-2" size={18} color="#9F1239" />
-                </View>
-                <Text style={styles.manageTitle}>Supprimer etage</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Plan rapide</Text>
-            <Text style={styles.sectionHint}>
-              Tape une porte pour changer rapidement.
-            </Text>
-            <View style={styles.mapCard}>
-              {portesParEtage.map(([etage, portes]) => (
-                <View key={etage} style={styles.mapEtage}>
-                  <Text style={styles.mapEtageTitle}>Etage {etage}</Text>
-                  <View style={styles.mapDoors}>
-                    {portes.map((porte) => {
-                      const status = getDisplayStatus(porte);
-                      const isActive = porte.id === currentPorte?.id;
-                      const isVisited = status !== null;
-                      const chipBg = isVisited ? status.accent : "#E2E8F0";
-                      const chipBorder = "transparent";
-                      const chipText = isVisited ? "#FFFFFF" : "#64748B";
-                      return (
-                        <Animated.View
-                          key={porte.id}
-                          style={{
-                            transform: [{ scale: isActive ? doorPulse : 1 }],
-                          }}
-                        >
-                          <Pressable
+                <Animated.FlatList
+                  ref={doorPagerRef}
+                  data={sortedPortes}
+                  horizontal
+                  pagingEnabled
+                  snapToInterval={doorCardWidth}
+                  decelerationRate="fast"
+                  snapToAlignment="start"
+                  bounces={false}
+                  scrollEnabled
+                  showsHorizontalScrollIndicator={false}
+                  nestedScrollEnabled
+                  scrollEventThrottle={16}
+                  onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                    { useNativeDriver: true, listener: handleDoorScroll },
+                  )}
+                  onMomentumScrollEnd={handleDoorScrollEnd}
+                  contentContainerStyle={styles.doorPagerContent}
+                  keyExtractor={(item) => String(item.id)}
+                  getItemLayout={(_, index) => ({
+                    length: doorCardWidth,
+                    offset: doorCardWidth * index,
+                    index,
+                  })}
+                  initialNumToRender={1}
+                  windowSize={3}
+                  maxToRenderPerBatch={2}
+                  removeClippedSubviews
+                  renderItem={({ item, index }) => {
+                    const itemStatus = getDisplayStatus(item) ?? defaultStatus;
+                    const inputRange = [
+                      (index - 1) * doorCardWidth,
+                      index * doorCardWidth,
+                      (index + 1) * doorCardWidth,
+                    ];
+                    const headerOpacity = scrollX.interpolate({
+                      inputRange,
+                      outputRange: [0.7, 1, 0.7],
+                      extrapolate: "clamp",
+                    });
+                    const headerTranslate = scrollX.interpolate({
+                      inputRange,
+                      outputRange: [10, 0, -10],
+                      extrapolate: "clamp",
+                    });
+                    const bodyOpacity = scrollX.interpolate({
+                      inputRange,
+                      outputRange: [0.85, 1, 0.85],
+                      extrapolate: "clamp",
+                    });
+                    return (
+                      <View style={[styles.doorPage, { width: doorCardWidth }]}>
+                        <View style={styles.currentCard}>
+                          <View style={styles.currentBackdrop} />
+                          <Animated.View
                             style={[
-                              styles.doorChip,
+                              styles.currentHeader,
                               {
-                                backgroundColor: chipBg,
-                                borderColor: chipBorder,
+                                opacity: headerOpacity,
+                                transform: [{ translateY: headerTranslate }],
                               },
-                              isActive && styles.doorChipActive,
                             ]}
-                            onPress={() => goToPorte(porte.id)}
                           >
-                            <View style={styles.doorChipContent}>
+                            <View>
+                              <Text style={styles.currentLabel}>
+                                Porte courante
+                              </Text>
+                              <Text style={styles.currentTitle}>
+                                {item.nomPersonnalise || item.numero || "--"}
+                              </Text>
+                            </View>
+                            <View
+                              style={[
+                                styles.statusPill,
+                                {
+                                  backgroundColor: itemStatus.bg,
+                                  borderColor: itemStatus.accent,
+                                },
+                              ]}
+                            >
+                              <View
+                                style={[
+                                  styles.statusDot,
+                                  { backgroundColor: itemStatus.accent },
+                                ]}
+                              />
                               <Text
                                 style={[
-                                  styles.doorChipText,
-                                  { color: chipText },
+                                  styles.statusPillText,
+                                  { color: itemStatus.fg },
                                 ]}
                               >
-                                {porte.nomPersonnalise || porte.numero}
+                                {itemStatus.label}
                               </Text>
-                              {isActive ? (
-                                <View style={styles.activeDot} />
-                              ) : null}
                             </View>
-                          </Pressable>
-                        </Animated.View>
-                      );
-                    })}
+                          </Animated.View>
+                          <View style={styles.currentMeta}>
+                            <Text style={styles.currentMetaText}>
+                              Etage {item.etage ?? "--"}
+                            </Text>
+                            <Text style={styles.currentMetaText}>-</Text>
+                            <Text style={styles.currentMetaText}>
+                              Statut: {itemStatus.label}
+                            </Text>
+                          </View>
+                          <Animated.View style={{ opacity: bodyOpacity }}>
+                            <StatusGrid
+                              currentPorte={item}
+                              onSelect={(statut) =>
+                                handleStatusSelect(statut, item)
+                              }
+                            />
+                          </Animated.View>
+                        </View>
+                      </View>
+                    );
+                  }}
+                />
+              </Animated.View>
+            </View>
+          </View>
+
+
+
+          <View style={styles.sectionCard}>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Plan rapide</Text>
+              <Text style={styles.sectionHint}>
+                Tape une porte pour changer rapidement.
+              </Text>
+              <View style={styles.mapCard}>
+                {portesParEtage.map(([etage, portes]) => (
+                  <View key={etage} style={styles.mapEtage}>
+                    <Text style={styles.mapEtageTitle}>Etage {etage}</Text>
+                    <View style={styles.mapDoors}>
+                      {portes.map((porte) => {
+                        const status = getDisplayStatus(porte);
+                        const isActive = porte.id === currentPorte?.id;
+                        const isVisited = status !== null;
+                        const chipBg = isVisited ? status.accent : "#E2E8F0";
+                        const chipBorder = "transparent";
+                        const chipText = isVisited ? "#FFFFFF" : "#64748B";
+                        return (
+                          <Animated.View
+                            key={porte.id}
+                            style={{
+                              transform: [{ scale: isActive ? doorPulse : 1 }],
+                            }}
+                          >
+                            <Pressable
+                              style={[
+                                styles.doorChip,
+                                {
+                                  backgroundColor: chipBg,
+                                  borderColor: chipBorder,
+                                },
+                                isActive && styles.doorChipActive,
+                              ]}
+                              onPress={() => goToPorte(porte.id)}
+                            >
+                              <View style={styles.doorChipContent}>
+                                <Text
+                                  style={[
+                                    styles.doorChipText,
+                                    { color: chipText },
+                                  ]}
+                                >
+                                  {porte.nomPersonnalise || porte.numero}
+                                </Text>
+                                {isActive ? (
+                                  <View style={styles.activeDot} />
+                                ) : null}
+                              </View>
+                            </Pressable>
+                          </Animated.View>
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
-              ))}
+                ))}
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -1439,6 +1569,121 @@ export default function ImmeubleDetailsView({
         </BottomSheetScrollView>
       </BottomSheetModal>
 
+      <BottomSheetModal
+        ref={manageSheetRef}
+        index={0}
+        snapPoints={manageSheetSnapPoints}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop
+            {...props}
+            appearsOnIndex={0}
+            disappearsOnIndex={-1}
+            pressBehavior="close"
+            opacity={0.45}
+          />
+        )}
+        handleIndicatorStyle={styles.sheetIndicator}
+        backgroundStyle={styles.sheetBackground}
+      >
+        <BottomSheetScrollView contentContainerStyle={styles.manageSheet}>
+          <View style={styles.manageSheetHero}>
+            <View style={styles.manageSheetHeroIcon}>
+              <Feather name="sliders" size={20} color="#2563EB" />
+            </View>
+            <Text style={styles.manageSheetTitle}>Gestion</Text>
+            <Text style={styles.manageSheetSubtitle}>Portes & etages</Text>
+          </View>
+          <View style={styles.manageSheetGroup}>
+            <Text style={styles.manageSheetGroupTitle}>Portes</Text>
+            <Pressable
+              style={styles.manageSheetAction}
+              onPress={() => {
+                manageSheetRef.current?.close();
+                openAddPorte();
+              }}
+            >
+              <View style={styles.manageSheetIcon}>
+                <Feather name="plus-square" size={18} color="#0F172A" />
+              </View>
+              <View style={styles.manageSheetText}>
+                <Text style={styles.manageSheetLabel}>Ajouter porte</Text>
+                <Text style={styles.manageSheetHint}>
+                  Ajoute a l'etage courant
+                </Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.manageSheetAction,
+                !currentPorte && styles.manageSheetActionDisabled,
+              ]}
+              onPress={() => {
+                manageSheetRef.current?.close();
+                openDeletePorte();
+              }}
+              disabled={!currentPorte}
+            >
+              <View style={styles.manageSheetIconDanger}>
+                <Feather name="minus-square" size={18} color="#9F1239" />
+              </View>
+              <View style={styles.manageSheetText}>
+                <Text style={styles.manageSheetLabel}>Supprimer porte</Text>
+                <Text style={styles.manageSheetHint}>
+                  Derniere porte de l'etage
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+          <View style={styles.manageSheetDivider} />
+          <View style={styles.manageSheetGroup}>
+            <Text style={styles.manageSheetGroupTitle}>Etages</Text>
+            <Pressable
+              style={[
+                styles.manageSheetAction,
+                addingEtage && styles.manageSheetActionDisabled,
+              ]}
+              onPress={() => {
+                manageSheetRef.current?.close();
+                void handleAddEtage();
+              }}
+              disabled={addingEtage}
+            >
+              <View style={styles.manageSheetIcon}>
+                <Feather name="layers" size={18} color="#0F172A" />
+              </View>
+              <View style={styles.manageSheetText}>
+                <Text style={styles.manageSheetLabel}>Ajouter etage</Text>
+                <Text style={styles.manageSheetHint}>
+                  Ajoute un nouvel etage
+                </Text>
+              </View>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.manageSheetAction,
+                (!canRemoveEtage || removingEtage) &&
+                  styles.manageSheetActionDisabled,
+              ]}
+              onPress={() => {
+                manageSheetRef.current?.close();
+                openDeleteEtage();
+              }}
+              disabled={!canRemoveEtage || removingEtage}
+            >
+              <View style={styles.manageSheetIconDanger}>
+                <Feather name="trash-2" size={18} color="#9F1239" />
+              </View>
+              <View style={styles.manageSheetText}>
+                <Text style={styles.manageSheetLabel}>Supprimer etage</Text>
+                <Text style={styles.manageSheetHint}>
+                  Supprime le dernier etage
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
+
       <AddPorteSheet
         open={isAddPorteOpen}
         defaultEtage={addPorteDefaults.etage}
@@ -1451,7 +1696,7 @@ export default function ImmeubleDetailsView({
         key={
           deleteFloor !== null
             ? `delete-floor-${deleteFloor}`
-            : deleteTarget?.id ?? "delete-sheet"
+            : (deleteTarget?.id ?? "delete-sheet")
         }
         open={!!deleteTarget || deleteFloor !== null}
         title={
@@ -1529,17 +1774,20 @@ export default function ImmeubleDetailsView({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F2F2F7",
   },
   header: {
     paddingHorizontal: 16,
     paddingBottom: 12,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderColor: "#E2E8F0",
+    backgroundColor: "#F2F2F7",
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   backButton: {
     width: 38,
@@ -1548,8 +1796,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   headerText: {
     flex: 1,
@@ -1563,6 +1814,19 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     color: "#64748B",
+  },
+  headerAction: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   content: {
     padding: 16,
@@ -1633,55 +1897,118 @@ const styles = StyleSheet.create({
   },
   progressCard: {
     position: "relative",
-    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
+    gap: 12,
+  },
+  progressCardTablet: {
+    padding: 22,
+    borderRadius: 24,
+  },
+  progressHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
   },
-  progressGlow: {
-    position: "absolute",
-    width: 90,
-    height: 90,
+  progressTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  progressTitleTablet: {
+    fontSize: 16,
+  },
+  progressSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#94A3B8",
+  },
+  progressSubtitleTablet: {
+    fontSize: 13,
+  },
+  progressPercentPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 999,
-    right: -30,
-    top: -40,
-    backgroundColor: "rgba(0, 122, 255, 0.12)",
+    backgroundColor: "#EFF6FF",
   },
-  progressLabel: {
+  progressPercentText: {
     fontSize: 12,
-    color: "#64748B",
+    fontWeight: "700",
+    color: "#2563EB",
   },
-  progressValue: {
-    marginTop: 4,
+  progressPercentTextTablet: {
+    fontSize: 14,
+  },
+  progressBar: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  progressBarTablet: {
+    height: 14,
+  },
+  progressBarFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#2563EB",
+  },
+  progressStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  progressStat: {
+    flex: 1,
+  },
+  progressStatValue: {
     fontSize: 18,
     fontWeight: "800",
     color: "#0F172A",
   },
-  progressBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "#2563EB",
+  progressStatValueTablet: {
+    fontSize: 22,
   },
-  progressBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#F9FAFB",
+  progressStatLabel: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#94A3B8",
+  },
+  progressStatLabelTablet: {
+    fontSize: 13,
+  },
+  progressDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: "#E2E8F0",
+  },
+  doorPagerWrap: {
+    paddingVertical: 12,
+  },
+  doorPagerContent: {},
+  doorPage: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
   },
   currentCard: {
     position: "relative",
     overflow: "hidden",
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderRadius: 22,
+    padding: 18,
     gap: 12,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
   },
   currentBackdrop: {
     position: "absolute",
@@ -1736,29 +2063,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#64748B",
   },
-  navRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  navButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 12,
+  sectionCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
-  },
-  navButtonDisabled: {
-    opacity: 0.5,
-  },
-  navButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#1E293B",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   section: {
     gap: 12,
@@ -1805,7 +2120,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F2F2F7",
     shadowOpacity: 0,
     shadowRadius: 0,
     elevation: 0,
@@ -1842,83 +2157,104 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#0F172A",
   },
-  floorNav: {
-    flexDirection: "row",
+  manageSheet: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 20,
     gap: 12,
   },
-  floorButton: {
-    flex: 1,
-    flexDirection: "row",
+  manageSheetHero: {
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    gap: 6,
+    paddingVertical: 8,
   },
-  floorButtonDisabled: {
-    opacity: 0.5,
+  manageSheetHeroIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
-  floorLabel: {
-    fontSize: 11,
-    color: "#94A3B8",
-    fontWeight: "600",
-  },
-  floorValue: {
-    marginTop: 2,
-    fontSize: 13,
+  manageSheetTitle: {
+    fontSize: 14,
     fontWeight: "700",
     color: "#0F172A",
   },
-  floorButtonRight: {
-    alignItems: "flex-end",
+  manageSheetSubtitle: {
+    fontSize: 11,
+    color: "#94A3B8",
   },
-  manageGrid: {
+  manageSheetGroup: {
+    gap: 10,
+  },
+  manageSheetGroupTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  manageSheetDivider: {
+    height: 1,
+    backgroundColor: "#E2E8F0",
+    marginVertical: 6,
+  },
+  manageSheetAction: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  manageButton: {
-    width: "48%",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    gap: 12,
+    padding: 12,
     borderRadius: 14,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    paddingVertical: 14,
-    gap: 8,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
-  manageButtonDisabled: {
+  manageSheetActionDisabled: {
     opacity: 0.5,
   },
-  manageIcon: {
-    width: 36,
-    height: 36,
+  manageSheetIcon: {
+    width: 40,
+    height: 40,
     borderRadius: 12,
     backgroundColor: "#EFF6FF",
     alignItems: "center",
     justifyContent: "center",
   },
-  manageTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-  manageIconDanger: {
-    width: 36,
-    height: 36,
+  manageSheetIconDanger: {
+    width: 40,
+    height: 40,
     borderRadius: 12,
     backgroundColor: "#FEE2E2",
     alignItems: "center",
     justifyContent: "center",
   },
+  manageSheetText: {
+    flex: 1,
+  },
+  manageSheetLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  manageSheetHint: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#94A3B8",
+  },
   mapCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#F8FAFC",
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
     padding: 12,
     gap: 12,
   },
@@ -2263,13 +2599,3 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
 });
-
-
-
-
-
-
-
-
-
-

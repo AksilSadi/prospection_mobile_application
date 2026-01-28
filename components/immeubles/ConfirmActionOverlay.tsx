@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { useEffect, useRef } from "react";
 import {
   Animated,
+  Easing,
   Modal,
   Pressable,
   StyleSheet,
@@ -32,7 +33,7 @@ export default function ConfirmActionOverlay({
   onClose,
 }: ConfirmActionOverlayProps) {
   const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.96)).current;
+  const translateY = useRef(new Animated.Value(24)).current;
   const { width } = useWindowDimensions();
   const isTablet = width >= 700;
   const isDanger = tone === "danger";
@@ -40,44 +41,48 @@ export default function ConfirmActionOverlay({
   useEffect(() => {
     if (!open) return;
     opacity.setValue(0);
-    scale.setValue(0.96);
+    translateY.setValue(24);
     Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
         duration: 160,
         useNativeDriver: true,
       }),
-      Animated.spring(scale, {
-        toValue: 1,
-        friction: 7,
-        tension: 90,
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [open, opacity, scale]);
+  }, [open, opacity, translateY]);
 
   return (
     <Modal visible={open} transparent animationType="none">
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Animated.View
           style={[
-            styles.card,
-            isTablet && styles.cardTablet,
-            { opacity, transform: [{ scale }] },
+            styles.sheet,
+            isTablet && styles.sheetTablet,
+            { opacity, transform: [{ translateY }] },
           ]}
         >
-          <View style={[styles.iconWrap, isDanger && styles.iconDanger]}>
-            <Feather
-              name={isDanger ? "alert-triangle" : "check-circle"}
-              size={18}
-              color={isDanger ? "#DC2626" : "#16A34A"}
-            />
+          <View style={styles.sheetHandle} />
+          <View style={[styles.heroIcon, isDanger && styles.heroIconDanger]}>
+            <View
+              style={[styles.heroIconInner, isDanger && styles.heroIconInnerDanger]}
+            >
+              <Feather
+                name={isDanger ? "trash-2" : "check-circle"}
+                size={22}
+                color={isDanger ? "#DC2626" : "#16A34A"}
+              />
+            </View>
           </View>
           <Text style={styles.title}>{title}</Text>
           {description ? (
             <Text style={styles.description}>{description}</Text>
           ) : null}
-
           <View style={styles.actions}>
             <Pressable style={styles.ghostButton} onPress={onClose}>
               <Text style={styles.ghostText}>{cancelLabel}</Text>
@@ -101,38 +106,61 @@ export default function ConfirmActionOverlay({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  card: {
-    width: "100%",
-    borderRadius: 20,
+    backgroundColor: "rgba(15, 23, 42, 0.35)",
+    justifyContent: "flex-end",
     padding: 18,
+  },
+  sheet: {
+    width: "100%",
+    borderRadius: 26,
+    padding: 20,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     gap: 10,
     shadowColor: "#0F172A",
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 10,
   },
-  cardTablet: {
+  sheetTablet: {
     width: 520,
-    padding: 22,
+    alignSelf: "center",
+    marginBottom: 24,
   },
-  iconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: "#DCFCE7",
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#E2E8F0",
+    marginBottom: 8,
+  },
+  heroIcon: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    backgroundColor: "#EEF2FF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  heroIconDanger: {
+    backgroundColor: "#FEE2E2",
+  },
+  heroIconInner: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
   },
-  iconDanger: {
-    backgroundColor: "#FEE2E2",
+  heroIconInnerDanger: {
+    backgroundColor: "#FFFFFF",
   },
   title: {
     fontSize: 16,

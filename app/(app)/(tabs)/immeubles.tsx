@@ -41,6 +41,9 @@ export default function ImmeublesScreen({
   const [detailsDirty, setDetailsDirty] = useState(false);
   const listOpacity = useRef(new Animated.Value(1)).current;
   const listTranslate = useRef(new Animated.Value(0)).current;
+  const detailsOpacity = useRef(new Animated.Value(0)).current;
+  const detailsTranslate = useRef(new Animated.Value(24)).current;
+  const [isExitingDetails, setIsExitingDetails] = useState(false);
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -75,6 +78,24 @@ export default function ImmeublesScreen({
       }),
     ]).start();
   }, [listOpacity, listTranslate, selectedImmeubleId]);
+
+  useEffect(() => {
+    if (selectedImmeubleId === null) return;
+    detailsOpacity.setValue(0);
+    detailsTranslate.setValue(24);
+    Animated.parallel([
+      Animated.timing(detailsOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(detailsTranslate, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [detailsOpacity, detailsTranslate, selectedImmeubleId]);
 
   useEffect(() => {
     if (!onSwipeLockChange) return;
@@ -115,18 +136,42 @@ export default function ImmeublesScreen({
 
   if (selectedImmeuble) {
     return (
-      <ImmeubleDetailsView
-        immeuble={selectedImmeuble}
-        onBack={() => {
-          setSelectedImmeubleId(null);
-          if (detailsDirty) {
-            void refetch();
-            setDetailsDirty(false);
-          }
+      <Animated.View
+        style={{
+          flex: 1,
+          opacity: detailsOpacity,
+          transform: [{ translateX: detailsTranslate }],
         }}
-        onDirtyChange={setDetailsDirty}
-        onRefreshImmeuble={() => void refetch()}
-      />
+      >
+        <ImmeubleDetailsView
+          immeuble={selectedImmeuble}
+          onBack={() => {
+            if (isExitingDetails) return;
+            setIsExitingDetails(true);
+            Animated.parallel([
+              Animated.timing(detailsOpacity, {
+                toValue: 0,
+                duration: 180,
+                useNativeDriver: true,
+              }),
+              Animated.timing(detailsTranslate, {
+                toValue: 24,
+                duration: 180,
+                useNativeDriver: true,
+              }),
+            ]).start(() => {
+              setSelectedImmeubleId(null);
+              setIsExitingDetails(false);
+              if (detailsDirty) {
+                void refetch();
+                setDetailsDirty(false);
+              }
+            });
+          }}
+          onDirtyChange={setDetailsDirty}
+          onRefreshImmeuble={() => void refetch()}
+        />
+      </Animated.View>
     );
   }
 

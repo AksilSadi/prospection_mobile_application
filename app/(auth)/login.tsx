@@ -156,7 +156,7 @@ export default function LoginScreen() {
                     styles.loginButton,
                     pressed && styles.loginButtonPressed,
                     isLoading && styles.loginButtonDisabled,
-                    { marginTop: verticalSpacing * 0.5 }
+                    { marginTop: verticalSpacing * 0.5 },
                   ]}
                 >
                   {isLoading ? (
@@ -272,8 +272,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontWeight: "500",
   },
-  form: {
-  },
+  form: {},
   inputGroup: {
     gap: 8,
   },
