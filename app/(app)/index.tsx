@@ -2,6 +2,7 @@
 import ProfileMenuOverlay from "@/components/ProfileMenuOverlay";
 import { useAutoAudio } from "@/hooks/audio/use-auto-audio";
 import { ProfileMenuProvider, useProfileMenu } from "@/hooks/use-profile-menu";
+import { HamburgerMenuProvider } from "@/hooks/use-hamburger-menu";
 import { authService } from "@/services/auth";
 import { Feather } from "@expo/vector-icons";
 import { LiveKitRoom } from "@livekit/react-native";
@@ -64,9 +65,11 @@ function AppContent() {
 export default function AppIndex() {
   return (
     <ProfileMenuProvider>
-      <View style={styles.container}>
-        <AppContent />
-      </View>
+      <HamburgerMenuProvider>
+        <View style={styles.container}>
+          <AppContent />
+        </View>
+      </HamburgerMenuProvider>
     </ProfileMenuProvider>
   );
 }

@@ -16,7 +16,7 @@ export default function RootLayout() {
       <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
         <BottomSheetModalProvider>
           <Stack screenOptions={{ headerShown: false }} />
-          <StatusBar style="auto" />
+          <StatusBar style="light" translucent backgroundColor="transparent" />
         </BottomSheetModalProvider>
       </TamaguiProvider>
     </GestureHandlerRootView>
