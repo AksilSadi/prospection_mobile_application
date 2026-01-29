@@ -7,6 +7,35 @@ import { calculateRank, RANKS } from "@/utils/business/ranks";
 import type { Commercial, Manager } from "@/types/api";
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 
+type WeeklyData = {
+  day: string;
+  doors: number;
+};
+
+// Simple custom bar chart component
+function SimpleBarChart({ data }: { data: WeeklyData[] }) {
+  const maxValue = Math.max(...data.map((d) => d.doors), 1);
+
+  return (
+    <View style={styles.chartContainer}>
+      {data.map((item, index) => {
+        const barHeight = (item.doors / maxValue) * 140;
+        return (
+          <View key={index} style={styles.barColumn}>
+            <View style={styles.barValueContainer}>
+              <Text style={styles.barValue}>{item.doors}</Text>
+            </View>
+            <View style={styles.barWrapper}>
+              <View style={[styles.bar, { height: barHeight }]} />
+            </View>
+            <Text style={styles.dayLabel}>{item.day}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function DashboardScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -73,6 +102,17 @@ export default function DashboardScreen() {
   const currentRankIndex = RANKS.findIndex((r) => r.name === rankInfo.name);
   const nextRank = RANKS[currentRankIndex + 1];
 
+  // Weekly prospection data (mock data - to be replaced with API data)
+  const weeklyData: WeeklyData[] = useMemo(() => [
+    { day: "Lun", doors: 12 },
+    { day: "Mar", doors: 18 },
+    { day: "Mer", doors: 15 },
+    { day: "Jeu", doors: 22 },
+    { day: "Ven", doors: 19 },
+    { day: "Sam", doors: 8 },
+    { day: "Dim", doors: 5 },
+  ], []);
+
   if (loading || !profile) {
     return (
       <View style={styles.container}>
@@ -122,6 +162,15 @@ export default function DashboardScreen() {
               <Text style={styles.progressText}>{rankInfo.pointsToNext} points restants</Text>
             </View>
           )}
+        </View>
+
+        {/* Weekly Prospection Chart */}
+        <View style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            <Feather name="bar-chart-2" size={20} color="#2563EB" />
+            <Text style={styles.chartTitle}>Portes prospectées cette semaine</Text>
+          </View>
+          <SimpleBarChart data={weeklyData} />
         </View>
       </ScrollView>
 
@@ -264,6 +313,70 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#64748B",
     textAlign: "center",
+  },
+  chartCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    marginTop: 20,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  chartHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 20,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+    flex: 1,
+  },
+  chartContainer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    height: 180,
+    paddingHorizontal: 4,
+  },
+  barColumn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  barValueContainer: {
+    height: 24,
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  barValue: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#2563EB",
+  },
+  barWrapper: {
+    width: "100%",
+    paddingHorizontal: 4,
+    height: 140,
+    justifyContent: "flex-end",
+  },
+  bar: {
+    width: "100%",
+    backgroundColor: "#2563EB",
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    minHeight: 4,
+  },
+  dayLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 8,
   },
   sheetContainer: {
     flex: 1,
