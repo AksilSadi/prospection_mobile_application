@@ -1,30 +1,19 @@
 ﻿import SwipeTabs from "@/components/navigation/SwipeTabs";
-import ProfileMenuOverlay from "@/components/ProfileMenuOverlay";
+import AnimatedHeader from "@/components/navigation/AnimatedHeader";
+import ProfileSheet from "@/components/ProfileSheet";
 import { useAutoAudio } from "@/hooks/audio/use-auto-audio";
-import { ProfileMenuProvider, useProfileMenu } from "@/hooks/use-profile-menu";
+import { ProfileSheetProvider, useProfileSheet } from "@/hooks/use-profile-sheet";
+import { HamburgerMenuProvider } from "@/hooks/use-hamburger-menu";
 import { authService } from "@/services/auth";
-import { Feather } from "@expo/vector-icons";
 import { LiveKitRoom } from "@livekit/react-native";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-function Header() {
-  const { open } = useProfileMenu();
-  const insets = useSafeAreaInsets();
-
-  return (
-    <View style={[styles.headerSafe, { paddingTop: insets.top + 8 }]}>
-      <Text style={styles.headerTitle}>Pro-Win</Text>
-      <Feather name="user" size={20} color="#1F2937" onPress={open} />
-    </View>
-  );
-}
+import { StyleSheet, View } from "react-native";
 
 function AppContent() {
   const [index, setIndex] = useState(0);
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const { sheetRef } = useProfileSheet();
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -40,7 +29,7 @@ function AppContent() {
 
   return (
     <>
-      <Header />
+      <AnimatedHeader currentIndex={index} />
       {connectionDetails ? (
         <View style={styles.livekitHost}>
           <LiveKitRoom
@@ -56,18 +45,20 @@ function AppContent() {
         </View>
       ) : null}
       <SwipeTabs index={index} onIndexChange={setIndex} />
-      <ProfileMenuOverlay />
+      <ProfileSheet ref={sheetRef} userId={userId} role={role} />
     </>
   );
 }
 
 export default function AppIndex() {
   return (
-    <ProfileMenuProvider>
-      <View style={styles.container}>
-        <AppContent />
-      </View>
-    </ProfileMenuProvider>
+    <ProfileSheetProvider>
+      <HamburgerMenuProvider>
+        <View style={styles.container}>
+          <AppContent />
+        </View>
+      </HamburgerMenuProvider>
+    </ProfileSheetProvider>
   );
 }
 
@@ -75,19 +66,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-  },
-  headerSafe: {
-    backgroundColor: "#F8FAFC",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#0F172A",
   },
   livekitHost: {
     width: 0,

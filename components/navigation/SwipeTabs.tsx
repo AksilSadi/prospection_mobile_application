@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { TabView } from "react-native-tab-view";
-import BottomTabs from "@/components/navigation/BottomTabs";
+import HamburgerButton from "@/components/navigation/HamburgerButton";
+import HamburgerMenuOverlay from "@/components/navigation/HamburgerMenuOverlay";
 import DashboardScreen from "@/app/(app)/(tabs)/dashboard";
 import ImmeublesScreen from "@/app/(app)/(tabs)/immeubles";
 import HistoriqueScreen from "@/app/(app)/(tabs)/historique";
@@ -44,7 +45,8 @@ export default function SwipeTabs({ index, onIndexChange }: SwipeTabsProps) {
         swipeEnabled={swipeEnabled}
         lazy
       />
-      <BottomTabs routes={tabRoutes} index={index} onTabPress={onIndexChange} />
+      <HamburgerButton position="bottom-left" />
+      <HamburgerMenuOverlay currentIndex={index} onNavigate={onIndexChange} />
     </View>
   );
 }
