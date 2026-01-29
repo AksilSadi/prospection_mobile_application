@@ -33,6 +33,7 @@ export default function ImmeublesScreen({
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [progressFilter, setProgressFilter] = useState("all");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [selectedImmeubleId, setSelectedImmeubleId] = useState<number | null>(
@@ -126,13 +127,29 @@ export default function ImmeublesScreen({
     return immeubles.filter((imm) => imm.adresse.toLowerCase().includes(lower));
   }, [immeubles, query]);
 
+  const immeublesEnCours = useMemo(() => {
+    return filteredImmeubles.filter((imm) => {
+      const portes = imm.portes || [];
+      const prospectees = portes.filter((porte) => porte.statut !== "NON_VISITE").length;
+      const total = portes.length;
+      const percent = total === 0 ? 0 : Math.round((prospectees / total) * 100);
+      if (progressFilter === "all") return true;
+      if (progressFilter === "incomplete") return percent < 100;
+      if (progressFilter === "low") return percent < 35;
+      if (progressFilter === "mid") return percent >= 35 && percent < 70;
+      if (progressFilter === "high") return percent >= 70 && percent < 100;
+      if (progressFilter === "complete") return percent === 100;
+      return true;
+    });
+  }, [filteredImmeubles, progressFilter]);
+
   const immeublePairs = useMemo(() => {
     const pairs: Immeuble[][] = [];
-    for (let i = 0; i < filteredImmeubles.length; i += 2) {
-      pairs.push(filteredImmeubles.slice(i, i + 2));
+    for (let i = 0; i < immeublesEnCours.length; i += 2) {
+      pairs.push(immeublesEnCours.slice(i, i + 2));
     }
     return pairs;
-  }, [filteredImmeubles]);
+  }, [immeublesEnCours]);
 
   const totalPortes = useMemo(() => {
     return immeubles.reduce(
@@ -241,8 +258,8 @@ export default function ImmeublesScreen({
                   <View style={styles.summaryIconPrimary}>
                     <Feather name="layers" size={16} color="#FFFFFF" />
                   </View>
-                  <Text style={styles.summaryValue}>{immeubles.length}</Text>
-                  <Text style={styles.summaryLabel}>Immeubles actifs</Text>
+                  <Text style={styles.summaryValue}>{immeublesEnCours.length}</Text>
+                  <Text style={styles.summaryLabel}>Immeubles a finir</Text>
                 </View>
                 <View style={styles.summaryCardSecondary}>
                   <View style={styles.summaryIconSecondary}>
@@ -253,6 +270,82 @@ export default function ImmeublesScreen({
                 </View>
               </View>
 
+
+              <View style={styles.filterRow}>
+                <Pressable
+                  style={[styles.filterChip, progressFilter === "all" && styles.filterChipActive]}
+                  onPress={() => setProgressFilter("all")}
+                >
+                  <Feather name="layers" size={12} color={progressFilter === "all" ? "#FFFFFF" : "#2563EB"} />
+                  <Text
+                    style={[styles.filterChipText, progressFilter === "all" && styles.filterChipTextActive]}
+                  >
+                    Tous
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.filterChip, progressFilter === "incomplete" && styles.filterChipActive]}
+                  onPress={() => setProgressFilter("incomplete")}
+                >
+                  <Feather
+                    name="activity"
+                    size={12}
+                    color={progressFilter === "incomplete" ? "#FFFFFF" : "#2563EB"}
+                  />
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      progressFilter === "incomplete" && styles.filterChipTextActive,
+                    ]}
+                  >
+                    En cours
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.filterChip, progressFilter === "low" && styles.filterChipActive]}
+                  onPress={() => setProgressFilter("low")}
+                >
+                  <Feather name="trending-down" size={12} color={progressFilter === "low" ? "#FFFFFF" : "#EF4444"} />
+                  <Text
+                    style={[styles.filterChipText, progressFilter === "low" && styles.filterChipTextActive]}
+                  >
+                    0-35%
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.filterChip, progressFilter === "mid" && styles.filterChipActive]}
+                  onPress={() => setProgressFilter("mid")}
+                >
+                  <Feather name="bar-chart-2" size={12} color={progressFilter === "mid" ? "#FFFFFF" : "#F59E0B"} />
+                  <Text
+                    style={[styles.filterChipText, progressFilter === "mid" && styles.filterChipTextActive]}
+                  >
+                    35-70%
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.filterChip, progressFilter === "high" && styles.filterChipActive]}
+                  onPress={() => setProgressFilter("high")}
+                >
+                  <Feather name="trending-up" size={12} color={progressFilter === "high" ? "#FFFFFF" : "#22C55E"} />
+                  <Text
+                    style={[styles.filterChipText, progressFilter === "high" && styles.filterChipTextActive]}
+                  >
+                    70-99%
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.filterChip, progressFilter === "complete" && styles.filterChipActive]}
+                  onPress={() => setProgressFilter("complete")}
+                >
+                  <Feather name="check" size={12} color={progressFilter === "complete" ? "#FFFFFF" : "#16A34A"} />
+                  <Text
+                    style={[styles.filterChipText, progressFilter === "complete" && styles.filterChipTextActive]}
+                  >
+                    100%
+                  </Text>
+                </Pressable>
+              </View>
               <View style={styles.searchWrap}>
                 <View style={[styles.searchBar, styles.searchBarShadow]}>
                   <View style={styles.searchIconWrap}>
@@ -283,7 +376,18 @@ export default function ImmeublesScreen({
           renderItem={({ item: pair }) => (
             <View style={styles.row}>
               {pair.map((immeuble, index) => {
-                const total = immeuble.nbEtages * immeuble.nbPortesParEtage;
+                const portes = immeuble.portes || [];
+                const total = portes.length || immeuble.nbEtages * immeuble.nbPortesParEtage;
+                const prospectees = portes.length
+                  ? portes.filter((porte) => porte.statut !== "NON_VISITE").length
+                  : 0;
+                const progressPercent = total === 0 ? 0 : Math.round((prospectees / total) * 100);
+                const progressColor =
+                  progressPercent < 35
+                    ? "#EF4444"
+                    : progressPercent < 70
+                    ? "#F59E0B"
+                    : "#22C55E";
                 const cardLabel = `Appartement ${String.fromCharCode(65 + (index % 26))}`;
                 return (
                   <Pressable
@@ -310,14 +414,17 @@ export default function ImmeublesScreen({
                         <Text style={styles.cardMeta}>•</Text>
                         <Text style={styles.cardMeta}>{total} portes</Text>
                       </View>
-                      <View style={styles.cardMetaRow}>
-                        <Feather
-                          name={immeuble.ascenseurPresent ? "check-circle" : "x-circle"}
-                          size={11}
-                          color={immeuble.ascenseurPresent ? "#16A34A" : "#EF4444"}
-                        />
-                        <Text style={styles.cardMeta}>
-                          {immeuble.ascenseurPresent ? "Ascenseur" : "Sans ascenseur"}
+                      <View style={styles.progressRow}>
+                        <View style={styles.progressTrack}>
+                          <View
+                            style={[
+                              styles.progressFill,
+                              { width: `${progressPercent}%`, backgroundColor: progressColor },
+                            ]}
+                          />
+                        </View>
+                        <Text style={[styles.progressText, { color: progressColor }]}>
+                          {progressPercent}%
                         </Text>
                       </View>
                     </View>
@@ -402,25 +509,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    backgroundColor: "#F8FAFF",
+    borderRadius: 999,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#D7E0F0",
   },
   searchBarShadow: {
     shadowColor: "#0F172A",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
   },
   searchIconWrap: {
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#E0EDFF",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -485,6 +592,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#64748B",
   },
+  filterRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+  },
+  filterChipActive: {
+    backgroundColor: "#2563EB",
+    borderColor: "#2563EB",
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  filterChipTextActive: {
+    color: "#FFFFFF",
+  },
   helper: {
     fontSize: 13,
     color: "#64748B",
@@ -495,7 +630,7 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     padding: 20,
-    borderRadius: 16,
+    borderRadius: 999,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     gap: 8,
@@ -528,7 +663,7 @@ const styles = StyleSheet.create({
   skeletonSummaryCard: {
     flex: 1,
     height: 64,
-    borderRadius: 16,
+    borderRadius: 999,
     backgroundColor: "#E5E7EB",
   },
   skeletonSearch: {
@@ -613,6 +748,29 @@ const styles = StyleSheet.create({
   cardMeta: {
     fontSize: 12,
     color: "#64748B",
+  },
+  progressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  progressTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "#E2E8F0",
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#2563EB",
+  },
+  progressText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#2563EB",
   },
   fab: {
     position: "absolute",
