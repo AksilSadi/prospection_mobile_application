@@ -6,10 +6,10 @@ import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import type { Immeuble } from "@/types/api";
 
 const FILTERS = [
-  { key: "all", label: "Tous" },
-  { key: "24h", label: "24h" },
-  { key: "7d", label: "7j" },
-  { key: "30d", label: "30j" },
+  { key: "all", label: "Tous", icon: "layers" },
+  { key: "24h", label: "24h", icon: "clock" },
+  { key: "7d", label: "7j", icon: "calendar" },
+  { key: "30d", label: "30j", icon: "calendar" },
 ];
 
 export default function HistoriqueScreen() {
@@ -81,8 +81,15 @@ export default function HistoriqueScreen() {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.headerBlock}>
-            <Text style={styles.pageTitle}>Historique</Text>
-            <Text style={styles.subtitle}>Immeubles recents</Text>
+            <View style={styles.heroCard}>
+              <View style={styles.heroIcon}>
+                <Feather name="clock" size={22} color="#2563EB" />
+              </View>
+              <View style={styles.heroText}>
+                <Text style={styles.pageTitle}>Historique</Text>
+                <Text style={styles.subtitle}>Suivi de vos immeubles recents</Text>
+              </View>
+            </View>
 
             <View style={styles.filtersRow}>
               {FILTERS.map((item) => {
@@ -93,6 +100,11 @@ export default function HistoriqueScreen() {
                     onPress={() => setFilter(item.key)}
                     style={[styles.filterChip, selected && styles.filterChipActive]}
                   >
+                    <Feather
+                      name={item.icon as keyof typeof Feather.glyphMap}
+                      size={12}
+                      color={selected ? "#FFFFFF" : "#64748B"}
+                    />
                     <Text style={[styles.filterText, selected && styles.filterTextActive]}>
                       {item.label}
                     </Text>
@@ -132,7 +144,9 @@ export default function HistoriqueScreen() {
                 </Text>
               </View>
             </View>
-            <Feather name="chevron-right" size={18} color="#CBD5F5" />
+            <View style={styles.cardChevron}>
+              <Feather name="chevron-right" size={18} color="#94A3B8" />
+            </View>
           </View>
         )}
         ListFooterComponent={null}
@@ -154,6 +168,32 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
+  heroCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  heroIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroText: {
+    flex: 1,
+  },
   pageTitle: {
     fontSize: 20,
     fontWeight: "700",
@@ -169,6 +209,9 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -254,6 +297,11 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   cardIcon: {
     width: 36,
@@ -280,6 +328,14 @@ const styles = StyleSheet.create({
   cardDate: {
     fontSize: 12,
     color: "#94A3B8",
+  },
+  cardChevron: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
   },
   itemSeparator: {
     height: 8,
