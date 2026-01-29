@@ -33,7 +33,7 @@ export default function ImmeublesScreen({
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [progressFilter, setProgressFilter] = useState("all");
+  const [progressFilter, setProgressFilter] = useState("incomplete");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [selectedImmeubleId, setSelectedImmeubleId] = useState<number | null>(
@@ -471,11 +471,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8FAFC",
   },
   content: {
-    padding: 16,
+    padding: 18,
     paddingBottom: 24,
   },
   headerBlock: {
-    gap: 12,
+    gap: 14,
     marginBottom: 12,
   },
   headerRow: {
@@ -493,12 +493,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
     color: "#0F172A",
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#64748B",
   },
   searchWrap: {
@@ -572,24 +572,24 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     marginTop: 10,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
     color: "#FFFFFF",
   },
   summaryLabel: {
     marginTop: 4,
-    fontSize: 12,
+    fontSize: 13,
     color: "#DBEAFE",
   },
   summaryValueSecondary: {
     marginTop: 10,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "700",
     color: "#0F172A",
   },
   summaryLabelSecondary: {
     marginTop: 4,
-    fontSize: 12,
+    fontSize: 13,
     color: "#64748B",
   },
   filterRow: {
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
     borderColor: "#2563EB",
   },
   filterChipText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
     color: "#475569",
   },
@@ -683,16 +683,16 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: "row",
-    gap: 12,
-    marginBottom: 12,
+    gap: 16,
+    marginBottom: 16,
     justifyContent: "space-between",
   },
   card: {
     flex: 1,
-    maxWidth: 340,
+    maxWidth: 360,
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 12,
+    borderRadius: 20,
+    padding: 14,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     shadowColor: "#0F172A",
@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
   },
   cardPlaceholder: {
     flex: 1,
-    maxWidth: 340,
+    maxWidth: 360,
   },
   cardHeader: {
     flexDirection: "row",
@@ -732,12 +732,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
     color: "#0F172A",
   },
   cardTitleCompact: {
-    fontSize: 13,
+    fontSize: 14,
   },
   cardMetaRow: {
     flexDirection: "row",
@@ -746,7 +746,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardMeta: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#64748B",
   },
   progressRow: {
@@ -768,7 +768,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
   },
   progressText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "600",
     color: "#2563EB",
   },
