@@ -140,16 +140,6 @@ export default function HamburgerMenuOverlay({ currentIndex, onNavigate }: Hambu
             isActive={currentIndex === 2}
           />
         </View>
-
-        <View style={styles.footer}>
-          <View style={styles.statsCard}>
-            <Text style={styles.statsLabel}>Session active</Text>
-            <View style={styles.statsRow}>
-              <Feather name="activity" size={14} color="#10B981" />
-              <Text style={styles.statsValue}>En cours</Text>
-            </View>
-          </View>
-        </View>
       </Animated.View>
     </View>
   );
@@ -281,32 +271,5 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
     position: "absolute",
     right: 0,
-  },
-  footer: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  statsCard: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  statsLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#64748B",
-    marginBottom: 6,
-  },
-  statsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  statsValue: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#10B981",
   },
 });

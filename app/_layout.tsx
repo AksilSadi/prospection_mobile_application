@@ -12,7 +12,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <Stack screenOptions={{ headerShown: false }} />
-        <StatusBar style="auto" />
+        <StatusBar style="light" translucent backgroundColor="transparent" />
       </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );
