@@ -24,8 +24,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
-  FlatList,
   Keyboard,
+  FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -35,6 +35,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 type DateTimePickerType = ComponentType<any> | null;
 
 type StatusOption = {
@@ -167,49 +168,6 @@ const buildFallbackPortes = (immeuble: Immeuble | null) => {
   return portes;
 };
 
-function StatusGrid({
-  currentPorte,
-  onSelect,
-}: {
-  currentPorte: Porte | undefined;
-  onSelect: (statut: string) => void;
-}) {
-  const activeKey = getDisplayStatusKey(currentPorte);
-  return (
-    <View style={styles.statusGrid}>
-      {STATUS_OPTIONS.map((option) => {
-        const isActive = activeKey === option.value;
-        const cardBg = isActive ? option.accent : option.bg;
-        const cardBorder = isActive ? option.accent : "#E5E5EA";
-        const labelColor = isActive ? "#FFFFFF" : option.fg;
-        const descColor = isActive ? "rgba(255, 255, 255, 0.9)" : option.fg;
-        const iconBg = isActive ? "rgba(255, 255, 255, 0.2)" : option.accent;
-        const iconColor = isActive ? "#FFFFFF" : option.fg;
-        return (
-          <Pressable
-            key={option.value}
-            style={[
-              styles.statusCard,
-              { backgroundColor: cardBg, borderColor: cardBorder },
-            ]}
-            onPress={() => onSelect(option.value)}
-          >
-            <View style={[styles.statusIcon, { backgroundColor: iconBg }]}>
-              <Feather name={option.icon} size={18} color={iconColor} />
-            </View>
-            <Text style={[styles.statusLabel, { color: labelColor }]}>
-              {option.label}
-            </Text>
-            <Text style={[styles.statusDesc, { color: descColor }]}>
-              {option.description}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 type ImmeubleDetailsViewProps = {
   immeuble: Immeuble;
   onBack: () => void;
@@ -248,16 +206,9 @@ export default function ImmeubleDetailsView({
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const contentTranslate = useRef(new Animated.Value(12)).current;
   const [isReady, setIsReady] = useState(false);
-  const doorPulse = useRef(new Animated.Value(1)).current;
-  const doorPagerRef = useRef<FlatList<Porte>>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
-  const swipeIndicatorOpacity = useRef(new Animated.Value(1)).current;
+  const doorContentScale = useRef(new Animated.Value(1)).current;
   const progressFill = useRef(new Animated.Value(0)).current;
-  const manageSheetRef = useRef<BottomSheetModal>(null);
-  const manageSheetSnapPoints = useMemo(
-    () => (isTablet ? ["52%"] : ["62%"]),
-    [isTablet],
-  );
+  const doorPagerRef = useRef<FlatList<Porte>>(null);
   const { add: addEtageToImmeuble, loading: addingEtage } =
     useAddEtageToImmeuble();
   const { create: createPorte, loading: creatingPorte } = useCreatePorte();
@@ -268,6 +219,11 @@ export default function ImmeubleDetailsView({
   const editSheetRef = useRef<BottomSheetModal>(null);
   const editSnapPoints = useMemo(
     () => (isTablet ? ["60%", "85%"] : ["55%", "75%"]),
+    [isTablet],
+  );
+  const floorPlanSheetRef = useRef<BottomSheetModal>(null);
+  const floorPlanSnapPoints = useMemo(
+    () => (isTablet ? ["50%", "80%"] : ["45%", "70%"]),
     [isTablet],
   );
   const [editMode, setEditMode] = useState<
@@ -290,6 +246,7 @@ export default function ImmeubleDetailsView({
   });
   const [deleteTarget, setDeleteTarget] = useState<Porte | null>(null);
   const [deleteFloor, setDeleteFloor] = useState<number | null>(null);
+  const [showFloorPlan, setShowFloorPlan] = useState(false);
 
   useEffect(() => {
     const nextPortes = immeuble.portes?.length
@@ -345,6 +302,15 @@ export default function ImmeubleDetailsView({
     }, 60);
     return () => clearTimeout(timeoutId);
   }, [contentOpacity, contentTranslate, isReady]);
+
+  // Gérer l'ouverture de la bottom sheet du plan rapide
+  useEffect(() => {
+    if (showFloorPlan) {
+      floorPlanSheetRef.current?.present();
+    } else {
+      floorPlanSheetRef.current?.close();
+    }
+  }, [showFloorPlan]);
 
   const showToast = (title: string, subtitle: string) => {
     setActionToast({ title, subtitle });
@@ -496,13 +462,13 @@ export default function ImmeubleDetailsView({
     () => getMaxEtage(portesState, immeuble.nbEtages ?? 0),
     [portesState, immeuble.nbEtages],
   );
-
-  const contentPadding = 16;
-  const sectionPadding = 16;
-  const doorCardWidth = Math.max(
-    1,
-    width - contentPadding * 2 - sectionPadding * 2,
-  );
+  const handleDoorScrollEnd = (event: any) => {
+    const offsetX = event.nativeEvent.contentOffset.x;
+    const nextIndex = Math.round(offsetX / Math.max(1, width));
+    setCurrentIndex((prev) =>
+      Math.max(0, Math.min(nextIndex, sortedPortes.length - 1)),
+    );
+  };
 
   const currentPorte = sortedPortes[currentIndex];
   const currentStatus = getDisplayStatus(currentPorte) ?? {
@@ -514,7 +480,6 @@ export default function ImmeubleDetailsView({
     accent: "#CBD5F5",
     icon: "circle" as const,
   };
-  const defaultStatus = currentStatus;
 
   useEffect(() => {
     if (currentIndex >= sortedPortes.length) {
@@ -524,60 +489,15 @@ export default function ImmeubleDetailsView({
 
   useEffect(() => {
     if (!currentPorte?.id) return;
-    doorPulse.setValue(0.92);
-    Animated.spring(doorPulse, {
+    const baseScale = isTablet ? 0.985 : 0.965;
+    doorContentScale.setValue(baseScale);
+    Animated.spring(doorContentScale, {
       toValue: 1,
-      friction: 6,
-      tension: 140,
+      friction: 7,
+      tension: 120,
       useNativeDriver: true,
     }).start();
-  }, [currentPorte?.id, doorPulse]);
-
-  // Animation de l'indicateur de swipe (pulse)
-  useEffect(() => {
-    const loopAnimation = () => {
-      Animated.sequence([
-        Animated.timing(swipeIndicatorOpacity, {
-          toValue: 0.4,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(swipeIndicatorOpacity, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ]).start(() => loopAnimation());
-    };
-    loopAnimation();
-    return () => {
-      swipeIndicatorOpacity.setValue(1);
-    };
-  }, [swipeIndicatorOpacity]);
-
-  useEffect(() => {
-    if (!doorPagerRef.current || sortedPortes.length === 0) return;
-    const safeIndex = Math.min(
-      Math.max(0, currentIndex),
-      sortedPortes.length - 1,
-    );
-    doorPagerRef.current.scrollToIndex({
-      index: safeIndex,
-      animated: true,
-    });
-  }, [currentIndex, sortedPortes.length]);
-
-  const handleDoorScrollEnd = (event: any) => {
-    if (!doorCardWidth) return;
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const rawIndex = Math.min(
-      Math.max(0, Math.round(offsetX / doorCardWidth)),
-      Math.max(0, sortedPortes.length - 1),
-    );
-    if (rawIndex !== currentIndex) {
-      setCurrentIndex(rawIndex);
-    }
-  };
+  }, [currentPorte?.id, doorContentScale, isTablet]);
 
   const progress = useMemo(() => {
     const total = sortedPortes.length;
@@ -607,37 +527,6 @@ export default function ImmeubleDetailsView({
     });
     return Array.from(grouped.entries()).sort((a, b) => b[0] - a[0]);
   }, [sortedPortes]);
-
-  const previousFloorTarget = useMemo(() => {
-    if (!currentPorte) return null;
-    for (let i = currentIndex - 1; i >= 0; i -= 1) {
-      if (sortedPortes[i].etage !== currentPorte.etage) {
-        return sortedPortes[i].etage;
-      }
-    }
-    return null;
-  }, [currentIndex, currentPorte, sortedPortes]);
-
-  const nextFloorTarget = useMemo(() => {
-    if (!currentPorte) return null;
-    for (let i = currentIndex + 1; i < sortedPortes.length; i += 1) {
-      if (sortedPortes[i].etage !== currentPorte.etage) {
-        return sortedPortes[i].etage;
-      }
-    }
-    return null;
-  }, [currentIndex, currentPorte, sortedPortes]);
-
-  const canRemoveEtage = displayNbEtages > 0;
-
-  const goToPorte = (porteId: number) => {
-    const index = sortedPortes.findIndex((porte) => porte.id === porteId);
-    if (index >= 0) setCurrentIndex(index);
-  };
-
-  const openManageSheet = () => {
-    manageSheetRef.current?.present();
-  };
 
   const getNextDoorNumber = (etage: number) => {
     const portesOnFloor = portesState.filter((porte) => porte.etage === etage);
@@ -854,6 +743,20 @@ export default function ImmeubleDetailsView({
     }
   };
 
+  const advanceToNextDoor = (porteId: number) => {
+    const targetIndex = sortedPortes.findIndex((item) => item.id === porteId);
+    if (targetIndex >= 0 && targetIndex < sortedPortes.length - 1) {
+      setTimeout(() => {
+        const nextIndex = targetIndex + 1;
+        setCurrentIndex(nextIndex);
+        doorPagerRef.current?.scrollToIndex({
+          index: nextIndex,
+          animated: true,
+        });
+      }, 120);
+    }
+  };
+
   const handleStatusSelect = async (statut: string, target?: Porte) => {
     const porte = target ?? currentPorte;
     if (!porte) return;
@@ -863,17 +766,7 @@ export default function ImmeubleDetailsView({
     }
     if (statut === "ABSENT_MATIN") {
       void applyStatus(porte, "ABSENT", { nbRepassages: 1 });
-      const targetIndex = sortedPortes.findIndex(
-        (item) => item.id === porte.id,
-      );
-      if (targetIndex >= 0 && targetIndex < sortedPortes.length - 1) {
-        setTimeout(() => {
-          doorPagerRef.current?.scrollToIndex({
-            index: targetIndex + 1,
-            animated: true,
-          });
-        }, 80);
-      }
+      advanceToNextDoor(porte.id);
       return;
     }
     if (statut === "ABSENT_SOIR") {
@@ -881,29 +774,11 @@ export default function ImmeubleDetailsView({
       void applyStatus(porte, "ABSENT", {
         nbRepassages: nextRepassage,
       });
-      const targetIndex = sortedPortes.findIndex(
-        (item) => item.id === porte.id,
-      );
-      if (targetIndex >= 0 && targetIndex < sortedPortes.length - 1) {
-        setTimeout(() => {
-          doorPagerRef.current?.scrollToIndex({
-            index: targetIndex + 1,
-            animated: true,
-          });
-        }, 80);
-      }
+      advanceToNextDoor(porte.id);
       return;
     }
     void applyStatus(porte, statut);
-    const targetIndex = sortedPortes.findIndex((item) => item.id === porte.id);
-    if (targetIndex >= 0 && targetIndex < sortedPortes.length - 1) {
-      setTimeout(() => {
-        doorPagerRef.current?.scrollToIndex({
-          index: targetIndex + 1,
-          animated: true,
-        });
-      }, 80);
-    }
+    advanceToNextDoor(porte.id);
   };
 
   return (
@@ -921,11 +796,10 @@ export default function ImmeubleDetailsView({
           </Text>
         </View>
         <Pressable
-          style={styles.headerAction}
-          onPress={openManageSheet}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.floorPlanButton}
+          onPress={() => setShowFloorPlan(true)}
         >
-          <Feather name="more-horizontal" size={20} color="#1E293B" />
+          <Feather name="grid" size={18} color="#2563EB" />
         </Pressable>
       </View>
 
@@ -957,274 +831,229 @@ export default function ImmeubleDetailsView({
           <View style={styles.skeletonCardTall} />
           <View style={styles.skeletonCardTall} />
         </View>
-      ) : null}
-
-      <Animated.View
-        style={[
-          styles.contentAnimated,
-          {
-            opacity: contentOpacity,
-            transform: [{ translateY: contentTranslate }],
-          },
-        ]}
-      >
-        <ScrollView contentContainerStyle={styles.content}>
-          {/* Progress bar moderne style iOS */}
-          <View
+      ) : (
+        <>
+          <Animated.View
             style={[
-              styles.progressCardNew,
-              isTablet && styles.progressCardNewTablet,
+              styles.contentAnimated,
+              {
+                opacity: contentOpacity,
+                transform: [{ translateY: contentTranslate }],
+              },
             ]}
           >
-            <View style={styles.progressRowNew}>
-              <View style={styles.progressLeftNew}>
-                <View style={styles.progressIconNew}>
-                  <Feather name="activity" size={14} color="#2563EB" />
-                </View>
-                <View style={styles.progressTextsNew}>
-                  <Text style={styles.progressTitleNew}>Progression</Text>
-                  <Text style={styles.progressSubtitleNew}>
-                    {progress.visited} / {progress.total} portes
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.progressPercentNew}>
-                <Text style={styles.progressPercentTextNew}>
-                  {progress.percentage}%
-                </Text>
-              </View>
-            </View>
-            <View style={styles.progressBarTrackNew}>
-              <Animated.View
+            <ScrollView contentContainerStyle={styles.content}>
+              {/* Progress bar moderne style iOS */}
+              <View
                 style={[
-                  styles.progressBarFillNew,
-                  {
-                    width: progressFill.interpolate({
-                      inputRange: [0, 100],
-                      outputRange: ["0%", "100%"],
-                    }),
-                  },
-                ]}
-              />
-            </View>
-          </View>
-
-          <View style={styles.sectionCard}>
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Statut de la porte</Text>
-                <Text style={styles.sectionCounter}>
-                  {currentIndex + 1} / {sortedPortes.length}
-                </Text>
-              </View>
-              <Animated.View
-                style={[
-                  styles.doorPagerWrap,
+                  styles.progressCardNew,
+                  isTablet && styles.progressCardNewTablet,
                 ]}
               >
-                <Animated.FlatList
-                  ref={doorPagerRef}
-                  data={sortedPortes}
-                  horizontal
-                  pagingEnabled
-                  snapToInterval={doorCardWidth}
-                  decelerationRate={0.9}
-                  snapToAlignment="start"
-                  bounces={false}
-                  scrollEnabled
-                  showsHorizontalScrollIndicator={false}
-                  nestedScrollEnabled
-                  scrollEventThrottle={1}
-                  onScroll={Animated.event(
-                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                    { useNativeDriver: true },
-                  )}
-                  onMomentumScrollEnd={handleDoorScrollEnd}
-                  contentContainerStyle={styles.doorPagerContent}
-                  keyExtractor={(item) => String(item.id)}
-                  getItemLayout={(_, index) => ({
-                    length: doorCardWidth,
-                    offset: doorCardWidth * index,
-                    index,
-                  })}
-                  initialNumToRender={1}
-                  windowSize={5}
-                  maxToRenderPerBatch={3}
-                  removeClippedSubviews={true}
-                  renderItem={({ item }) => {
-                    const itemStatus = getDisplayStatus(item) ?? defaultStatus;
-                    return (
-                      <View style={[styles.doorPage, { width: doorCardWidth }]}>
-                        <View style={styles.currentCard}>
-                          <View style={styles.currentBackdrop} />
-                          <View style={styles.currentHeader}>
-                            <View>
-                              <Text style={styles.currentLabel}>
-                                Porte courante
-                              </Text>
-                              <Text style={styles.currentTitle}>
+                <View style={styles.progressRowNew}>
+                  <View style={styles.progressLeftNew}>
+                    <View style={styles.progressIconNew}>
+                      <Feather name="activity" size={14} color="#2563EB" />
+                    </View>
+                    <View style={styles.progressTextsNew}>
+                      <Text style={styles.progressTitleNew}>Progression</Text>
+                      <Text style={styles.progressSubtitleNew}>
+                        {progress.visited} / {progress.total} portes
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.progressPercentNew}>
+                    <Text style={styles.progressPercentTextNew}>
+                      {progress.percentage}%
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.progressBarTrackNew}>
+                  <Animated.View
+                    style={[
+                      styles.progressBarFillNew,
+                      {
+                        width: progressFill.interpolate({
+                          inputRange: [0, 100],
+                          outputRange: ["0%", "100%"],
+                        }),
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+
+              {/* Carte de porte avec statuts (swipe horizontal) */}
+              <FlatList
+                ref={doorPagerRef}
+                data={sortedPortes}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => String(item.id)}
+                onMomentumScrollEnd={handleDoorScrollEnd}
+                getItemLayout={(_, index) => ({
+                  length: width,
+                  offset: width * index,
+                  index,
+                })}
+                contentContainerStyle={styles.doorPagerContent}
+                renderItem={({ item, index }) => {
+                  const status = getDisplayStatus(item) ?? {
+                    value: "NON_VISITE",
+                    label: "Non visite",
+                    description: "Par defaut",
+                    bg: "#E2E8F0",
+                    fg: "#475569",
+                    accent: "#CBD5F5",
+                    icon: "circle" as const,
+                  };
+                  const isActive = index === currentIndex;
+                  return (
+                    <View style={[styles.doorPagerItem, { width }]}>
+                      <Animated.View
+                        style={[
+                          styles.doorCardInScroll,
+                          isActive && {
+                            transform: [{ scale: doorContentScale }],
+                          },
+                        ]}
+                      >
+                        <View style={styles.doorCardHeader}>
+                          <View style={styles.doorCardTitleRow}>
+                            <View style={styles.doorNumberBadge}>
+                              <Text style={styles.doorNumberText}>
                                 {item.nomPersonnalise || item.numero || "--"}
                               </Text>
                             </View>
-                            <View
-                              style={[
-                                styles.statusPill,
-                                {
-                                  backgroundColor: itemStatus.bg,
-                                  borderColor: itemStatus.accent,
-                                },
-                              ]}
-                            >
-                              <View
-                                style={[
-                                  styles.statusDot,
-                                  { backgroundColor: itemStatus.accent },
-                                ]}
-                              />
-                              <Text
-                                style={[
-                                  styles.statusPillText,
-                                  { color: itemStatus.fg },
-                                ]}
-                              >
-                                {itemStatus.label}
+                            <View style={styles.doorFloorBadge}>
+                              <Feather name="layers" size={12} color="#64748B" />
+                              <Text style={styles.doorFloorText}>
+                                Etage {item.etage ?? "--"}
                               </Text>
                             </View>
                           </View>
-                          <View style={styles.currentMeta}>
-                            <Text style={styles.currentMetaText}>
-                              Etage {item.etage ?? "--"}
-                            </Text>
-                            <Text style={styles.currentMetaText}>-</Text>
-                            <Text style={styles.currentMetaText}>
-                              Statut: {itemStatus.label}
+                          <View
+                            style={[
+                              styles.statusBadge,
+                              { backgroundColor: status.bg },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.statusDotBadge,
+                                { backgroundColor: status.accent },
+                              ]}
+                            />
+                            <Text
+                              style={[styles.statusBadgeText, { color: status.fg }]}
+                            >
+                              {status.label}
                             </Text>
                           </View>
-                          <StatusGrid
-                            currentPorte={item}
-                            onSelect={(statut) =>
-                              handleStatusSelect(statut, item)
-                            }
-                          />
                         </View>
-                      </View>
-                    );
-                  }}
-                />
-              </Animated.View>
-            </View>
-          </View>
 
-          {/* Indicateur de swipe animé */}
-          {sortedPortes.length > 1 && (
-            <View style={styles.swipeIndicator}>
-              <Animated.View style={{ opacity: swipeIndicatorOpacity }}>
-                <Feather name="chevron-left" size={20} color="#94A3B8" />
-              </Animated.View>
-              <View style={styles.swipeDots}>
-                {sortedPortes.map((_, index) => {
-                  const inputRange = [
-                    (index - 1) * doorCardWidth,
-                    index * doorCardWidth,
-                    (index + 1) * doorCardWidth,
-                  ];
-                  const dotScale = scrollX.interpolate({
-                    inputRange,
-                    outputRange: [0.5, 1, 0.5],
-                    extrapolate: "clamp",
-                  });
-                  const dotOpacity = scrollX.interpolate({
-                    inputRange,
-                    outputRange: [0.3, 1, 0.3],
-                    extrapolate: "clamp",
-                  });
-                  const isActive = index === currentIndex;
-                  return (
-                    <Animated.View
-                      key={index}
-                      style={[
-                        styles.swipeDot,
-                        isActive && styles.swipeDotActive,
-                        {
-                          transform: [{ scaleX: dotScale }, { scaleY: dotScale }],
-                          opacity: dotOpacity,
-                        },
-                      ]}
-                    />
-                  );
-                })}
-              </View>
-              <Animated.View style={{ opacity: swipeIndicatorOpacity }}>
-                <Feather name="chevron-right" size={20} color="#94A3B8" />
-              </Animated.View>
-            </View>
-          )}
-
-          <Text style={styles.swipeHint}>Glisse pour changer de porte</Text>
-
-
-
-          <View style={styles.sectionCard}>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Plan rapide</Text>
-              <Text style={styles.sectionHint}>
-                Tape une porte pour changer rapidement.
-              </Text>
-              <View style={styles.mapCard}>
-                {portesParEtage.map(([etage, portes]) => (
-                  <View key={etage} style={styles.mapEtage}>
-                    <Text style={styles.mapEtageTitle}>Etage {etage}</Text>
-                    <View style={styles.mapDoors}>
-                      {portes.map((porte) => {
-                        const status = getDisplayStatus(porte);
-                        const isActive = porte.id === currentPorte?.id;
-                        const isVisited = status !== null;
-                        const chipBg = isVisited ? status.accent : "#E2E8F0";
-                        const chipBorder = "transparent";
-                        const chipText = isVisited ? "#FFFFFF" : "#64748B";
-                        return (
-                          <Animated.View
-                            key={porte.id}
-                            style={{
-                              transform: [{ scale: isActive ? doorPulse : 1 }],
-                            }}
-                          >
-                            <Pressable
-                              style={[
-                                styles.doorChip,
-                                {
-                                  backgroundColor: chipBg,
-                                  borderColor: chipBorder,
-                                },
-                                isActive && styles.doorChipActive,
-                              ]}
-                              onPress={() => goToPorte(porte.id)}
-                            >
-                              <View style={styles.doorChipContent}>
-                                <Text
+                        <View style={styles.statusGrid}>
+                          {STATUS_OPTIONS.map((option) => {
+                            const isActiveStatus =
+                              getDisplayStatusKey(item) === option.value;
+                            const cardBg = isActiveStatus ? option.accent : option.bg;
+                            const cardBorder = isActiveStatus
+                              ? option.accent
+                              : "#E2E8F0";
+                            const labelColor = isActiveStatus
+                              ? "#FFFFFF"
+                              : option.fg;
+                            const descColor = isActiveStatus
+                              ? "rgba(255, 255, 255, 0.9)"
+                              : option.fg;
+                            const iconBg = isActiveStatus
+                              ? "rgba(255, 255, 255, 0.2)"
+                              : option.accent;
+                            const iconColor = isActiveStatus
+                              ? "#FFFFFF"
+                              : option.fg;
+                            return (
+                              <Pressable
+                                key={option.value}
+                                style={[
+                                  styles.statusCard,
+                                  {
+                                    backgroundColor: cardBg,
+                                    borderColor: cardBorder,
+                                  },
+                                ]}
+                                onPress={() => handleStatusSelect(option.value, item)}
+                              >
+                                <View
                                   style={[
-                                    styles.doorChipText,
-                                    { color: chipText },
+                                    styles.statusIcon,
+                                    { backgroundColor: iconBg },
                                   ]}
                                 >
-                                  {porte.nomPersonnalise || porte.numero}
+                                  <Feather
+                                    name={option.icon}
+                                    size={16}
+                                    color={iconColor}
+                                  />
+                                </View>
+                                <Text
+                                  style={[styles.statusLabel, { color: labelColor }]}
+                                >
+                                  {option.label}
                                 </Text>
-                                {isActive ? (
-                                  <View style={styles.activeDot} />
-                                ) : null}
-                              </View>
-                            </Pressable>
-                          </Animated.View>
-                        );
-                      })}
+                                <Text
+                                  style={[styles.statusDesc, { color: descColor }]}
+                                >
+                                  {option.description}
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+
+                        {/* Indicateur de pagination */}
+                        {sortedPortes.length > 1 && (
+                          <View style={styles.paginationIndicator}>
+                            <Animated.View
+                              style={{ opacity: currentIndex > 0 ? 1 : 0.3 }}
+                            >
+                              <Feather name="chevron-left" size={16} color="#94A3B8" />
+                            </Animated.View>
+                            <View style={styles.paginationDots}>
+                              {sortedPortes.slice(0, 5).map((_, dotIndex) => {
+                                const isActiveDot =
+                                  dotIndex === Math.min(currentIndex, 4);
+                                return (
+                                  <View
+                                    key={dotIndex}
+                                    style={[
+                                      styles.paginationDot,
+                                      isActiveDot && styles.paginationDotActive,
+                                    ]}
+                                  />
+                                );
+                              })}
+                            </View>
+                            <Animated.View
+                              style={{
+                                opacity:
+                                  currentIndex < sortedPortes.length - 1 ? 1 : 0.3,
+                              }}
+                            >
+                              <Feather name="chevron-right" size={16} color="#94A3B8" />
+                            </Animated.View>
+                          </View>
+                        )}
+                      </Animated.View>
                     </View>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-      </Animated.View>
+                  );
+                }}
+              />
+            </ScrollView>
+          </Animated.View>
+        </>
+      )}
 
       <BottomSheetModal
         ref={editSheetRef}
@@ -1481,223 +1310,112 @@ export default function ImmeubleDetailsView({
         </BottomSheetScrollView>
       </BottomSheetModal>
 
+      {/* Bottom Sheet Plan Rapide */}
       <BottomSheetModal
-        ref={manageSheetRef}
-        index={0}
-        snapPoints={manageSheetSnapPoints}
+        ref={floorPlanSheetRef}
+        index={showFloorPlan ? 1 : -1}
+        snapPoints={floorPlanSnapPoints}
+        enablePanDownToClose
+        onChange={(index) => {
+          if (index === -1) setShowFloorPlan(false);
+        }}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
             {...props}
             appearsOnIndex={0}
             disappearsOnIndex={-1}
             pressBehavior="close"
-            opacity={0.45}
+            opacity={0.4}
           />
         )}
-        handleIndicatorStyle={styles.handleIndicator}
         backgroundStyle={styles.sheetBackground}
+        handleIndicatorStyle={styles.handleIndicator}
       >
         <BottomSheetScrollView
           contentContainerStyle={[
-            styles.manageSheet,
-            isTablet && styles.manageSheetTablet,
+            styles.sheetContent,
+            isTablet && styles.sheetContentTablet,
           ]}
         >
-          {!isTablet ? (
-            <>
-              <View style={styles.manageSheetHero}>
-                <View style={styles.manageSheetHeroIcon}>
-                  <Feather name="sliders" size={20} color="#2563EB" />
-                </View>
-                <Text style={styles.manageSheetTitle}>Gestion</Text>
-                <Text style={styles.manageSheetSubtitle}>Portes & etages</Text>
-              </View>
-              <View style={styles.manageSheetGroup}>
-                <Text style={styles.manageSheetGroupTitle}>Portes</Text>
-                <Pressable
-                  style={styles.manageSheetAction}
-                  onPress={() => {
-                    manageSheetRef.current?.close();
-                    openAddPorte();
-                  }}
-                >
-                  <View style={styles.manageSheetIcon}>
-                    <Feather name="plus-square" size={18} color="#0F172A" />
-                  </View>
-                  <View style={styles.manageSheetText}>
-                    <Text style={styles.manageSheetLabel}>Ajouter porte</Text>
-                    <Text style={styles.manageSheetHint}>
-                      Ajoute a l&apos;etage courant
-                    </Text>
-                  </View>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.manageSheetAction,
-                    !currentPorte && styles.manageSheetActionDisabled,
-                  ]}
-                  onPress={() => {
-                    manageSheetRef.current?.close();
-                    openDeletePorte();
-                  }}
-                  disabled={!currentPorte}
-                >
-                  <View style={styles.manageSheetIconDanger}>
-                    <Feather name="minus-square" size={18} color="#9F1239" />
-                  </View>
-                  <View style={styles.manageSheetText}>
-                    <Text style={styles.manageSheetLabel}>Supprimer porte</Text>
-                    <Text style={styles.manageSheetHint}>
-                      Derniere porte de l&apos;etage
-                    </Text>
-                  </View>
-                </Pressable>
-              </View>
-              <View style={styles.manageSheetDivider} />
-              <View style={styles.manageSheetGroup}>
-                <Text style={styles.manageSheetGroupTitle}>Etages</Text>
-                <Pressable
-                  style={[
-                    styles.manageSheetAction,
-                    addingEtage && styles.manageSheetActionDisabled,
-                  ]}
-                  onPress={() => {
-                    manageSheetRef.current?.close();
-                    void handleAddEtage();
-                  }}
-                  disabled={addingEtage}
-                >
-                  <View style={styles.manageSheetIcon}>
-                    <Feather name="layers" size={18} color="#0F172A" />
-                  </View>
-                  <View style={styles.manageSheetText}>
-                    <Text style={styles.manageSheetLabel}>Ajouter etage</Text>
-                    <Text style={styles.manageSheetHint}>
-                      Ajoute un nouvel etage
-                    </Text>
-                  </View>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.manageSheetAction,
-                    (!canRemoveEtage || removingEtage) &&
-                      styles.manageSheetActionDisabled,
-                  ]}
-                  onPress={() => {
-                    manageSheetRef.current?.close();
-                    openDeleteEtage();
-                  }}
-                  disabled={!canRemoveEtage || removingEtage}
-                >
-                  <View style={styles.manageSheetIconDanger}>
-                    <Feather name="trash-2" size={18} color="#9F1239" />
-                  </View>
-                  <View style={styles.manageSheetText}>
-                    <Text style={styles.manageSheetLabel}>Supprimer etage</Text>
-                    <Text style={styles.manageSheetHint}>
-                      Supprime le dernier etage
-                    </Text>
-                  </View>
-                </Pressable>
-              </View>
-            </>
-          ) : (
-            // Version tablette avec grandes icônes colorées
-            <>
-              <View style={styles.manageSheetHeroTablet}>
-                <View style={styles.manageSheetHeroIconTablet}>
-                  <Feather name="sliders" size={24} color="#2563EB" />
-                </View>
-                <Text style={styles.manageSheetTitleTablet}>Gestion</Text>
-                <Text style={styles.manageSheetSubtitleTablet}>
-                  Gerer portes et etages
+          <View style={styles.floorPlanHero}>
+            <View style={styles.floorPlanHeroIcon}>
+              <Feather name="grid" size={22} color="#2563EB" />
+            </View>
+            <View style={styles.floorPlanHeroText}>
+              <Text style={styles.floorPlanTitle}>Plan de l'immeuble</Text>
+              <Text style={styles.floorPlanSubtitle}>
+                {sortedPortes.length} portes • {portesParEtage.length} etages
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.floorPlanCurrent}>
+            <Text style={styles.floorPlanCurrentLabel}>Porte actuelle</Text>
+            <View style={styles.floorPlanCurrentCard}>
+              <View style={styles.floorPlanCurrentBadge}>
+                <Text style={styles.floorPlanCurrentNumber}>
+                  {currentPorte?.nomPersonnalise || currentPorte?.numero || "--"}
                 </Text>
               </View>
-
-              <View style={styles.manageGridTablet}>
-                {/* Ajouter Porte */}
-                <Pressable
-                  style={styles.manageCardTablet}
-                  onPress={() => {
-                    manageSheetRef.current?.close();
-                    openAddPorte();
-                  }}
-                >
-                  <View style={styles.manageCardIconBlue}>
-                    <Feather name="plus-square" size={28} color="#FFFFFF" />
-                  </View>
-                  <Text style={styles.manageCardLabelTablet}>Ajouter porte</Text>
-                  <Text style={styles.manageCardDescTablet}>
-                    A l&apos;étage {currentPorte?.etage ?? 1}
+              <View style={styles.floorPlanCurrentInfo}>
+                <Text style={styles.floorPlanCurrentFloor}>
+                  Étage {currentPorte?.etage ?? "--"}
+                </Text>
+                {currentStatus && (
+                  <Text
+                    style={[
+                      styles.floorPlanCurrentStatus,
+                      { color: currentStatus.accent },
+                    ]}
+                  >
+                    {currentStatus.label}
                   </Text>
-                </Pressable>
-
-                {/* Supprimer Porte */}
-                <Pressable
-                  style={[
-                    styles.manageCardTablet,
-                    !currentPorte && styles.manageCardTabletDisabled,
-                  ]}
-                  onPress={() => {
-                    manageSheetRef.current?.close();
-                    openDeletePorte();
-                  }}
-                  disabled={!currentPorte}
-                >
-                  <View style={styles.manageCardIconRed}>
-                    <Feather name="minus-square" size={28} color="#FFFFFF" />
-                  </View>
-                  <Text style={styles.manageCardLabelTablet}>Supprimer porte</Text>
-                  <Text style={styles.manageCardDescTablet}>
-                    Derniere de l&apos;étage
-                  </Text>
-                </Pressable>
-
-                {/* Ajouter Etage */}
-                <Pressable
-                  style={[
-                    styles.manageCardTablet,
-                    addingEtage && styles.manageCardTabletDisabled,
-                  ]}
-                  onPress={() => {
-                    manageSheetRef.current?.close();
-                    void handleAddEtage();
-                  }}
-                  disabled={addingEtage}
-                >
-                  <View style={styles.manageCardIconPurple}>
-                    <Feather name="layers" size={28} color="#FFFFFF" />
-                  </View>
-                  <Text style={styles.manageCardLabelTablet}>Ajouter etage</Text>
-                  <Text style={styles.manageCardDescTablet}>
-                    Nouvel etage #{displayNbEtages + 1}
-                  </Text>
-                </Pressable>
-
-                {/* Supprimer Etage */}
-                <Pressable
-                  style={[
-                    styles.manageCardTablet,
-                    (!canRemoveEtage || removingEtage) &&
-                      styles.manageCardTabletDisabled,
-                  ]}
-                  onPress={() => {
-                    manageSheetRef.current?.close();
-                    openDeleteEtage();
-                  }}
-                  disabled={!canRemoveEtage || removingEtage}
-                >
-                  <View style={styles.manageCardIconOrange}>
-                    <Feather name="trash-2" size={28} color="#FFFFFF" />
-                  </View>
-                  <Text style={styles.manageCardLabelTablet}>Supprimer etage</Text>
-                  <Text style={styles.manageCardDescTablet}>
-                    Etage #{displayNbEtages}
-                  </Text>
-                </Pressable>
+                )}
               </View>
-            </>
-          )}
+            </View>
+          </View>
+
+          <View style={styles.floorPlanList}>
+            <Text style={styles.floorPlanListTitle}>Toutes les portes</Text>
+            {portesParEtage.map(([etage, portes]) => (
+              <View key={etage} style={styles.floorPlanEtageSection}>
+                <Text style={styles.floorPlanEtageLabel}>Étage {etage}</Text>
+                <View style={styles.floorPlanDoorsGrid}>
+                  {portes.map((porte) => {
+                    const status = getDisplayStatus(porte);
+                    const isActive = porte.id === currentPorte?.id;
+                    const isVisited = status !== null;
+                    const chipBg = isVisited ? status?.accent : "#F1F5F9";
+                    const chipBorder = isActive ? status?.accent : "transparent";
+                    const chipText = isVisited ? "#FFFFFF" : "#64748B";
+
+                    return (
+                      <View
+                        key={porte.id}
+                        style={[
+                          styles.floorPlanDoorChip,
+                          {
+                            backgroundColor: chipBg,
+                            borderColor: chipBorder,
+                            borderWidth: isActive ? 2 : 1,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.floorPlanDoorChipText, { color: chipText }]}
+                        >
+                          {porte.nomPersonnalise || porte.numero}
+                        </Text>
+                        {isActive && (
+                          <View style={styles.floorPlanActiveIndicator} />
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ))}
+          </View>
         </BottomSheetScrollView>
       </BottomSheetModal>
 
@@ -1832,22 +1550,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#64748B",
   },
-  headerAction: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
+  floorPlanButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#EFF6FF",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#0F172A",
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   content: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 100,
     gap: 16,
   },
   contentAnimated: {
@@ -2244,11 +1962,6 @@ const styles = StyleSheet.create({
   sectionHint: {
     fontSize: 12,
     color: "#94A3B8",
-  },
-  statusGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
   },
   statusCard: {
     width: "48%",
@@ -2852,5 +2565,225 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  doorCardInScroll: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+    gap: 12,
+    marginBottom: 16,
+  },
+  doorPagerContent: {
+    paddingVertical: 4,
+  },
+  doorPagerItem: {
+    paddingHorizontal: 16,
+  },
+  doorCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  doorCardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  doorNumberBadge: {
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  doorNumberText: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2563EB",
+  },
+  doorFloorBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  doorFloorText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+  },
+  statusDotBadge: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  statusGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  paginationIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 8,
+  },
+  paginationDots: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  paginationDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#E2E8F0",
+  },
+  paginationDotActive: {
+    backgroundColor: "#2563EB",
+  },
+  // Styles pour le plan rapide en bottom sheet
+  floorPlanHero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    backgroundColor: "#EFF6FF",
+    borderRadius: 16,
+    marginBottom: 16,
+  },
+  floorPlanHeroIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  floorPlanHeroText: {
+    flex: 1,
+  },
+  floorPlanTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  floorPlanSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#64748B",
+  },
+  floorPlanCurrent: {
+    marginBottom: 20,
+  },
+  floorPlanCurrentLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748B",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  floorPlanCurrentCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  floorPlanCurrentBadge: {
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  floorPlanCurrentNumber: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#2563EB",
+  },
+  floorPlanCurrentInfo: {
+    flex: 1,
+  },
+  floorPlanCurrentFloor: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0F172A",
+  },
+  floorPlanCurrentStatus: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  floorPlanList: {
+    gap: 16,
+  },
+  floorPlanListTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 8,
+  },
+  floorPlanEtageSection: {
+    gap: 10,
+  },
+  floorPlanEtageLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  floorPlanDoorsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  floorPlanDoorChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1,
+    borderColor: "transparent",
+    minWidth: 50,
+    alignItems: "center",
+  },
+  floorPlanDoorChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  floorPlanActiveIndicator: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#2563EB",
   },
 });
