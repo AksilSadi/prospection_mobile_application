@@ -193,6 +193,8 @@ export default function ImmeubleDetailsView({
   } | null>(null);
   const [hasLocalUpdates, setHasLocalUpdates] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [isFabOpen, setIsFabOpen] = useState(false);
+  const [fabHint, setFabHint] = useState<string | null>(null);
   const immeubleIdRef = useRef<number | null>(null);
   const DateTimePicker = useMemo<DateTimePickerType>(() => {
     try {
@@ -208,6 +210,8 @@ export default function ImmeubleDetailsView({
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const contentTranslate = useRef(new Animated.Value(12)).current;
   const [isReady, setIsReady] = useState(false);
+  const fabAnim = useRef(new Animated.Value(0)).current;
+  const fabHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressFill = useRef(new Animated.Value(0)).current;
   const doorPagerRef = useRef<FlatList<Porte>>(null);
   const { add: addEtageToImmeuble, loading: addingEtage } =
@@ -280,6 +284,9 @@ export default function ImmeubleDetailsView({
     return () => {
       if (toastTimeoutRef.current) {
         clearTimeout(toastTimeoutRef.current);
+      }
+      if (fabHintTimeoutRef.current) {
+        clearTimeout(fabHintTimeoutRef.current);
       }
     };
   }, []);
@@ -730,6 +737,56 @@ export default function ImmeubleDetailsView({
     if (!result) {
       showToast("Erreur", "Mise a jour impossible");
     }
+  };
+
+  const fabRotation = fabAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "180deg"],
+  });
+
+  const toggleFab = () => {
+    setIsFabOpen((prev) => {
+      const next = !prev;
+      Animated.timing(fabAnim, {
+        toValue: next ? 1 : 0,
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+      return next;
+    });
+  };
+
+  const closeFab = () => {
+    Animated.timing(fabAnim, {
+      toValue: 0,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => setIsFabOpen(false));
+  };
+
+  const handleFabAction = (action: () => void) => {
+    closeFab();
+    action();
+  };
+
+  const showFabHint = (label: string) => {
+    if (fabHintTimeoutRef.current) {
+      clearTimeout(fabHintTimeoutRef.current);
+    }
+    setFabHint(label);
+    fabHintTimeoutRef.current = setTimeout(() => {
+      setFabHint(null);
+    }, 1400);
+  };
+
+  const hideFabHint = () => {
+    if (fabHintTimeoutRef.current) {
+      clearTimeout(fabHintTimeoutRef.current);
+      fabHintTimeoutRef.current = null;
+    }
+    setFabHint(null);
   };
 
   const advanceToNextDoor = (porteId: number) => {
@@ -1491,6 +1548,167 @@ export default function ImmeubleDetailsView({
           />
         </View>
       ) : null}
+
+      <View
+        style={[styles.fabMenu, { bottom: insets.bottom + (isTablet ? 28 : 24) }]}
+        pointerEvents={isFabOpen ? "auto" : "box-none"}
+      >
+        <View
+          style={[
+            styles.fabChips,
+            { width: isTablet ? 260 : 220, height: isTablet ? 260 : 220 },
+          ]}
+          pointerEvents="box-none"
+        >
+          {[
+            {
+              label: "Ajouter porte",
+              subLabel: "Etage courant",
+              icon: "plus",
+              tone: "primary",
+              onPress: openAddPorte,
+            },
+            {
+              label: "Ajouter etage",
+              subLabel: "Nouveau niveau",
+              icon: "layers",
+              tone: "primary",
+              onPress: handleAddEtage,
+            },
+            {
+              label: "Supprimer porte",
+              subLabel: "Derniere de l'etage",
+              icon: "trash-2",
+              tone: "danger",
+              onPress: openDeletePorte,
+            },
+            {
+              label: "Supprimer etage",
+              subLabel: "Dernier etage",
+              icon: "minus-circle",
+              tone: "danger",
+              onPress: openDeleteEtage,
+            },
+          ].map((action, index, items) => {
+            const arcStart = -100;
+            const arcEnd = -180;
+            const angle =
+              items.length > 1
+                ? arcStart + ((arcEnd - arcStart) * index) / (items.length - 1)
+                : -135;
+            const radius = isTablet ? 160 : 130;
+            const chipSize = isTablet ? 64 : 56;
+            const hintOffsetX = chipSize * 1.2;
+            const hintOffsetY = -(chipSize * 1.1);
+            const targetX = Math.cos((Math.PI / 180) * angle) * radius;
+            const targetY = Math.sin((Math.PI / 180) * angle) * radius;
+            const translateX = fabAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, targetX],
+            });
+            const translateY = fabAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, targetY],
+            });
+            const hintTranslateX = Animated.add(
+              translateX,
+              new Animated.Value(-hintOffsetX),
+            );
+            const hintTranslateY = Animated.add(
+              translateY,
+              new Animated.Value(hintOffsetY),
+            );
+            const scale = fabAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.92, 1],
+            });
+            const opacity = fabAnim.interpolate({
+              inputRange: [0, 0.3, 1],
+              outputRange: [0, 0.3, 1],
+            });
+            const isDanger = action.tone === "danger";
+            return (
+              <View
+                key={action.label}
+                style={styles.fabChipAnchor}
+                pointerEvents="box-none"
+              >
+                <Animated.View
+                  style={[
+                    styles.fabChipWrap,
+                    {
+                      width: chipSize,
+                      height: chipSize,
+                      transform: [{ translateX }, { translateY }, { scale }],
+                      opacity,
+                    },
+                  ]}
+                >
+                  <Pressable
+                    accessibilityLabel={action.label}
+                    accessibilityHint={action.subLabel}
+                    style={[
+                      styles.fabChip,
+                      isDanger ? styles.fabChipDanger : styles.fabChipPrimary,
+                      {
+                        width: chipSize,
+                        height: chipSize,
+                        borderRadius: chipSize / 2,
+                      },
+                    ]}
+                    delayLongPress={250}
+                    onPress={() => handleFabAction(action.onPress)}
+                    onLongPress={() => showFabHint(action.label)}
+                    onPressOut={hideFabHint}
+                  >
+                    <Feather
+                      name={action.icon as keyof typeof Feather.glyphMap}
+                      size={isTablet ? 22 : 20}
+                      color={isDanger ? "#B91C1C" : "#1D4ED8"}
+                    />
+                  </Pressable>
+                </Animated.View>
+                {fabHint === action.label ? (
+                  <Animated.View
+                    style={[
+                      styles.fabHintWrap,
+                      {
+                        transform: [
+                          { translateX: hintTranslateX },
+                          { translateY: hintTranslateY },
+                        ],
+                        opacity,
+                      },
+                    ]}
+                    pointerEvents="none"
+                  >
+                    <View
+                      style={[
+                        styles.fabHint,
+                        isDanger && styles.fabHintDanger,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.fabHintText,
+                          isDanger && styles.fabHintTextDanger,
+                        ]}
+                      >
+                        {action.label}
+                      </Text>
+                    </View>
+                  </Animated.View>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+        <Animated.View style={{ transform: [{ rotate: fabRotation }] }}>
+          <Pressable style={styles.fabButton} onPress={toggleFab}>
+            <Feather name="menu" size={22} color="#FFFFFF" />
+          </Pressable>
+        </Animated.View>
+      </View>
 
       <Modal
         transparent
@@ -2928,5 +3146,99 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  fabMenu: {
+    position: "absolute",
+    right: 18,
+    alignItems: "flex-end",
+    zIndex: 20,
+  },
+  fabChips: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    alignItems: "flex-end",
+    overflow: "visible",
+  },
+  fabChipAnchor: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    overflow: "visible",
+  },
+  fabChipWrap: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    alignItems: "center",
+    overflow: "visible",
+  },
+  fabChip: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  fabChipPrimary: {
+    borderColor: "#DBEAFE",
+    backgroundColor: "#FFFFFF",
+  },
+  fabChipDanger: {
+    borderColor: "#FEE2E2",
+    backgroundColor: "#FFF1F2",
+  },
+  fabHint: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+    alignSelf: "flex-start",
+  },
+  fabHintWrap: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    overflow: "visible",
+    alignItems: "flex-start",
+    zIndex: 25,
+  },
+  fabHintDanger: {
+    backgroundColor: "#FFF1F2",
+    borderColor: "#FECACA",
+  },
+  fabHintText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1D4ED8",
+  },
+  fabHintTextDanger: {
+    color: "#B91C1C",
+  },
+  fabButton: {
+    width: 54,
+    height: 54,
+    borderRadius: 20,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#1D4ED8",
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
 });

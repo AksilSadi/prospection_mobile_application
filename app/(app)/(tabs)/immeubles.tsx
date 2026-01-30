@@ -21,11 +21,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 type ImmeublesScreenProps = {
   isActive?: boolean;
   onSwipeLockChange?: (locked: boolean) => void;
+  onHamburgerVisibilityChange?: (visible: boolean) => void;
 };
 
 export default function ImmeublesScreen({
   isActive = true,
   onSwipeLockChange,
+  onHamburgerVisibilityChange,
 }: ImmeublesScreenProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -103,6 +105,11 @@ export default function ImmeublesScreen({
     if (!onSwipeLockChange) return;
     onSwipeLockChange(isActive && selectedImmeubleId !== null);
   }, [isActive, onSwipeLockChange, selectedImmeubleId]);
+
+  useEffect(() => {
+    if (!onHamburgerVisibilityChange || !isActive) return;
+    onHamburgerVisibilityChange(selectedImmeubleId === null);
+  }, [isActive, onHamburgerVisibilityChange, selectedImmeubleId]);
 
   const {
     data: profile,
