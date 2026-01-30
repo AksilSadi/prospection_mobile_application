@@ -245,7 +245,6 @@ export default function ImmeublesScreen({
             <View style={styles.headerBlock}>
               <View style={styles.headerRow}>
                 <View>
-                  <Text style={styles.title}>Immeubles</Text>
                   <Text style={styles.subtitle}>Vue globale de vos immeubles</Text>
                 </View>
                 <View style={styles.headerBadge}>
@@ -689,10 +688,10 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    maxWidth: 360,
+    maxWidth: 380,
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 14,
+    borderRadius: 22,
+    padding: 16,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     shadowColor: "#0F172A",
@@ -703,25 +702,25 @@ const styles = StyleSheet.create({
   },
   cardPlaceholder: {
     flex: 1,
-    maxWidth: 360,
+    maxWidth: 380,
   },
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   cardIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 14,
     backgroundColor: "#EFF6FF",
     alignItems: "center",
     justifyContent: "center",
   },
   cardChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 999,
     backgroundColor: "#F1F5F9",
     fontSize: 11,
@@ -732,12 +731,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: "#0F172A",
   },
   cardTitleCompact: {
-    fontSize: 14,
+    fontSize: 15,
   },
   cardMetaRow: {
     flexDirection: "row",
@@ -746,7 +745,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   cardMeta: {
-    fontSize: 13,
+    fontSize: 14,
     color: "#64748B",
   },
   progressRow: {
@@ -757,7 +756,7 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     flex: 1,
-    height: 6,
+    height: 8,
     borderRadius: 999,
     backgroundColor: "#E2E8F0",
     overflow: "hidden",
@@ -768,7 +767,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#2563EB",
   },
   progressText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
     color: "#2563EB",
   },

@@ -32,7 +32,6 @@ import {
   Text,
   TextInput,
   useWindowDimensions,
-  Vibration,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -251,10 +250,8 @@ export default function ImmeubleDetailsView({
   const [isReady, setIsReady] = useState(false);
   const doorPulse = useRef(new Animated.Value(1)).current;
   const doorPagerRef = useRef<FlatList<Porte>>(null);
-  const swipeShake = useRef(new Animated.Value(0)).current;
-  const swipeLockRef = useRef(false);
-  const forwardBlockRef = useRef(false);
   const scrollX = useRef(new Animated.Value(0)).current;
+  const swipeIndicatorOpacity = useRef(new Animated.Value(1)).current;
   const progressFill = useRef(new Animated.Value(0)).current;
   const manageSheetRef = useRef<BottomSheetModal>(null);
   const manageSheetSnapPoints = useMemo(
@@ -500,22 +497,12 @@ export default function ImmeubleDetailsView({
     [portesState, immeuble.nbEtages],
   );
 
-  useEffect(() => {
-    if (currentIndex >= sortedPortes.length) {
-      setCurrentIndex(Math.max(0, sortedPortes.length - 1));
-    }
-  }, [currentIndex, doorCardWidth, sortedPortes.length]);
-
-  useEffect(() => {
-    if (!currentPorte?.id) return;
-    doorPulse.setValue(0.92);
-    Animated.spring(doorPulse, {
-      toValue: 1,
-      friction: 6,
-      tension: 140,
-      useNativeDriver: true,
-    }).start();
-  }, [currentPorte?.id, doorPulse]);
+  const contentPadding = 16;
+  const sectionPadding = 16;
+  const doorCardWidth = Math.max(
+    1,
+    width - contentPadding * 2 - sectionPadding * 2,
+  );
 
   const currentPorte = sortedPortes[currentIndex];
   const currentStatus = getDisplayStatus(currentPorte) ?? {
@@ -529,50 +516,44 @@ export default function ImmeubleDetailsView({
   };
   const defaultStatus = currentStatus;
 
-  const hasSelectedStatus = (porte?: Porte | null) => {
-    const key = getDisplayStatusKey(porte);
-    return Boolean(key && STATUS_DISPLAY[key]);
-  };
+  useEffect(() => {
+    if (currentIndex >= sortedPortes.length) {
+      setCurrentIndex(Math.max(0, sortedPortes.length - 1));
+    }
+  }, [currentIndex, sortedPortes.length]);
 
-  const triggerSwipeLock = () => {
-    Vibration.vibrate(12);
-    swipeShake.stopAnimation();
-    swipeShake.setValue(0);
-    Animated.sequence([
-      Animated.timing(swipeShake, {
-        toValue: 8,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(swipeShake, {
-        toValue: -8,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(swipeShake, {
-        toValue: 6,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(swipeShake, {
-        toValue: -6,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-      Animated.timing(swipeShake, {
-        toValue: 0,
-        duration: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
+  useEffect(() => {
+    if (!currentPorte?.id) return;
+    doorPulse.setValue(0.92);
+    Animated.spring(doorPulse, {
+      toValue: 1,
+      friction: 6,
+      tension: 140,
+      useNativeDriver: true,
+    }).start();
+  }, [currentPorte?.id, doorPulse]);
 
-  const contentPadding = 16;
-  const sectionPadding = 16;
-  const doorCardWidth = Math.max(
-    1,
-    width - contentPadding * 2 - sectionPadding * 2,
-  );
+  // Animation de l'indicateur de swipe (pulse)
+  useEffect(() => {
+    const loopAnimation = () => {
+      Animated.sequence([
+        Animated.timing(swipeIndicatorOpacity, {
+          toValue: 0.4,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(swipeIndicatorOpacity, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]).start(() => loopAnimation());
+    };
+    loopAnimation();
+    return () => {
+      swipeIndicatorOpacity.setValue(1);
+    };
+  }, [swipeIndicatorOpacity]);
 
   useEffect(() => {
     if (!doorPagerRef.current || sortedPortes.length === 0) return;
@@ -593,50 +574,9 @@ export default function ImmeubleDetailsView({
       Math.max(0, Math.round(offsetX / doorCardWidth)),
       Math.max(0, sortedPortes.length - 1),
     );
-    const maxIndex = Math.max(0, sortedPortes.length - 1);
-    let desiredIndex = currentIndex;
-    if (rawIndex > currentIndex) {
-      if (hasSelectedStatus(sortedPortes[currentIndex])) {
-        desiredIndex = Math.min(currentIndex + 1, maxIndex);
-      } else {
-        triggerSwipeLock();
-        desiredIndex = currentIndex;
-      }
-    } else if (rawIndex < currentIndex) {
-      desiredIndex = Math.max(currentIndex - 1, 0);
+    if (rawIndex !== currentIndex) {
+      setCurrentIndex(rawIndex);
     }
-    if (desiredIndex !== currentIndex) {
-      setCurrentIndex(desiredIndex);
-    }
-    if (rawIndex !== desiredIndex && doorPagerRef.current) {
-      doorPagerRef.current.scrollToIndex({
-        index: desiredIndex,
-        animated: true,
-      });
-    }
-  };
-
-  const handleDoorScroll = (event: any) => {
-    if (!doorCardWidth || swipeLockRef.current) return;
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const currentOffset = currentIndex * doorCardWidth;
-    if (
-      offsetX > currentOffset + 4 &&
-      !hasSelectedStatus(sortedPortes[currentIndex])
-    ) {
-      if (!forwardBlockRef.current) {
-        triggerSwipeLock();
-        forwardBlockRef.current = true;
-      }
-      if (doorPagerRef.current) {
-        doorPagerRef.current.scrollToIndex({
-          index: currentIndex,
-          animated: false,
-        });
-      }
-      return;
-    }
-    forwardBlockRef.current = false;
   };
 
   const progress = useMemo(() => {
@@ -1029,43 +969,35 @@ export default function ImmeubleDetailsView({
         ]}
       >
         <ScrollView contentContainerStyle={styles.content}>
+          {/* Progress bar moderne style iOS */}
           <View
-            style={[styles.progressCard, isTablet && styles.progressCardTablet]}
+            style={[
+              styles.progressCardNew,
+              isTablet && styles.progressCardNewTablet,
+            ]}
           >
-            <View style={styles.progressHeader}>
-              <View>
-                <Text
-                  style={[
-                    styles.progressTitle,
-                    isTablet && styles.progressTitleTablet,
-                  ]}
-                >
-                  Progression
-                </Text>
-                <Text
-                  style={[
-                    styles.progressSubtitle,
-                    isTablet && styles.progressSubtitleTablet,
-                  ]}
-                >
-                  Portes visitees
-                </Text>
+            <View style={styles.progressRowNew}>
+              <View style={styles.progressLeftNew}>
+                <View style={styles.progressIconNew}>
+                  <Feather name="activity" size={14} color="#2563EB" />
+                </View>
+                <View style={styles.progressTextsNew}>
+                  <Text style={styles.progressTitleNew}>Progression</Text>
+                  <Text style={styles.progressSubtitleNew}>
+                    {progress.visited} / {progress.total} portes
+                  </Text>
+                </View>
               </View>
-              <View style={styles.progressPercentPill}>
-                <Text
-                  style={[
-                    styles.progressPercentText,
-                    isTablet && styles.progressPercentTextTablet,
-                  ]}
-                >
+              <View style={styles.progressPercentNew}>
+                <Text style={styles.progressPercentTextNew}>
                   {progress.percentage}%
                 </Text>
               </View>
             </View>
-            <View style={[styles.progressBar, isTablet && styles.progressBarTablet]}>
+            <View style={styles.progressBarTrackNew}>
               <Animated.View
                 style={[
-                  styles.progressBarFill,
+                  styles.progressBarFillNew,
                   {
                     width: progressFill.interpolate({
                       inputRange: [0, 100],
@@ -1075,56 +1007,19 @@ export default function ImmeubleDetailsView({
                 ]}
               />
             </View>
-            <View style={styles.progressStatsRow}>
-              <View style={styles.progressStat}>
-                <Text
-                  style={[
-                    styles.progressStatValue,
-                    isTablet && styles.progressStatValueTablet,
-                  ]}
-                >
-                  {progress.visited}
-                </Text>
-                <Text
-                  style={[
-                    styles.progressStatLabel,
-                    isTablet && styles.progressStatLabelTablet,
-                  ]}
-                >
-                  Visitees
-                </Text>
-              </View>
-              <View style={styles.progressDivider} />
-              <View style={styles.progressStat}>
-                <Text
-                  style={[
-                    styles.progressStatValue,
-                    isTablet && styles.progressStatValueTablet,
-                  ]}
-                >
-                  {progress.total}
-                </Text>
-                <Text
-                  style={[
-                    styles.progressStatLabel,
-                    isTablet && styles.progressStatLabelTablet,
-                  ]}
-                >
-                  Total portes
-                </Text>
-              </View>
-            </View>
           </View>
 
           <View style={styles.sectionCard}>
             <View style={styles.section}>
-              <View>
+              <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Statut de la porte</Text>
+                <Text style={styles.sectionCounter}>
+                  {currentIndex + 1} / {sortedPortes.length}
+                </Text>
               </View>
               <Animated.View
                 style={[
                   styles.doorPagerWrap,
-                  { transform: [{ translateX: swipeShake }] },
                 ]}
               >
                 <Animated.FlatList
@@ -1133,16 +1028,16 @@ export default function ImmeubleDetailsView({
                   horizontal
                   pagingEnabled
                   snapToInterval={doorCardWidth}
-                  decelerationRate="fast"
+                  decelerationRate={0.9}
                   snapToAlignment="start"
                   bounces={false}
                   scrollEnabled
                   showsHorizontalScrollIndicator={false}
                   nestedScrollEnabled
-                  scrollEventThrottle={16}
+                  scrollEventThrottle={1}
                   onScroll={Animated.event(
                     [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                    { useNativeDriver: true, listener: handleDoorScroll },
+                    { useNativeDriver: true },
                   )}
                   onMomentumScrollEnd={handleDoorScrollEnd}
                   contentContainerStyle={styles.doorPagerContent}
@@ -1153,44 +1048,16 @@ export default function ImmeubleDetailsView({
                     index,
                   })}
                   initialNumToRender={1}
-                  windowSize={3}
-                  maxToRenderPerBatch={2}
-                  removeClippedSubviews
-                  renderItem={({ item, index }) => {
+                  windowSize={5}
+                  maxToRenderPerBatch={3}
+                  removeClippedSubviews={true}
+                  renderItem={({ item }) => {
                     const itemStatus = getDisplayStatus(item) ?? defaultStatus;
-                    const inputRange = [
-                      (index - 1) * doorCardWidth,
-                      index * doorCardWidth,
-                      (index + 1) * doorCardWidth,
-                    ];
-                    const headerOpacity = scrollX.interpolate({
-                      inputRange,
-                      outputRange: [0.7, 1, 0.7],
-                      extrapolate: "clamp",
-                    });
-                    const headerTranslate = scrollX.interpolate({
-                      inputRange,
-                      outputRange: [10, 0, -10],
-                      extrapolate: "clamp",
-                    });
-                    const bodyOpacity = scrollX.interpolate({
-                      inputRange,
-                      outputRange: [0.85, 1, 0.85],
-                      extrapolate: "clamp",
-                    });
                     return (
                       <View style={[styles.doorPage, { width: doorCardWidth }]}>
                         <View style={styles.currentCard}>
                           <View style={styles.currentBackdrop} />
-                          <Animated.View
-                            style={[
-                              styles.currentHeader,
-                              {
-                                opacity: headerOpacity,
-                                transform: [{ translateY: headerTranslate }],
-                              },
-                            ]}
-                          >
+                          <View style={styles.currentHeader}>
                             <View>
                               <Text style={styles.currentLabel}>
                                 Porte courante
@@ -1223,7 +1090,7 @@ export default function ImmeubleDetailsView({
                                 {itemStatus.label}
                               </Text>
                             </View>
-                          </Animated.View>
+                          </View>
                           <View style={styles.currentMeta}>
                             <Text style={styles.currentMetaText}>
                               Etage {item.etage ?? "--"}
@@ -1233,14 +1100,12 @@ export default function ImmeubleDetailsView({
                               Statut: {itemStatus.label}
                             </Text>
                           </View>
-                          <Animated.View style={{ opacity: bodyOpacity }}>
-                            <StatusGrid
-                              currentPorte={item}
-                              onSelect={(statut) =>
-                                handleStatusSelect(statut, item)
-                              }
-                            />
-                          </Animated.View>
+                          <StatusGrid
+                            currentPorte={item}
+                            onSelect={(statut) =>
+                              handleStatusSelect(statut, item)
+                            }
+                          />
                         </View>
                       </View>
                     );
@@ -1249,6 +1114,53 @@ export default function ImmeubleDetailsView({
               </Animated.View>
             </View>
           </View>
+
+          {/* Indicateur de swipe animé */}
+          {sortedPortes.length > 1 && (
+            <View style={styles.swipeIndicator}>
+              <Animated.View style={{ opacity: swipeIndicatorOpacity }}>
+                <Feather name="chevron-left" size={20} color="#94A3B8" />
+              </Animated.View>
+              <View style={styles.swipeDots}>
+                {sortedPortes.map((_, index) => {
+                  const inputRange = [
+                    (index - 1) * doorCardWidth,
+                    index * doorCardWidth,
+                    (index + 1) * doorCardWidth,
+                  ];
+                  const dotScale = scrollX.interpolate({
+                    inputRange,
+                    outputRange: [0.5, 1, 0.5],
+                    extrapolate: "clamp",
+                  });
+                  const dotOpacity = scrollX.interpolate({
+                    inputRange,
+                    outputRange: [0.3, 1, 0.3],
+                    extrapolate: "clamp",
+                  });
+                  const isActive = index === currentIndex;
+                  return (
+                    <Animated.View
+                      key={index}
+                      style={[
+                        styles.swipeDot,
+                        isActive && styles.swipeDotActive,
+                        {
+                          transform: [{ scaleX: dotScale }, { scaleY: dotScale }],
+                          opacity: dotOpacity,
+                        },
+                      ]}
+                    />
+                  );
+                })}
+              </View>
+              <Animated.View style={{ opacity: swipeIndicatorOpacity }}>
+                <Feather name="chevron-right" size={20} color="#94A3B8" />
+              </Animated.View>
+            </View>
+          )}
+
+          <Text style={styles.swipeHint}>Glisse pour changer de porte</Text>
 
 
 
@@ -1582,105 +1494,210 @@ export default function ImmeubleDetailsView({
             opacity={0.45}
           />
         )}
-        handleIndicatorStyle={styles.sheetIndicator}
+        handleIndicatorStyle={styles.handleIndicator}
         backgroundStyle={styles.sheetBackground}
       >
-        <BottomSheetScrollView contentContainerStyle={styles.manageSheet}>
-          <View style={styles.manageSheetHero}>
-            <View style={styles.manageSheetHeroIcon}>
-              <Feather name="sliders" size={20} color="#2563EB" />
-            </View>
-            <Text style={styles.manageSheetTitle}>Gestion</Text>
-            <Text style={styles.manageSheetSubtitle}>Portes & etages</Text>
-          </View>
-          <View style={styles.manageSheetGroup}>
-            <Text style={styles.manageSheetGroupTitle}>Portes</Text>
-            <Pressable
-              style={styles.manageSheetAction}
-              onPress={() => {
-                manageSheetRef.current?.close();
-                openAddPorte();
-              }}
-            >
-              <View style={styles.manageSheetIcon}>
-                <Feather name="plus-square" size={18} color="#0F172A" />
+        <BottomSheetScrollView
+          contentContainerStyle={[
+            styles.manageSheet,
+            isTablet && styles.manageSheetTablet,
+          ]}
+        >
+          {!isTablet ? (
+            <>
+              <View style={styles.manageSheetHero}>
+                <View style={styles.manageSheetHeroIcon}>
+                  <Feather name="sliders" size={20} color="#2563EB" />
+                </View>
+                <Text style={styles.manageSheetTitle}>Gestion</Text>
+                <Text style={styles.manageSheetSubtitle}>Portes & etages</Text>
               </View>
-              <View style={styles.manageSheetText}>
-                <Text style={styles.manageSheetLabel}>Ajouter porte</Text>
-                <Text style={styles.manageSheetHint}>
-                  Ajoute a l'etage courant
+              <View style={styles.manageSheetGroup}>
+                <Text style={styles.manageSheetGroupTitle}>Portes</Text>
+                <Pressable
+                  style={styles.manageSheetAction}
+                  onPress={() => {
+                    manageSheetRef.current?.close();
+                    openAddPorte();
+                  }}
+                >
+                  <View style={styles.manageSheetIcon}>
+                    <Feather name="plus-square" size={18} color="#0F172A" />
+                  </View>
+                  <View style={styles.manageSheetText}>
+                    <Text style={styles.manageSheetLabel}>Ajouter porte</Text>
+                    <Text style={styles.manageSheetHint}>
+                      Ajoute a l&apos;etage courant
+                    </Text>
+                  </View>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.manageSheetAction,
+                    !currentPorte && styles.manageSheetActionDisabled,
+                  ]}
+                  onPress={() => {
+                    manageSheetRef.current?.close();
+                    openDeletePorte();
+                  }}
+                  disabled={!currentPorte}
+                >
+                  <View style={styles.manageSheetIconDanger}>
+                    <Feather name="minus-square" size={18} color="#9F1239" />
+                  </View>
+                  <View style={styles.manageSheetText}>
+                    <Text style={styles.manageSheetLabel}>Supprimer porte</Text>
+                    <Text style={styles.manageSheetHint}>
+                      Derniere porte de l&apos;etage
+                    </Text>
+                  </View>
+                </Pressable>
+              </View>
+              <View style={styles.manageSheetDivider} />
+              <View style={styles.manageSheetGroup}>
+                <Text style={styles.manageSheetGroupTitle}>Etages</Text>
+                <Pressable
+                  style={[
+                    styles.manageSheetAction,
+                    addingEtage && styles.manageSheetActionDisabled,
+                  ]}
+                  onPress={() => {
+                    manageSheetRef.current?.close();
+                    void handleAddEtage();
+                  }}
+                  disabled={addingEtage}
+                >
+                  <View style={styles.manageSheetIcon}>
+                    <Feather name="layers" size={18} color="#0F172A" />
+                  </View>
+                  <View style={styles.manageSheetText}>
+                    <Text style={styles.manageSheetLabel}>Ajouter etage</Text>
+                    <Text style={styles.manageSheetHint}>
+                      Ajoute un nouvel etage
+                    </Text>
+                  </View>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.manageSheetAction,
+                    (!canRemoveEtage || removingEtage) &&
+                      styles.manageSheetActionDisabled,
+                  ]}
+                  onPress={() => {
+                    manageSheetRef.current?.close();
+                    openDeleteEtage();
+                  }}
+                  disabled={!canRemoveEtage || removingEtage}
+                >
+                  <View style={styles.manageSheetIconDanger}>
+                    <Feather name="trash-2" size={18} color="#9F1239" />
+                  </View>
+                  <View style={styles.manageSheetText}>
+                    <Text style={styles.manageSheetLabel}>Supprimer etage</Text>
+                    <Text style={styles.manageSheetHint}>
+                      Supprime le dernier etage
+                    </Text>
+                  </View>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            // Version tablette avec grandes icônes colorées
+            <>
+              <View style={styles.manageSheetHeroTablet}>
+                <View style={styles.manageSheetHeroIconTablet}>
+                  <Feather name="sliders" size={24} color="#2563EB" />
+                </View>
+                <Text style={styles.manageSheetTitleTablet}>Gestion</Text>
+                <Text style={styles.manageSheetSubtitleTablet}>
+                  Gerer portes et etages
                 </Text>
               </View>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.manageSheetAction,
-                !currentPorte && styles.manageSheetActionDisabled,
-              ]}
-              onPress={() => {
-                manageSheetRef.current?.close();
-                openDeletePorte();
-              }}
-              disabled={!currentPorte}
-            >
-              <View style={styles.manageSheetIconDanger}>
-                <Feather name="minus-square" size={18} color="#9F1239" />
+
+              <View style={styles.manageGridTablet}>
+                {/* Ajouter Porte */}
+                <Pressable
+                  style={styles.manageCardTablet}
+                  onPress={() => {
+                    manageSheetRef.current?.close();
+                    openAddPorte();
+                  }}
+                >
+                  <View style={styles.manageCardIconBlue}>
+                    <Feather name="plus-square" size={28} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.manageCardLabelTablet}>Ajouter porte</Text>
+                  <Text style={styles.manageCardDescTablet}>
+                    A l&apos;étage {currentPorte?.etage ?? 1}
+                  </Text>
+                </Pressable>
+
+                {/* Supprimer Porte */}
+                <Pressable
+                  style={[
+                    styles.manageCardTablet,
+                    !currentPorte && styles.manageCardTabletDisabled,
+                  ]}
+                  onPress={() => {
+                    manageSheetRef.current?.close();
+                    openDeletePorte();
+                  }}
+                  disabled={!currentPorte}
+                >
+                  <View style={styles.manageCardIconRed}>
+                    <Feather name="minus-square" size={28} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.manageCardLabelTablet}>Supprimer porte</Text>
+                  <Text style={styles.manageCardDescTablet}>
+                    Derniere de l&apos;étage
+                  </Text>
+                </Pressable>
+
+                {/* Ajouter Etage */}
+                <Pressable
+                  style={[
+                    styles.manageCardTablet,
+                    addingEtage && styles.manageCardTabletDisabled,
+                  ]}
+                  onPress={() => {
+                    manageSheetRef.current?.close();
+                    void handleAddEtage();
+                  }}
+                  disabled={addingEtage}
+                >
+                  <View style={styles.manageCardIconPurple}>
+                    <Feather name="layers" size={28} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.manageCardLabelTablet}>Ajouter etage</Text>
+                  <Text style={styles.manageCardDescTablet}>
+                    Nouvel etage #{displayNbEtages + 1}
+                  </Text>
+                </Pressable>
+
+                {/* Supprimer Etage */}
+                <Pressable
+                  style={[
+                    styles.manageCardTablet,
+                    (!canRemoveEtage || removingEtage) &&
+                      styles.manageCardTabletDisabled,
+                  ]}
+                  onPress={() => {
+                    manageSheetRef.current?.close();
+                    openDeleteEtage();
+                  }}
+                  disabled={!canRemoveEtage || removingEtage}
+                >
+                  <View style={styles.manageCardIconOrange}>
+                    <Feather name="trash-2" size={28} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.manageCardLabelTablet}>Supprimer etage</Text>
+                  <Text style={styles.manageCardDescTablet}>
+                    Etage #{displayNbEtages}
+                  </Text>
+                </Pressable>
               </View>
-              <View style={styles.manageSheetText}>
-                <Text style={styles.manageSheetLabel}>Supprimer porte</Text>
-                <Text style={styles.manageSheetHint}>
-                  Derniere porte de l'etage
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-          <View style={styles.manageSheetDivider} />
-          <View style={styles.manageSheetGroup}>
-            <Text style={styles.manageSheetGroupTitle}>Etages</Text>
-            <Pressable
-              style={[
-                styles.manageSheetAction,
-                addingEtage && styles.manageSheetActionDisabled,
-              ]}
-              onPress={() => {
-                manageSheetRef.current?.close();
-                void handleAddEtage();
-              }}
-              disabled={addingEtage}
-            >
-              <View style={styles.manageSheetIcon}>
-                <Feather name="layers" size={18} color="#0F172A" />
-              </View>
-              <View style={styles.manageSheetText}>
-                <Text style={styles.manageSheetLabel}>Ajouter etage</Text>
-                <Text style={styles.manageSheetHint}>
-                  Ajoute un nouvel etage
-                </Text>
-              </View>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.manageSheetAction,
-                (!canRemoveEtage || removingEtage) &&
-                  styles.manageSheetActionDisabled,
-              ]}
-              onPress={() => {
-                manageSheetRef.current?.close();
-                openDeleteEtage();
-              }}
-              disabled={!canRemoveEtage || removingEtage}
-            >
-              <View style={styles.manageSheetIconDanger}>
-                <Feather name="trash-2" size={18} color="#9F1239" />
-              </View>
-              <View style={styles.manageSheetText}>
-                <Text style={styles.manageSheetLabel}>Supprimer etage</Text>
-                <Text style={styles.manageSheetHint}>
-                  Supprime le dernier etage
-                </Text>
-              </View>
-            </Pressable>
-          </View>
+            </>
+          )}
         </BottomSheetScrollView>
       </BottomSheetModal>
 
@@ -1774,12 +1791,12 @@ export default function ImmeubleDetailsView({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F2F2F7",
+    backgroundColor: "#F8FAFC",
   },
   header: {
     paddingHorizontal: 16,
     paddingBottom: 12,
-    backgroundColor: "#F2F2F7",
+    backgroundColor: "#F8FAFC",
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -1911,6 +1928,81 @@ const styles = StyleSheet.create({
     padding: 22,
     borderRadius: 24,
   },
+  // Nouveau style de barre de progression moderne
+  progressCardNew: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 14,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+    marginBottom: 12,
+  },
+  progressCardNewTablet: {
+    padding: 16,
+    borderRadius: 18,
+    marginBottom: 14,
+  },
+  progressRowNew: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  progressLeftNew: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  progressIconNew: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  progressTextsNew: {
+    flex: 1,
+  },
+  progressTitleNew: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+    letterSpacing: -0.2,
+  },
+  progressSubtitleNew: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  progressPercentNew: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#2563EB",
+  },
+  progressPercentTextNew: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: -0.3,
+  },
+  progressBarTrackNew: {
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: "#F1F5F9",
+    overflow: "hidden",
+  },
+  progressBarFillNew: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#2563EB",
+  },
   progressHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1996,6 +2088,36 @@ const styles = StyleSheet.create({
   doorPage: {
     paddingVertical: 6,
     paddingHorizontal: 8,
+  },
+  // Indicateur de swipe
+  swipeIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    paddingVertical: 8,
+  },
+  swipeDots: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  swipeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: "#CBD5E1",
+  },
+  swipeDotActive: {
+    backgroundColor: "#2563EB",
+  },
+  swipeHint: {
+    textAlign: "center",
+    fontSize: 12,
+    color: "#94A3B8",
+    fontWeight: "500",
+    marginTop: 4,
+    marginBottom: 8,
   },
   currentCard: {
     position: "relative",
@@ -2104,6 +2226,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: "#0F172A",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionCounter: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748B",
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   sectionHint: {
     fontSize: 12,
@@ -2251,6 +2387,125 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     color: "#94A3B8",
+  },
+  // Styles tablette pour le manageSheet
+  manageSheetTablet: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
+  manageSheetHeroTablet: {
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  manageSheetHeroIconTablet: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  manageSheetTitleTablet: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  manageSheetSubtitleTablet: {
+    fontSize: 13,
+    color: "#64748B",
+  },
+  manageGridTablet: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+  },
+  manageCardTablet: {
+    width: "47%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 18,
+    alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  manageCardTabletDisabled: {
+    opacity: 0.45,
+  },
+  manageCardIconBlue: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "#2563EB",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#2563EB",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  manageCardIconRed: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#DC2626",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  manageCardIconPurple: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "#7C3AED",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#7C3AED",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  manageCardIconOrange: {
+    width: 56,
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: "#F97316",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#F97316",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  manageCardLabelTablet: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  manageCardDescTablet: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
   },
   mapCard: {
     backgroundColor: "#F8FAFC",

@@ -81,16 +81,6 @@ export default function HistoriqueScreen() {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <View style={styles.headerBlock}>
-            <View style={styles.heroCard}>
-              <View style={styles.heroIcon}>
-                <Feather name="clock" size={22} color="#2563EB" />
-              </View>
-              <View style={styles.heroText}>
-                <Text style={styles.pageTitle}>Historique</Text>
-                <Text style={styles.subtitle}>Suivi de vos immeubles recents</Text>
-              </View>
-            </View>
-
             <View style={styles.filtersRow}>
               {FILTERS.map((item) => {
                 const selected = item.key === filter;
@@ -168,41 +158,15 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
-  heroCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
-  },
-  heroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: "#EFF6FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroText: {
-    flex: 1,
-  },
+
+
+
   pageTitle: {
     fontSize: 20,
     fontWeight: "700",
     color: "#0F172A",
   },
-  subtitle: {
-    fontSize: 13,
-    color: "#64748B",
-  },
+
   filtersRow: {
     flexDirection: "row",
     gap: 8,
