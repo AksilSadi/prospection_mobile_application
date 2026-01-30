@@ -891,7 +891,7 @@ export default function ImmeubleDetailsView({
                   index,
                 })}
                 contentContainerStyle={styles.doorPagerContent}
-                renderItem={({ item, index }) => {
+                renderItem={({ item }) => {
                   const status = getDisplayStatus(item) ?? {
                     value: "NON_VISITE",
                     label: "Non visite",
@@ -903,9 +903,7 @@ export default function ImmeubleDetailsView({
                   };
                   return (
                     <View style={[styles.doorPagerItem, { width }]}>
-                      <Animated.View
-                        style={styles.doorCardInScroll}
-                      >
+                      <View style={styles.doorCardInScroll}>
                         <View style={styles.doorCardHeader}>
                           <View style={styles.doorCardTitleRow}>
                             <View style={styles.doorNumberBadge}>
@@ -961,45 +959,49 @@ export default function ImmeubleDetailsView({
                               ? "#FFFFFF"
                               : option.fg;
                             return (
-                              <Pressable
-                                key={option.value}
-                                style={[
-                                  styles.statusCard,
-                                  {
-                                    backgroundColor: cardBg,
-                                    borderColor: cardBorder,
-                                  },
-                                ]}
-                                onPress={() => handleStatusSelect(option.value, item)}
-                              >
-                                <View
+                              <View key={option.value} style={styles.statusCardWrap}>
+                                <Pressable
                                   style={[
-                                    styles.statusIcon,
-                                    { backgroundColor: iconBg },
+                                    styles.statusCard,
+                                    {
+                                      backgroundColor: cardBg,
+                                      borderColor: cardBorder,
+                                    },
                                   ]}
+                                  onPress={() => handleStatusSelect(option.value, item)}
                                 >
-                                  <Feather
-                                    name={option.icon}
-                                    size={16}
-                                    color={iconColor}
-                                  />
-                                </View>
-                                <Text
-                                  style={[styles.statusLabel, { color: labelColor }]}
-                                >
-                                  {option.label}
-                                </Text>
-                                <Text
-                                  style={[styles.statusDesc, { color: descColor }]}
-                                >
-                                  {option.description}
-                                </Text>
-                              </Pressable>
+                                  <View
+                                    style={[
+                                      styles.statusIcon,
+                                      { backgroundColor: iconBg },
+                                    ]}
+                                  >
+                                    <Feather
+                                      name={option.icon}
+                                      size={16}
+                                      color={iconColor}
+                                    />
+                                  </View>
+                                  <Text
+                                    style={[
+                                      styles.statusLabel,
+                                      { color: labelColor },
+                                    ]}
+                                  >
+                                    {option.label}
+                                  </Text>
+                                  <Text
+                                    style={[styles.statusDesc, { color: descColor }]}
+                                  >
+                                    {option.description}
+                                  </Text>
+                                </Pressable>
+                              </View>
                             );
                           })}
                         </View>
 
-                      </Animated.View>
+                      </View>
                     </View>
                   );
                 }}
@@ -1113,11 +1115,21 @@ export default function ImmeubleDetailsView({
                   isTablet && styles.sheetCardTablet,
                 ]}
               >
-                <Text style={styles.sheetLabel}>Quand</Text>
+                <View style={styles.sheetSectionHeader}>
+                  <View style={[styles.sheetSectionIcon, styles.sheetSectionIconBlue]}>
+                    <Feather name="calendar" size={14} color="#1D4ED8" />
+                  </View>
+                  <View style={styles.sheetSectionText}>
+                    <Text style={styles.sheetSectionTitle}>Quand</Text>
+                    <Text style={styles.sheetSectionSubtitle}>
+                      Date et heure du rendez-vous
+                    </Text>
+                  </View>
+                </View>
                 {hasNativePicker ? (
                   <>
                     <Pressable
-                      style={styles.pickerRow}
+                      style={[styles.pickerRow, styles.pickerRowPrimary]}
                       onPress={() => setShowDatePicker(true)}
                     >
                       <View style={styles.pickerIcon}>
@@ -1132,7 +1144,7 @@ export default function ImmeubleDetailsView({
                       <Feather name="chevron-right" size={16} color="#94A3B8" />
                     </Pressable>
                     <Pressable
-                      style={styles.pickerRow}
+                      style={[styles.pickerRow, styles.pickerRowPrimary]}
                       onPress={() => setShowTimePicker(true)}
                     >
                       <View style={styles.pickerIcon}>
@@ -1189,7 +1201,17 @@ export default function ImmeubleDetailsView({
                   isTablet && styles.sheetCardTablet,
                 ]}
               >
-                <Text style={styles.sheetLabel}>Contrats signes</Text>
+                <View style={styles.sheetSectionHeader}>
+                  <View style={[styles.sheetSectionIcon, styles.sheetSectionIconGreen]}>
+                    <Feather name="award" size={14} color="#047857" />
+                  </View>
+                  <View style={styles.sheetSectionText}>
+                    <Text style={styles.sheetSectionTitle}>Contrats signes</Text>
+                    <Text style={styles.sheetSectionSubtitle}>
+                      Nombre total confirme
+                    </Text>
+                  </View>
+                </View>
                 <View style={styles.counterRow}>
                   <Pressable
                     style={styles.counterButton}
@@ -1202,7 +1224,10 @@ export default function ImmeubleDetailsView({
                   >
                     <Feather name="minus" size={16} color="#111827" />
                   </Pressable>
-                  <Text style={styles.counterValue}>{editForm.nbContrats}</Text>
+                  <View style={styles.counterValueWrap}>
+                    <Text style={styles.counterValue}>{editForm.nbContrats}</Text>
+                    <Text style={styles.counterLabel}>contrats</Text>
+                  </View>
                   <Pressable
                     style={[styles.counterButton, styles.counterButtonPrimary]}
                     onPress={() =>
@@ -1225,7 +1250,17 @@ export default function ImmeubleDetailsView({
                 isTablet && styles.sheetCardTablet,
               ]}
             >
-              <Text style={styles.sheetLabel}>Commentaire</Text>
+              <View style={styles.sheetSectionHeader}>
+                <View style={styles.sheetSectionIcon}>
+                  <Feather name="message-square" size={14} color="#2563EB" />
+                </View>
+                <View style={styles.sheetSectionText}>
+                  <Text style={styles.sheetSectionTitle}>Commentaire</Text>
+                  <Text style={styles.sheetSectionSubtitle}>
+                    Notes rapides pour cette porte
+                  </Text>
+                </View>
+              </View>
               <TextInput
                 placeholder="Ajouter un commentaire..."
                 value={editForm.commentaire}
@@ -1953,7 +1988,7 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
   },
   statusCard: {
-    width: "48%",
+    width: "100%",
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
@@ -1963,6 +1998,9 @@ const styles = StyleSheet.create({
     shadowRadius: 0,
     elevation: 0,
     gap: 6,
+  },
+  statusCardWrap: {
+    width: "48%",
   },
   statusIcon: {
     width: 34,
@@ -2256,15 +2294,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   sheetBackground: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: "#F9FAFB",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
   },
   handleIndicator: {
     width: 44,
     height: 4,
     borderRadius: 999,
-    backgroundColor: "#D1D5DB",
+    backgroundColor: "#E5E7EB",
   },
   absentOption: {
     flexDirection: "row",
@@ -2327,43 +2365,48 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    padding: 12,
-    borderRadius: 16,
-    backgroundColor: "#EFF6FF",
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#E5E7EB",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   sheetHeroTablet: {
-    padding: 16,
+    padding: 18,
   },
   sheetHeroRdv: {
-    backgroundColor: "#DBEAFE",
-    borderColor: "#BFDBFE",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#CBD5F5",
   },
   sheetHeroContract: {
-    backgroundColor: "#DCFCE7",
-    borderColor: "#BBF7D0",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#CDEBDD",
   },
   sheetHeroIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#DBEAFE",
+    backgroundColor: "#F1F5F9",
   },
   sheetHeroIconBlue: {
-    backgroundColor: "#DBEAFE",
+    backgroundColor: "#E8EDFF",
   },
   sheetHeroIconGreen: {
-    backgroundColor: "#DCFCE7",
+    backgroundColor: "#E6F4ED",
   },
   sheetHeroText: {
     flex: 1,
   },
   sheetTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 17,
+    fontWeight: "800",
     color: "#111827",
   },
   sheetTitleTablet: {
@@ -2378,22 +2421,27 @@ const styles = StyleSheet.create({
   },
   sheetCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 18,
+    padding: 16,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#E5E7EB",
     gap: 10,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   sheetCardTablet: {
-    padding: 16,
+    padding: 18,
   },
   sheetCardRdv: {
-    backgroundColor: "#EFF6FF",
-    borderColor: "#BFDBFE",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#CBD5F5",
   },
   sheetCardContract: {
-    backgroundColor: "#ECFDF3",
-    borderColor: "#BBF7D0",
+    backgroundColor: "#FFFFFF",
+    borderColor: "#CDEBDD",
   },
   sheetCardComment: {
     backgroundColor: "#FFFFFF",
@@ -2405,7 +2453,7 @@ const styles = StyleSheet.create({
     gap: 8,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: "#FFFFFF",
@@ -2423,17 +2471,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#BFDBFE",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  pickerRowPrimary: {
+    borderColor: "#CBD5F5",
+    backgroundColor: "#FFFFFF",
   },
   pickerIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: "#BFDBFE",
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2453,7 +2510,7 @@ const styles = StyleSheet.create({
   },
   sheetLabel: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#111827",
   },
   sheetHint: {
@@ -2478,7 +2535,7 @@ const styles = StyleSheet.create({
   sheetInput: {
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    borderRadius: 12,
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
     backgroundColor: "#FFFFFF",
@@ -2494,27 +2551,68 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   counterButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#F3F4F6",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F1F5F9",
     alignItems: "center",
     justifyContent: "center",
   },
   counterButtonPrimary: {
-    backgroundColor: "#D1FAE5",
+    backgroundColor: "#E6F4ED",
   },
   counterValue: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "800",
     color: "#111827",
+  },
+  counterValueWrap: {
+    alignItems: "center",
+    gap: 2,
+  },
+  counterLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  sheetSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  sheetSectionIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 11,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetSectionIconBlue: {
+    backgroundColor: "#E8EDFF",
+  },
+  sheetSectionIconGreen: {
+    backgroundColor: "#E6F4ED",
+  },
+  sheetSectionText: {
+    flex: 1,
+  },
+  sheetSectionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  sheetSectionSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#64748B",
   },
   sheetFooter: {
     flexDirection: "row",

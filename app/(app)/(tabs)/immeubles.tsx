@@ -40,6 +40,7 @@ export default function ImmeublesScreen({
     null,
   );
   const [detailsDirty, setDetailsDirty] = useState(false);
+  const cardAnimationsRef = useRef<Map<number, Animated.Value>>(new Map());
   const listOpacity = useRef(new Animated.Value(1)).current;
   const listTranslate = useRef(new Animated.Value(0)).current;
   const detailsOpacity = useRef(new Animated.Value(0)).current;
@@ -142,6 +143,31 @@ export default function ImmeublesScreen({
       return true;
     });
   }, [filteredImmeubles, progressFilter]);
+
+  const getCardAnimation = (id: number) => {
+    const existing = cardAnimationsRef.current.get(id);
+    if (existing) return existing;
+    const next = new Animated.Value(0);
+    cardAnimationsRef.current.set(id, next);
+    return next;
+  };
+
+  useEffect(() => {
+    if (selectedImmeubleId !== null || !isActive) return;
+    if (immeublesEnCours.length === 0) return;
+    immeublesEnCours.forEach((imm) => {
+      getCardAnimation(imm.id).setValue(0);
+    });
+    const animations = immeublesEnCours.map((imm) =>
+      Animated.spring(getCardAnimation(imm.id), {
+        toValue: 1,
+        friction: 6,
+        tension: 90,
+        useNativeDriver: true,
+      }),
+    );
+    Animated.stagger(80, animations).start();
+  }, [immeublesEnCours, isActive, selectedImmeubleId]);
 
   const immeublePairs = useMemo(() => {
     const pairs: Immeuble[][] = [];
@@ -388,46 +414,81 @@ export default function ImmeublesScreen({
                     ? "#F59E0B"
                     : "#22C55E";
                 const cardLabel = `Appartement ${String.fromCharCode(65 + (index % 26))}`;
+                const anim = getCardAnimation(immeuble.id);
                 return (
-                  <Pressable
+                  <Animated.View
                     key={immeuble.id}
-                    style={styles.card}
-                    onPress={() => setSelectedImmeubleId(immeuble.id)}
+                    style={[
+                      styles.cardWrap,
+                      {
+                        transform: [
+                          {
+                            translateY: anim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [-24, 0],
+                            }),
+                          },
+                          {
+                            translateX: anim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [8, 0],
+                            }),
+                          },
+                          {
+                            rotate: anim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ["-2deg", "0deg"],
+                            }),
+                          },
+                          {
+                            scale: anim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0.98, 1],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
                   >
-                    <View style={styles.cardHeader}>
-                      <View style={styles.cardIcon}>
-                        <Feather name="home" size={18} color="#2563EB" />
-                      </View>
-                      <Text style={styles.cardChip}>{cardLabel}</Text>
-                    </View>
-                    <View style={styles.cardContent}>
-                      <Text
-                        style={[styles.cardTitle, !isTablet && styles.cardTitleCompact]}
-                        numberOfLines={2}
-                      >
-                        {immeuble.adresse}
-                      </Text>
-                      <View style={styles.cardMetaRow}>
-                        <Feather name="grid" size={11} color="#64748B" />
-                        <Text style={styles.cardMeta}>{immeuble.nbEtages} etages</Text>
-                        <Text style={styles.cardMeta}>•</Text>
-                        <Text style={styles.cardMeta}>{total} portes</Text>
-                      </View>
-                      <View style={styles.progressRow}>
-                        <View style={styles.progressTrack}>
-                          <View
-                            style={[
-                              styles.progressFill,
-                              { width: `${progressPercent}%`, backgroundColor: progressColor },
-                            ]}
-                          />
+                    <Pressable
+                      style={styles.card}
+                      onPress={() => setSelectedImmeubleId(immeuble.id)}
+                    >
+                      <View style={styles.cardHeader}>
+                        <View style={styles.cardIcon}>
+                          <Feather name="home" size={18} color="#2563EB" />
                         </View>
-                        <Text style={[styles.progressText, { color: progressColor }]}>
-                          {progressPercent}%
-                        </Text>
+                        <Text style={styles.cardChip}>{cardLabel}</Text>
                       </View>
-                    </View>
-                  </Pressable>
+                      <View style={styles.cardContent}>
+                        <Text
+                          style={[styles.cardTitle, !isTablet && styles.cardTitleCompact]}
+                          numberOfLines={2}
+                        >
+                          {immeuble.adresse}
+                        </Text>
+                        <View style={styles.cardMetaRow}>
+                          <Feather name="grid" size={11} color="#64748B" />
+                          <Text style={styles.cardMeta}>{immeuble.nbEtages} etages</Text>
+                          <Text style={styles.cardMeta}>•</Text>
+                          <Text style={styles.cardMeta}>{total} portes</Text>
+                        </View>
+                        <View style={styles.progressRow}>
+                          <View style={styles.progressTrack}>
+                            <View
+                              style={[
+                                styles.progressFill,
+                                { width: `${progressPercent}%`, backgroundColor: progressColor },
+                              ]}
+                            />
+                          </View>
+                          <Text style={[styles.progressText, { color: progressColor }]}>
+                            {progressPercent}%
+                          </Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  </Animated.View>
                 );
               })}
               {pair.length === 1 && <View style={styles.cardPlaceholder} />}
@@ -685,6 +746,10 @@ const styles = StyleSheet.create({
     gap: 16,
     marginBottom: 16,
     justifyContent: "space-between",
+  },
+  cardWrap: {
+    flex: 1,
+    maxWidth: 380,
   },
   card: {
     flex: 1,
