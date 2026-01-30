@@ -26,6 +26,7 @@ import {
   Easing,
   Keyboard,
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -191,6 +192,7 @@ export default function ImmeubleDetailsView({
     subtitle: string;
   } | null>(null);
   const [hasLocalUpdates, setHasLocalUpdates] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const immeubleIdRef = useRef<number | null>(null);
   const DateTimePicker = useMemo<DateTimePickerType>(() => {
     try {
@@ -206,7 +208,6 @@ export default function ImmeubleDetailsView({
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const contentTranslate = useRef(new Animated.Value(12)).current;
   const [isReady, setIsReady] = useState(false);
-  const doorContentScale = useRef(new Animated.Value(1)).current;
   const progressFill = useRef(new Animated.Value(0)).current;
   const doorPagerRef = useRef<FlatList<Porte>>(null);
   const { add: addEtageToImmeuble, loading: addingEtage } =
@@ -486,18 +487,6 @@ export default function ImmeubleDetailsView({
       setCurrentIndex(Math.max(0, sortedPortes.length - 1));
     }
   }, [currentIndex, sortedPortes.length]);
-
-  useEffect(() => {
-    if (!currentPorte?.id) return;
-    const baseScale = isTablet ? 0.985 : 0.965;
-    doorContentScale.setValue(baseScale);
-    Animated.spring(doorContentScale, {
-      toValue: 1,
-      friction: 7,
-      tension: 120,
-      useNativeDriver: true,
-    }).start();
-  }, [currentPorte?.id, doorContentScale, isTablet]);
 
   const progress = useMemo(() => {
     const total = sortedPortes.length;
@@ -784,8 +773,11 @@ export default function ImmeubleDetailsView({
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable style={styles.backButton} onPress={onBack}>
-          <Feather name="chevron-left" size={20} color="#0F172A" />
+        <Pressable
+          style={styles.backButton}
+          onPress={() => setShowExitConfirm(true)}
+        >
+          <Feather name="chevron-left" size={20} color="#2563EB" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -799,7 +791,7 @@ export default function ImmeubleDetailsView({
           style={styles.floorPlanButton}
           onPress={() => setShowFloorPlan(true)}
         >
-          <Feather name="grid" size={18} color="#2563EB" />
+          <Feather name="grid" size={18} color="#FFFFFF" />
         </Pressable>
       </View>
 
@@ -892,6 +884,7 @@ export default function ImmeubleDetailsView({
                 showsHorizontalScrollIndicator={false}
                 keyExtractor={(item) => String(item.id)}
                 onMomentumScrollEnd={handleDoorScrollEnd}
+                style={styles.doorPager}
                 getItemLayout={(_, index) => ({
                   length: width,
                   offset: width * index,
@@ -908,16 +901,10 @@ export default function ImmeubleDetailsView({
                     accent: "#CBD5F5",
                     icon: "circle" as const,
                   };
-                  const isActive = index === currentIndex;
                   return (
                     <View style={[styles.doorPagerItem, { width }]}>
                       <Animated.View
-                        style={[
-                          styles.doorCardInScroll,
-                          isActive && {
-                            transform: [{ scale: doorContentScale }],
-                          },
-                        ]}
+                        style={styles.doorCardInScroll}
                       >
                         <View style={styles.doorCardHeader}>
                           <View style={styles.doorCardTitleRow}>
@@ -1012,39 +999,6 @@ export default function ImmeubleDetailsView({
                           })}
                         </View>
 
-                        {/* Indicateur de pagination */}
-                        {sortedPortes.length > 1 && (
-                          <View style={styles.paginationIndicator}>
-                            <Animated.View
-                              style={{ opacity: currentIndex > 0 ? 1 : 0.3 }}
-                            >
-                              <Feather name="chevron-left" size={16} color="#94A3B8" />
-                            </Animated.View>
-                            <View style={styles.paginationDots}>
-                              {sortedPortes.slice(0, 5).map((_, dotIndex) => {
-                                const isActiveDot =
-                                  dotIndex === Math.min(currentIndex, 4);
-                                return (
-                                  <View
-                                    key={dotIndex}
-                                    style={[
-                                      styles.paginationDot,
-                                      isActiveDot && styles.paginationDotActive,
-                                    ]}
-                                  />
-                                );
-                              })}
-                            </View>
-                            <Animated.View
-                              style={{
-                                opacity:
-                                  currentIndex < sortedPortes.length - 1 ? 1 : 0.3,
-                              }}
-                            >
-                              <Feather name="chevron-right" size={16} color="#94A3B8" />
-                            </Animated.View>
-                          </View>
-                        )}
                       </Animated.View>
                     </View>
                   );
@@ -1502,6 +1456,42 @@ export default function ImmeubleDetailsView({
           />
         </View>
       ) : null}
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={showExitConfirm}
+        onRequestClose={() => setShowExitConfirm(false)}
+      >
+        <View style={styles.exitOverlay}>
+          <View style={styles.exitCard}>
+            <View style={styles.exitIconWrap}>
+              <Feather name="alert-triangle" size={20} color="#EF4444" />
+            </View>
+            <Text style={styles.exitTitle}>Quitter la fiche ?</Text>
+            <Text style={styles.exitText}>
+              Tu vas revenir à la liste des immeubles. Continuer ?
+            </Text>
+            <View style={styles.exitActions}>
+              <Pressable
+                style={styles.exitButtonSecondary}
+                onPress={() => setShowExitConfirm(false)}
+              >
+                <Text style={styles.exitButtonSecondaryText}>Non, rester</Text>
+              </Pressable>
+              <Pressable
+                style={styles.exitButtonPrimary}
+                onPress={() => {
+                  setShowExitConfirm(false);
+                  onBack();
+                }}
+              >
+                <Text style={styles.exitButtonPrimaryText}>Oui, quitter</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1513,55 +1503,54 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
-    paddingBottom: 12,
-    backgroundColor: "#F8FAFC",
+    paddingBottom: 14,
+    backgroundColor: "#FFFFFF",
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     shadowColor: "#0F172A",
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
   },
   backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#FFFFFF",
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#EFF6FF",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
   },
   headerText: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
     color: "#0F172A",
   },
   headerSubtitle: {
-    marginTop: 2,
+    marginTop: 4,
     fontSize: 12,
     color: "#64748B",
   },
   floorPlanButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#EFF6FF",
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: "#2563EB",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    shadowColor: "#1D4ED8",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
   content: {
     padding: 16,
@@ -2578,6 +2567,9 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 16,
   },
+  doorPager: {
+    marginHorizontal: -16,
+  },
   doorPagerContent: {
     paddingVertical: 4,
   },
@@ -2642,26 +2634,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-  },
-  paginationIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    marginTop: 8,
-  },
-  paginationDots: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  paginationDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#E2E8F0",
-  },
-  paginationDotActive: {
-    backgroundColor: "#2563EB",
   },
   // Styles pour le plan rapide en bottom sheet
   floorPlanHero: {
@@ -2785,5 +2757,78 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     backgroundColor: "#2563EB",
+  },
+  exitOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  exitCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
+  },
+  exitIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  exitTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  exitText: {
+    marginTop: 6,
+    fontSize: 13,
+    textAlign: "center",
+    color: "#64748B",
+  },
+  exitActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 18,
+    width: "100%",
+  },
+  exitButtonSecondary: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+  },
+  exitButtonSecondaryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  exitButtonPrimary: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: "#EF4444",
+    alignItems: "center",
+  },
+  exitButtonPrimaryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });
