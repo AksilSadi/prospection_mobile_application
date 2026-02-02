@@ -231,6 +231,11 @@ export default function ImmeubleDetailsView({
     () => (isTablet ? ["50%", "80%"] : ["45%", "70%"]),
     [isTablet],
   );
+  const filterSheetRef = useRef<BottomSheetModal>(null);
+  const filterSnapPoints = useMemo(
+    () => (isTablet ? ["45%", "70%"] : ["40%", "65%"]),
+    [isTablet],
+  );
   const [editMode, setEditMode] = useState<
     "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | null
   >(null);
@@ -252,6 +257,10 @@ export default function ImmeubleDetailsView({
   const [deleteTarget, setDeleteTarget] = useState<Porte | null>(null);
   const [deleteFloor, setDeleteFloor] = useState<number | null>(null);
   const [showFloorPlan, setShowFloorPlan] = useState(false);
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [pendingStatusFilter, setPendingStatusFilter] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     const nextPortes = immeuble.portes?.length
@@ -268,6 +277,8 @@ export default function ImmeubleDetailsView({
     if (isNewImmeuble) {
       setHasLocalUpdates(false);
       if (onDirtyChange) onDirtyChange(false);
+      setStatusFilters([]);
+      setPendingStatusFilter(null);
       if (nextPortes.length > 0) {
         setIsReady(true);
         contentOpacity.setValue(1);
@@ -457,8 +468,10 @@ export default function ImmeubleDetailsView({
         : "Contrat signe",
     );
     closeEditSheet();
-    if (currentIndex < sortedPortes.length - 1) {
-      setCurrentIndex((prev) => Math.min(prev + 1, sortedPortes.length - 1));
+    if (currentIndex < filteredPortes.length - 1) {
+      setCurrentIndex((prev) =>
+        Math.min(prev + 1, filteredPortes.length - 1),
+      );
     }
   };
 
@@ -466,6 +479,14 @@ export default function ImmeubleDetailsView({
     () => [...portesState].sort(comparePortesDesc),
     [portesState],
   );
+
+  const filteredPortes = useMemo(() => {
+    if (statusFilters.length === 0) return sortedPortes;
+    return sortedPortes.filter(
+      (porte) => getDisplayStatusKey(porte) === statusFilters[0],
+    );
+  }, [sortedPortes, statusFilters]);
+
   const displayNbEtages = useMemo(
     () => getMaxEtage(portesState, immeuble.nbEtages ?? 0),
     [portesState, immeuble.nbEtages],
@@ -474,11 +495,11 @@ export default function ImmeubleDetailsView({
     const offsetX = event.nativeEvent.contentOffset.x;
     const nextIndex = Math.round(offsetX / Math.max(1, width));
     setCurrentIndex((prev) =>
-      Math.max(0, Math.min(nextIndex, sortedPortes.length - 1)),
+      Math.max(0, Math.min(nextIndex, filteredPortes.length - 1)),
     );
   };
 
-  const currentPorte = sortedPortes[currentIndex];
+  const currentPorte = filteredPortes[currentIndex];
   const currentStatus = getDisplayStatus(currentPorte) ?? {
     value: "NON_VISITE",
     label: "Non visite",
@@ -490,10 +511,10 @@ export default function ImmeubleDetailsView({
   };
 
   useEffect(() => {
-    if (currentIndex >= sortedPortes.length) {
-      setCurrentIndex(Math.max(0, sortedPortes.length - 1));
+    if (currentIndex >= filteredPortes.length) {
+      setCurrentIndex(Math.max(0, filteredPortes.length - 1));
     }
-  }, [currentIndex, sortedPortes.length]);
+  }, [currentIndex, filteredPortes.length]);
 
   const progress = useMemo(() => {
     const total = sortedPortes.length;
@@ -523,6 +544,33 @@ export default function ImmeubleDetailsView({
     });
     return Array.from(grouped.entries()).sort((a, b) => b[0] - a[0]);
   }, [sortedPortes]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    sortedPortes.forEach((porte) => {
+      const key = getDisplayStatusKey(porte);
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, [sortedPortes]);
+
+  const visibleStatusOptions = STATUS_OPTIONS;
+
+  const togglePendingFilter = (value: string) => {
+    setPendingStatusFilter((prev) => (prev === value ? null : value));
+  };
+
+  const applyStatusFilters = () => {
+    setStatusFilters(pendingStatusFilter ? [pendingStatusFilter] : []);
+    filterSheetRef.current?.dismiss();
+  };
+
+  const clearStatusFilters = () => {
+    setStatusFilters([]);
+    setPendingStatusFilter(null);
+    filterSheetRef.current?.dismiss();
+  };
 
   const getNextDoorNumber = (etage: number) => {
     const portesOnFloor = portesState.filter((porte) => porte.etage === etage);
@@ -789,9 +837,9 @@ export default function ImmeubleDetailsView({
     setFabHint(null);
   };
 
-  const advanceToNextDoor = (porteId: number) => {
-    const targetIndex = sortedPortes.findIndex((item) => item.id === porteId);
-    if (targetIndex >= 0 && targetIndex < sortedPortes.length - 1) {
+  const advanceToNextDoor = (porteId: number, portes: Porte[]) => {
+    const targetIndex = portes.findIndex((item) => item.id === porteId);
+    if (targetIndex >= 0 && targetIndex < portes.length - 1) {
       setTimeout(() => {
         const nextIndex = targetIndex + 1;
         setCurrentIndex(nextIndex);
@@ -812,7 +860,7 @@ export default function ImmeubleDetailsView({
     }
     if (statut === "ABSENT_MATIN") {
       void applyStatus(porte, "ABSENT", { nbRepassages: 1 });
-      advanceToNextDoor(porte.id);
+      advanceToNextDoor(porte.id, filteredPortes);
       return;
     }
     if (statut === "ABSENT_SOIR") {
@@ -820,11 +868,11 @@ export default function ImmeubleDetailsView({
       void applyStatus(porte, "ABSENT", {
         nbRepassages: nextRepassage,
       });
-      advanceToNextDoor(porte.id);
+      advanceToNextDoor(porte.id, filteredPortes);
       return;
     }
     void applyStatus(porte, statut);
-    advanceToNextDoor(porte.id);
+    advanceToNextDoor(porte.id, filteredPortes);
   };
 
   return (
@@ -932,10 +980,35 @@ export default function ImmeubleDetailsView({
                 </View>
               </View>
 
+              <View style={styles.statusHeaderRow}>
+                <View style={styles.statusHeaderLeft}>
+                  <Text style={styles.statusHeaderTitle}>Statuts</Text>
+                  {statusFilters.length > 0 ? (
+                    <Text style={styles.statusHeaderSubtitle}>
+                      1 filtre actif
+                    </Text>
+                  ) : (
+                    <Text style={styles.statusHeaderSubtitle}>
+                      Tous les statuts
+                    </Text>
+                  )}
+                </View>
+                <Pressable
+                  style={styles.statusFilterButton}
+                  onPress={() => {
+                    setPendingStatusFilter(statusFilters[0] ?? null);
+                    filterSheetRef.current?.present();
+                  }}
+                >
+                  <Feather name="filter" size={16} color="#2563EB" />
+                  <Text style={styles.statusFilterText}>Filtrer</Text>
+                </Pressable>
+              </View>
+
               {/* Carte de porte avec statuts (swipe horizontal) */}
               <FlatList
                 ref={doorPagerRef}
-                data={sortedPortes}
+                data={filteredPortes}
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
@@ -948,6 +1021,34 @@ export default function ImmeubleDetailsView({
                   index,
                 })}
                 contentContainerStyle={styles.doorPagerContent}
+                ListEmptyComponent={
+                  <View style={styles.emptyFilterCard}>
+                    <Feather name="filter" size={20} color="#94A3B8" />
+                    <Text style={styles.emptyFilterTitle}>
+                      Aucune porte pour ce filtre
+                    </Text>
+                    <Text style={styles.emptyFilterText}>
+                      Change le filtre ou affiche tout.
+                    </Text>
+                    <View style={styles.emptyFilterActions}>
+                      <Pressable
+                        style={styles.filterGhost}
+                        onPress={clearStatusFilters}
+                      >
+                        <Text style={styles.filterGhostText}>Tout afficher</Text>
+                      </Pressable>
+                      <Pressable
+                        style={styles.filterPrimary}
+                        onPress={() => {
+                          setPendingStatusFilter(statusFilters[0] ?? null);
+                          filterSheetRef.current?.present();
+                        }}
+                      >
+                        <Text style={styles.filterPrimaryText}>Modifier</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                }
                 renderItem={({ item }) => {
                   const status = getDisplayStatus(item) ?? {
                     value: "NON_VISITE",
@@ -996,7 +1097,7 @@ export default function ImmeubleDetailsView({
                         </View>
 
                         <View style={styles.statusGrid}>
-                          {STATUS_OPTIONS.map((option) => {
+                          {visibleStatusOptions.map((option) => {
                             const isActiveStatus =
                               getDisplayStatusKey(item) === option.value;
                             const cardBg = isActiveStatus ? option.accent : option.bg;
@@ -1074,7 +1175,7 @@ export default function ImmeubleDetailsView({
         snapPoints={editSnapPoints}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
-            {...props}
+            {...(props ?? {})}
             appearsOnIndex={0}
             disappearsOnIndex={-1}
             pressBehavior="close"
@@ -1367,7 +1468,7 @@ export default function ImmeubleDetailsView({
         }}
         backdropComponent={(props) => (
           <BottomSheetBackdrop
-            {...props}
+            {...(props ?? {})}
             appearsOnIndex={0}
             disappearsOnIndex={-1}
             pressBehavior="close"
@@ -1461,6 +1562,113 @@ export default function ImmeubleDetailsView({
                 </View>
               </View>
             ))}
+          </View>
+        </BottomSheetScrollView>
+      </BottomSheetModal>
+
+      <BottomSheetModal
+        ref={filterSheetRef}
+        snapPoints={filterSnapPoints}
+        enablePanDownToClose
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop
+            {...(props ?? {})}
+            appearsOnIndex={0}
+            disappearsOnIndex={-1}
+            pressBehavior="close"
+            opacity={0.4}
+          />
+        )}
+        onChange={(index) => {
+          if (index === -1) {
+            setPendingStatusFilter(statusFilters[0] ?? null);
+          }
+        }}
+        backgroundStyle={styles.sheetBackground}
+        handleIndicatorStyle={styles.handleIndicator}
+      >
+        <BottomSheetScrollView
+          contentContainerStyle={[
+            styles.sheetContent,
+            isTablet && styles.sheetContentTablet,
+          ]}
+        >
+          <View style={styles.filterSheetHeader}>
+            <View style={styles.filterSheetIcon}>
+              <Feather name="filter" size={16} color="#2563EB" />
+            </View>
+            <View style={styles.filterSheetText}>
+              <Text style={styles.filterSheetTitle}>Filtres des statuts</Text>
+              <Text style={styles.filterSheetSubtitle}>
+                Choisis plusieurs statuts
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.filterChipsRow}>
+            {STATUS_OPTIONS.map((option) => {
+              const isSelected = pendingStatusFilter === option.value;
+              const count = statusCounts[option.value] ?? 0;
+              return (
+                <Pressable
+                  key={option.value}
+                  style={[
+                    styles.filterChip,
+                    isSelected && styles.filterChipActive,
+                    count === 0 && styles.filterChipMuted,
+                  ]}
+                  onPress={() => togglePendingFilter(option.value)}
+                >
+                  <View
+                    style={[
+                      styles.filterChipIcon,
+                      isSelected && styles.filterChipIconActive,
+                    ]}
+                  >
+                    <Feather
+                      name={option.icon}
+                      size={14}
+                      color={isSelected ? "#FFFFFF" : option.accent}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      isSelected && styles.filterChipTextActive,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.filterChipCount,
+                      isSelected && styles.filterChipCountActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipCountText,
+                        isSelected && styles.filterChipCountTextActive,
+                      ]}
+                    >
+                      {count}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <View style={styles.filterSheetFooter}>
+            <Pressable style={styles.filterGhost} onPress={clearStatusFilters}>
+              <Text style={styles.filterGhostText}>Tout afficher</Text>
+            </Pressable>
+            <Pressable
+              style={styles.filterPrimary}
+              onPress={applyStatusFilters}
+            >
+              <Text style={styles.filterPrimaryText}>Appliquer</Text>
+            </Pressable>
           </View>
         </BottomSheetScrollView>
       </BottomSheetModal>
@@ -2871,6 +3079,132 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
+  filterSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  filterSheetIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterSheetText: {
+    flex: 1,
+  },
+  filterSheetTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  filterSheetSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: "#64748B",
+  },
+  filterChipsRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+  },
+  filterChipActive: {
+    backgroundColor: "#2563EB",
+    borderColor: "#2563EB",
+  },
+  filterChipMuted: {
+    opacity: 0.6,
+  },
+  filterChipIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterChipIconActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  filterChipTextActive: {
+    color: "#FFFFFF",
+  },
+  filterChipCount: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "#F1F5F9",
+  },
+  filterChipCountActive: {
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+  },
+  filterChipCountText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748B",
+  },
+  filterChipCountTextActive: {
+    color: "#FFFFFF",
+  },
+  filterSheetFooter: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 18,
+  },
+  filterGhost: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  filterGhostText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  filterPrimary: {
+    flex: 1,
+    borderRadius: 14,
+    backgroundColor: "#2563EB",
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  filterPrimaryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
   doorCardInScroll: {
     backgroundColor: "#FFFFFF",
     borderRadius: 20,
@@ -2946,10 +3280,71 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
+  statusHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  statusHeaderLeft: {
+    flex: 1,
+  },
+  statusHeaderTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  statusHeaderSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#94A3B8",
+  },
+  statusFilterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+  },
+  statusFilterText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#2563EB",
+  },
   statusGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+  },
+  emptyFilterCard: {
+    width: "100%",
+    padding: 20,
+    borderRadius: 18,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+    gap: 6,
+  },
+  emptyFilterTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  emptyFilterText: {
+    fontSize: 12,
+    color: "#64748B",
+  },
+  emptyFilterActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+    alignSelf: "stretch",
   },
   // Styles pour le plan rapide en bottom sheet
   floorPlanHero: {
