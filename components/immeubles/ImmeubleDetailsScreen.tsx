@@ -557,7 +557,7 @@ export default function ImmeubleDetailsView({
 
   const visibleStatusOptions = STATUS_OPTIONS;
 
-  const togglePendingFilter = (value: string) => {
+  const togglePendingFilter = (value: string | null) => {
     setPendingStatusFilter((prev) => (prev === value ? null : value));
   };
 
@@ -1000,7 +1000,7 @@ export default function ImmeubleDetailsView({
                     filterSheetRef.current?.present();
                   }}
                 >
-                  <Feather name="filter" size={16} color="#2563EB" />
+                  <Feather name="filter" size={15} color="#FFFFFF" />
                   <Text style={styles.statusFilterText}>Filtrer</Text>
                 </Pressable>
               </View>
@@ -1025,28 +1025,11 @@ export default function ImmeubleDetailsView({
                   <View style={styles.emptyFilterCard}>
                     <Feather name="filter" size={20} color="#94A3B8" />
                     <Text style={styles.emptyFilterTitle}>
-                      Aucune porte pour ce filtre
+                      Aucune porte trouvee
                     </Text>
                     <Text style={styles.emptyFilterText}>
-                      Change le filtre ou affiche tout.
+                      Aucun resultat avec ce filtre.
                     </Text>
-                    <View style={styles.emptyFilterActions}>
-                      <Pressable
-                        style={styles.filterGhost}
-                        onPress={clearStatusFilters}
-                      >
-                        <Text style={styles.filterGhostText}>Tout afficher</Text>
-                      </Pressable>
-                      <Pressable
-                        style={styles.filterPrimary}
-                        onPress={() => {
-                          setPendingStatusFilter(statusFilters[0] ?? null);
-                          filterSheetRef.current?.present();
-                        }}
-                      >
-                        <Text style={styles.filterPrimaryText}>Modifier</Text>
-                      </Pressable>
-                    </View>
                   </View>
                 }
                 renderItem={({ item }) => {
@@ -1576,7 +1559,7 @@ export default function ImmeubleDetailsView({
             appearsOnIndex={0}
             disappearsOnIndex={-1}
             pressBehavior="close"
-            opacity={0.4}
+            opacity={0.5}
           />
         )}
         onChange={(index) => {
@@ -1584,8 +1567,9 @@ export default function ImmeubleDetailsView({
             setPendingStatusFilter(statusFilters[0] ?? null);
           }
         }}
-        backgroundStyle={styles.sheetBackground}
-        handleIndicatorStyle={styles.handleIndicator}
+        backgroundStyle={styles.filterSheetBackground}
+        handleIndicatorStyle={styles.filterHandleIndicator}
+        animateOnMount
       >
         <BottomSheetScrollView
           contentContainerStyle={[
@@ -1593,81 +1577,149 @@ export default function ImmeubleDetailsView({
             isTablet && styles.sheetContentTablet,
           ]}
         >
+          {/* Header avec bordure */}
           <View style={styles.filterSheetHeader}>
-            <View style={styles.filterSheetIcon}>
-              <Feather name="filter" size={16} color="#2563EB" />
-            </View>
-            <View style={styles.filterSheetText}>
-              <Text style={styles.filterSheetTitle}>Filtres des statuts</Text>
-              <Text style={styles.filterSheetSubtitle}>
-                Choisis plusieurs statuts
-              </Text>
-            </View>
+            <Pressable
+              style={styles.filterCloseBtn}
+              onPress={() => filterSheetRef.current?.dismiss()}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Feather name="x" size={20} color="#212121" />
+            </Pressable>
+            <Text style={styles.filterHeaderTitle}>Filtres</Text>
+            <Pressable
+              style={styles.filterResetBtn}
+              onPress={clearStatusFilters}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.filterResetLabel}>Reset</Text>
+            </Pressable>
           </View>
 
-          <View style={styles.filterChipsRow}>
-            {STATUS_OPTIONS.map((option) => {
-              const isSelected = pendingStatusFilter === option.value;
-              const count = statusCounts[option.value] ?? 0;
-              return (
-                <Pressable
-                  key={option.value}
-                  style={[
-                    styles.filterChip,
-                    isSelected && styles.filterChipActive,
-                    count === 0 && styles.filterChipMuted,
-                  ]}
-                  onPress={() => togglePendingFilter(option.value)}
-                >
+          {/* Section Statuts avec radio buttons */}
+          <View style={styles.filterSection}>
+            <Text style={styles.filterSectionLabel}>Filtrer par statut</Text>
+            <View style={styles.filterRadioGroup}>
+              {/* Option "Toutes les portes" */}
+              <Pressable
+                style={[
+                  styles.filterRadioItem,
+                  pendingStatusFilter === null && styles.filterRadioItemActive,
+                ]}
+                onPress={() => togglePendingFilter(null)}
+              >
+                <View style={styles.filterRadioContent}>
                   <View
                     style={[
-                      styles.filterChipIcon,
-                      isSelected && styles.filterChipIconActive,
+                      styles.filterRadioCircle,
+                      pendingStatusFilter === null && styles.filterRadioCircleActive,
                     ]}
                   >
-                    <Feather
-                      name={option.icon}
-                      size={14}
-                      color={isSelected ? "#FFFFFF" : option.accent}
-                    />
+                    {pendingStatusFilter === null && (
+                      <View style={styles.filterRadioDot} />
+                    )}
                   </View>
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      isSelected && styles.filterChipTextActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                  <View
-                    style={[
-                      styles.filterChipCount,
-                      isSelected && styles.filterChipCountActive,
-                    ]}
-                  >
+                  <View style={styles.filterRadioTextContainer}>
                     <Text
                       style={[
-                        styles.filterChipCountText,
-                        isSelected && styles.filterChipCountTextActive,
+                        styles.filterRadioLabel,
+                        pendingStatusFilter === null && styles.filterRadioLabelActive,
                       ]}
                     >
-                      {count}
+                      Toutes les portes
+                    </Text>
+                    <Text style={styles.filterRadioDescription}>
+                      Afficher tous les statuts
                     </Text>
                   </View>
-                </Pressable>
-              );
-            })}
+                </View>
+                <View style={styles.filterRadioBadge}>
+                  <Text style={styles.filterRadioBadgeText}>
+                    {sortedPortes.length}
+                  </Text>
+                </View>
+              </Pressable>
+
+              {/* Options de statut */}
+              {STATUS_OPTIONS.map((option) => {
+                const isSelected = pendingStatusFilter === option.value;
+                const count = statusCounts[option.value] ?? 0;
+                return (
+                  <Pressable
+                    key={option.value}
+                    style={[
+                      styles.filterRadioItem,
+                      isSelected && styles.filterRadioItemActive,
+                      count === 0 && styles.filterRadioItemDisabled,
+                    ]}
+                    onPress={() => count > 0 && togglePendingFilter(option.value)}
+                    disabled={count === 0}
+                  >
+                    <View style={styles.filterRadioContent}>
+                      <View
+                        style={[
+                          styles.filterRadioCircle,
+                          styles.filterRadioCircleWithColor,
+                          isSelected && styles.filterRadioCircleActive,
+                          { borderColor: option.accent },
+                        ]}
+                      >
+                        {isSelected && (
+                          <View style={[styles.filterRadioDot, { backgroundColor: option.accent }]} />
+                        )}
+                      </View>
+                      <View style={styles.filterRadioTextContainer}>
+                        <Text
+                          style={[
+                            styles.filterRadioLabel,
+                            isSelected && styles.filterRadioLabelActive,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.filterRadioDescription,
+                            count === 0 && styles.filterRadioDescriptionDisabled,
+                          ]}
+                        >
+                          {option.description}
+                          {count === 0 && " (Aucune porte)"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View
+                      style={[
+                        styles.filterRadioBadge,
+                        styles.filterRadioBadgeWithColor,
+                        { backgroundColor: option.bg + "40" },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterRadioBadgeText,
+                          { color: option.fg },
+                          isSelected && { color: option.accent },
+                        ]}
+                      >
+                        {count}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
 
+          {/* Footer avec bouton Apply */}
           <View style={styles.filterSheetFooter}>
-            <Pressable style={styles.filterGhost} onPress={clearStatusFilters}>
-              <Text style={styles.filterGhostText}>Tout afficher</Text>
-            </Pressable>
             <Pressable
-              style={styles.filterPrimary}
+              style={styles.filterApplyButton}
               onPress={applyStatusFilters}
             >
-              <Text style={styles.filterPrimaryText}>Appliquer</Text>
+              <Text style={styles.filterApplyButtonText}>
+                Appliquer {pendingStatusFilter ? `(${statusCounts[pendingStatusFilter] ?? 0})` : `(${sortedPortes.length})`}
+              </Text>
             </Pressable>
           </View>
         </BottomSheetScrollView>
@@ -3079,131 +3131,173 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
+  // ============================================
+  // FILTER BOTTOM SHEET STYLES (Redesign)
+  // ============================================
+  filterSheetBackground: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  filterHandleIndicator: {
+    backgroundColor: "#E2E8F0",
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+  },
   filterSheetHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
   },
-  filterSheetIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    backgroundColor: "#EFF6FF",
+  filterCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#F8FAFC",
   },
-  filterSheetText: {
-    flex: 1,
+  filterHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#212121",
+    letterSpacing: -0.3,
   },
-  filterSheetTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#0F172A",
+  filterResetBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "transparent",
   },
-  filterSheetSubtitle: {
-    marginTop: 2,
-    fontSize: 12,
-    color: "#64748B",
+  filterResetLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2563EB",
   },
-  filterChipsRow: {
-    marginTop: 14,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
+  filterSection: {
+    paddingTop: 20,
+    paddingHorizontal: 20,
   },
-  filterChip: {
+  filterSectionLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#212121",
+    marginBottom: 16,
+    letterSpacing: -0.2,
+  },
+  filterRadioGroup: {
+    gap: 4,
+  },
+  filterRadioItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 999,
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: "#FAFAFA",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
+    borderColor: "transparent",
   },
-  filterChipActive: {
-    backgroundColor: "#2563EB",
+  filterRadioItemActive: {
+    backgroundColor: "#F0F7FF",
     borderColor: "#2563EB",
   },
-  filterChipMuted: {
-    opacity: 0.6,
+  filterRadioItemDisabled: {
+    opacity: 0.5,
   },
-  filterChipIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "#EFF6FF",
+  filterRadioContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 12,
+  },
+  filterRadioCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: "#E0E0E0",
     alignItems: "center",
     justifyContent: "center",
   },
-  filterChipIconActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  filterRadioCircleWithColor: {
+    borderColor: "#E0E0E0",
   },
-  filterChipText: {
+  filterRadioCircleActive: {
+    borderColor: "#2563EB",
+    borderWidth: 2,
+  },
+  filterRadioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#2563EB",
+  },
+  filterRadioTextContainer: {
+    flex: 1,
+  },
+  filterRadioLabel: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#212121",
+    marginBottom: 2,
+  },
+  filterRadioLabelActive: {
+    fontWeight: "600",
+    color: "#2563EB",
+  },
+  filterRadioDescription: {
     fontSize: 12,
-    fontWeight: "700",
-    color: "#0F172A",
+    color: "#757575",
+    fontStyle: "italic",
   },
-  filterChipTextActive: {
-    color: "#FFFFFF",
+  filterRadioDescriptionDisabled: {
+    color: "#9E9E9E",
   },
-  filterChipCount: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+  filterRadioBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: "#ECEFF1",
+    minWidth: 28,
+    alignItems: "center",
   },
-  filterChipCountActive: {
-    backgroundColor: "rgba(255, 255, 255, 0.25)",
-  },
-  filterChipCountText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#64748B",
-  },
-  filterChipCountTextActive: {
-    color: "#FFFFFF",
+  filterRadioBadgeWithColor: {},
+  filterRadioBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#616161",
   },
   filterSheetFooter: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 18,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
   },
-  filterGhost: {
-    flex: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  filterGhostText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#475569",
-  },
-  filterPrimary: {
-    flex: 1,
-    borderRadius: 14,
+  filterApplyButton: {
     backgroundColor: "#2563EB",
-    paddingVertical: 12,
+    borderRadius: 16,
+    paddingVertical: 16,
     alignItems: "center",
+    shadowColor: "#2563EB",
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
-  filterPrimaryText: {
-    fontSize: 13,
+  filterApplyButtonText: {
+    fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
+    letterSpacing: 0.3,
   },
   doorCardInScroll: {
     backgroundColor: "#FFFFFF",
@@ -3304,17 +3398,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#EFF6FF",
-    borderWidth: 1,
-    borderColor: "#DBEAFE",
+    borderRadius: 12,
+    backgroundColor: "#2563EB",
+    shadowColor: "#2563EB",
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   statusFilterText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#2563EB",
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   statusGrid: {
     flexDirection: "row",
