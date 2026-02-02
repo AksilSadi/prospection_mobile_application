@@ -1,6 +1,13 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Feather } from "@expo/vector-icons";
-import { FlatList, Pressable, StyleSheet, Text, View, ScrollView } from "react-native";
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  Animated,
+} from "react-native";
 import { authService } from "@/services/auth";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import type { Immeuble, StatusHistorique } from "@/types/api";
@@ -37,6 +44,10 @@ export default function HistoriqueScreen() {
   const [filter, setFilter] = useState("all");
   const [historyMap, setHistoryMap] = useState<Record<number, StatusHistorique[]>>({});
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [expandedImmeubleId, setExpandedImmeubleId] = useState<number | null>(null);
+  const expandAnimsRef = useState(() => new Map<number, Animated.Value>())[0];
+  const cardAnimsRef = useState(() => new Map<number, Animated.Value>())[0];
+  const skeletonPulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -47,6 +58,22 @@ export default function HistoriqueScreen() {
     };
     void loadIdentity();
   }, []);
+
+  const getExpandAnim = (id: number) => {
+    const existing = expandAnimsRef.get(id);
+    if (existing) return existing;
+    const next = new Animated.Value(0);
+    expandAnimsRef.set(id, next);
+    return next;
+  };
+
+  const getCardAnim = (id: number) => {
+    const existing = cardAnimsRef.get(id);
+    if (existing) return existing;
+    const next = new Animated.Value(0);
+    cardAnimsRef.set(id, next);
+    return next;
+  };
 
   const { data: profile, loading, error } = useWorkspaceProfile(userId, role);
 
@@ -62,7 +89,7 @@ export default function HistoriqueScreen() {
 
   const filteredImmeubles = useMemo(() => {
     const now = Date.now();
-    return sortedImmeubles.filter(imm => {
+    return sortedImmeubles.filter((imm) => {
       const lastModified = imm.updatedAt ? new Date(imm.updatedAt).getTime() : 0;
       if (filter === "24h") return now - lastModified < 24 * 60 * 60 * 1000;
       if (filter === "7d") return now - lastModified < 7 * 24 * 60 * 60 * 1000;
@@ -72,6 +99,42 @@ export default function HistoriqueScreen() {
   }, [sortedImmeubles, filter]);
 
   const visibleImmeubles = filteredImmeubles;
+
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+    return () => {
+      pulse.stop();
+    };
+  }, [skeletonPulse]);
+
+  useEffect(() => {
+    if (visibleImmeubles.length === 0) return;
+    const animations = visibleImmeubles.map((imm, index) => {
+      const anim = getCardAnim(imm.id);
+      anim.setValue(0);
+      return Animated.timing(anim, {
+        toValue: 1,
+        duration: 260,
+        delay: index * 45,
+        useNativeDriver: true,
+      });
+    });
+    Animated.stagger(60, animations).start();
+  }, [visibleImmeubles]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,23 +166,6 @@ export default function HistoriqueScreen() {
     };
   }, [visibleImmeubles]);
 
-  const buildImmeublePipeline = (history: StatusHistorique[]) => {
-    if (history.length === 0) return null;
-    const sorted = [...history].sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-    const steps: string[] = [];
-    sorted.forEach((event) => {
-      if (steps[steps.length - 1] !== event.statut) {
-        steps.push(event.statut);
-      }
-    });
-    return {
-      steps,
-      date: sorted[sorted.length - 1].createdAt,
-    };
-  };
-
   const buildPortePipelines = (history: StatusHistorique[]) => {
     if (history.length === 0) return [];
     const grouped = new Map<number, StatusHistorique[]>();
@@ -147,6 +193,7 @@ export default function HistoriqueScreen() {
           : `Porte ${porteId}`,
         lastDate: last.createdAt,
         steps,
+        events: sorted,
       };
     });
     return pipelines.sort(
@@ -154,21 +201,61 @@ export default function HistoriqueScreen() {
     );
   };
 
+  const toggleExpand = (immeubleId: number) => {
+    const currentId = expandedImmeubleId;
+    if (currentId === immeubleId) {
+      const anim = getExpandAnim(immeubleId);
+      Animated.timing(anim, {
+        toValue: 0,
+        duration: 260,
+        useNativeDriver: true,
+      }).start(() => {
+        setExpandedImmeubleId(null);
+      });
+      return;
+    }
+
+    if (currentId !== null && currentId !== immeubleId) {
+      getExpandAnim(currentId).setValue(0);
+    }
+
+    setExpandedImmeubleId(immeubleId);
+    const anim = getExpandAnim(immeubleId);
+    anim.setValue(0);
+    Animated.timing(anim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
   if (loading) {
+    const skeletonOpacity = skeletonPulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.45, 0.9],
+    });
     return (
       <View style={styles.container}>
         <View style={styles.skeletonHeader}>
-          <View style={styles.skeletonTitle} />
-          <View style={styles.skeletonSubtitle} />
+          <Animated.View style={[styles.skeletonTitle, { opacity: skeletonOpacity }]} />
+          <Animated.View
+            style={[styles.skeletonSubtitle, { opacity: skeletonOpacity }]}
+          />
           <View style={styles.skeletonFiltersRow}>
             {Array.from({ length: 4 }).map((_, index) => (
-              <View key={index} style={styles.skeletonFilter} />
+              <Animated.View
+                key={index}
+                style={[styles.skeletonFilter, { opacity: skeletonOpacity }]}
+              />
             ))}
           </View>
         </View>
         <View style={styles.skeletonList}>
           {Array.from({ length: 6 }).map((_, index) => (
-            <View key={index} style={styles.skeletonCard} />
+            <Animated.View
+              key={index}
+              style={[styles.skeletonCard, { opacity: skeletonOpacity }]}
+            />
           ))}
         </View>
       </View>
@@ -221,134 +308,173 @@ export default function HistoriqueScreen() {
           ) : null
         }
         ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
-        renderItem={({ item: immeuble }) => (
-          <View style={styles.card}>
-            <View style={styles.cardIcon}>
-              <Feather name="home" size={18} color="#FFFFFF" />
-            </View>
-            <View style={styles.cardBody}>
-              <Text style={styles.cardTitle} numberOfLines={1}>
-                {immeuble.adresse}
-              </Text>
-              <View style={styles.cardMeta}>
-                <Feather name="clock" size={12} color="#94A3B8" />
-                <Text style={styles.cardDate}>
-                  {immeuble.updatedAt
-                    ? new Date(immeuble.updatedAt).toLocaleDateString("fr-FR")
-                    : "Date inconnue"}
-                </Text>
-              </View>
-              {(() => {
-                const history = historyMap[immeuble.id] || [];
-                const immeublePipeline = buildImmeublePipeline(history);
-                const portePipelines = buildPortePipelines(history);
-                if (!immeublePipeline) {
-                  return (
-                    <Text style={styles.cardEmptyHistory}>
-                      Aucun historique de statut
+        renderItem={({ item: immeuble }) => {
+          const isExpanded = expandedImmeubleId === immeuble.id;
+          const expandAnim = getExpandAnim(immeuble.id);
+          const cardAnim = getCardAnim(immeuble.id);
+          const history = historyMap[immeuble.id] ?? [];
+          const hasHistory = Object.prototype.hasOwnProperty.call(historyMap, immeuble.id);
+          const porteCount = new Set(history.map((event) => event.porteId)).size;
+          const portePipelines = buildPortePipelines(history);
+          return (
+            <View>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.card,
+                  pressed && styles.cardPressed,
+                ]}
+                android_ripple={{ color: "#E2E8F0" }}
+                onPress={() => toggleExpand(immeuble.id)}
+              >
+                <Animated.View
+                  style={[
+                    styles.cardInner,
+                    {
+                      opacity: cardAnim,
+                      transform: [
+                        {
+                          translateY: cardAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [12, 0],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  <View style={styles.cardIcon}>
+                    <Feather name="home" size={18} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.cardBody}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                      {immeuble.adresse}
                     </Text>
-                  );
-                }
-                return (
-                  <View style={styles.pipelineWrap}>
-                    <Text style={styles.pipelineTitle}>Pipeline immeuble</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.pipelineRow}
+                    <View style={styles.cardMeta}>
+                      <Feather name="clock" size={12} color="#94A3B8" />
+                      <Text style={styles.cardDate}>
+                        {immeuble.updatedAt
+                          ? new Date(immeuble.updatedAt).toLocaleDateString("fr-FR")
+                          : "Date inconnue"}
+                      </Text>
+                    </View>
+                    <View style={styles.cardStats}>
+                      <View style={styles.statChip}>
+                        <Feather name="grid" size={12} color="#2563EB" />
+                        <Text style={styles.statText}>{porteCount} portes</Text>
+                      </View>
+                      <View style={styles.statChip}>
+                        <Feather name="activity" size={12} color="#0EA5E9" />
+                        <Text style={styles.statText}>{history.length} actions</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <View style={styles.cardChevron}>
+                    <Animated.View
+                      style={{
+                        transform: [
+                          {
+                            rotate: expandAnim.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ["0deg", "180deg"],
+                            }),
+                          },
+                        ],
+                      }}
                     >
-                      {immeublePipeline.steps.map((statut, index) => {
-                        const style = STATUS_STYLE[statut] || {
-                          label: statut,
-                          bg: "#E2E8F0",
-                          fg: "#475569",
-                          dot: "#94A3B8",
-                        };
-                        const isLast = index === immeublePipeline.steps.length - 1;
-                        return (
-                          <View key={`${statut}-${index}`} style={styles.pipelineStep}>
-                            <View
-                              style={[
-                                styles.pipelineChip,
-                                { backgroundColor: style.bg },
-                              ]}
-                            >
-                              <View
-                                style={[
-                                  styles.pipelineDot,
-                                  { backgroundColor: style.dot },
-                                ]}
-                              />
-                              <Text style={[styles.pipelineText, { color: style.fg }]}>
-                                {style.label}
-                              </Text>
-                            </View>
-                            {!isLast && <View style={styles.pipelineLine} />}
-                          </View>
-                        );
-                      })}
-                    </ScrollView>
+                      <Feather name="chevron-down" size={18} color="#94A3B8" />
+                    </Animated.View>
+                  </View>
+                </Animated.View>
+              </Pressable>
 
-                    <View style={styles.pipelineDoors}>
+              {isExpanded ? (
+                <Animated.View
+                  style={[
+                    {
+                      opacity: expandAnim,
+                      transform: [
+                        {
+                          translateY: expandAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-6, 0],
+                          }),
+                        },
+                        {
+                          scale: expandAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [0.985, 1],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}
+                >
+                  {portePipelines.length === 0 ? (
+                    <View style={styles.historyEmptyPanel}>
+                      <Feather name="inbox" size={20} color="#94A3B8" />
+                      <Text style={styles.historyEmptyTitle}>
+                        Aucun historique pour cet immeuble
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.historyPanel}>
+                      <Text style={styles.historyPanelTitle}>Historique des portes</Text>
                       {portePipelines.map((porte) => (
-                        <View key={porte.porteId} style={styles.pipelineDoorCard}>
-                          <View style={styles.pipelineDoorHeader}>
-                            <Text style={styles.pipelineDoorTitle}>{porte.porteLabel}</Text>
-                            <Text style={styles.pipelineDoorDate}>
-                              {new Date(porte.lastDate).toLocaleDateString("fr-FR")}
+                        <View key={porte.porteId} style={styles.historyDoorCard}>
+                          <View style={styles.historyDoorHeader}>
+                            <Text style={styles.historyDoorTitle}>{porte.porteLabel}</Text>
+                            <Text style={styles.historyDoorDate}>
+                              {new Date(porte.lastDate).toLocaleString("fr-FR")}
                             </Text>
                           </View>
-                          <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.pipelineRow}
-                          >
-                            {porte.steps.map((statut, index) => {
-                              const style = STATUS_STYLE[statut] || {
-                                label: statut,
+                          <View style={styles.historyTimeline}>
+                            {porte.events.map((event, index) => {
+                              const style = STATUS_STYLE[event.statut] || {
+                                label: event.statut,
                                 bg: "#E2E8F0",
                                 fg: "#475569",
                                 dot: "#94A3B8",
                               };
-                              const isLast = index === porte.steps.length - 1;
+                              const isLast = index === porte.events.length - 1;
                               return (
-                                <View
-                                  key={`${porte.porteId}-${statut}-${index}`}
-                                  style={styles.pipelineStep}
-                                >
-                                  <View
-                                    style={[
-                                      styles.pipelineChip,
-                                      { backgroundColor: style.bg },
-                                    ]}
-                                  >
+                                <View key={event.id} style={styles.timelineRow}>
+                                  <View style={styles.timelineLeft}>
                                     <View
                                       style={[
-                                        styles.pipelineDot,
+                                        styles.timelineDot,
                                         { backgroundColor: style.dot },
                                       ]}
                                     />
-                                    <Text style={[styles.pipelineText, { color: style.fg }]}>
-                                      {style.label}
+                                    {!isLast && <View style={styles.timelineLine} />}
+                                  </View>
+                                  <View style={styles.timelineContent}>
+                                    <View
+                                      style={[
+                                        styles.timelineChip,
+                                        { backgroundColor: style.bg },
+                                      ]}
+                                    >
+                                      <Text style={[styles.timelineText, { color: style.fg }]}>
+                                        {style.label}
+                                      </Text>
+                                    </View>
+                                    <Text style={styles.timelineDate}>
+                                      {new Date(event.createdAt).toLocaleString("fr-FR")}
                                     </Text>
                                   </View>
-                                  {!isLast && <View style={styles.pipelineLine} />}
                                 </View>
                               );
                             })}
-                          </ScrollView>
+                          </View>
                         </View>
                       ))}
                     </View>
-                  </View>
-                );
-              })()}
+                  )}
+                </Animated.View>
+              ) : null}
             </View>
-            <View style={styles.cardChevron}>
-              <Feather name="chevron-right" size={18} color="#94A3B8" />
-            </View>
-          </View>
-        )}
+          );
+        }}
         ListFooterComponent={null}
       />
     </View>
@@ -368,15 +494,6 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
-
-
-
-  pageTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-
   filtersRow: {
     flexDirection: "row",
     gap: 8,
@@ -458,28 +575,30 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   skeletonCard: {
-    height: 88,
-    borderRadius: 16,
+    height: 96,
+    borderRadius: 18,
     backgroundColor: "#E5E7EB",
   },
   card: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 12,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  cardInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   cardIcon: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     backgroundColor: "#2563EB",
     alignItems: "center",
@@ -489,8 +608,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cardTitle: {
-    fontSize: 14,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
     color: "#0F172A",
   },
   cardMeta: {
@@ -503,78 +622,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#94A3B8",
   },
-  cardEmptyHistory: {
-    marginTop: 6,
-    fontSize: 11,
-    color: "#94A3B8",
-  },
-  pipelineWrap: {
+  cardStats: {
     marginTop: 10,
-  },
-  pipelineTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#0F172A",
-    marginBottom: 6,
-  },
-  pipelineDoors: {
-    marginTop: 10,
-    gap: 10,
-  },
-  pipelineDoorCard: {
-    padding: 10,
-    borderRadius: 14,
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  pipelineDoorHeader: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  pipelineDoorTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-  pipelineDoorDate: {
-    fontSize: 11,
-    color: "#94A3B8",
-  },
-  pipelineRow: {
-    alignItems: "center",
-    gap: 8,
-    paddingRight: 8,
-  },
-  pipelineStep: {
-    flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
     gap: 8,
   },
-  pipelineChip: {
+  statChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
+    backgroundColor: "#F1F5F9",
   },
-  pipelineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  pipelineText: {
+  statText: {
     fontSize: 11,
     fontWeight: "600",
-  },
-  pipelineLine: {
-    width: 18,
-    height: 2,
-    borderRadius: 999,
-    backgroundColor: "#E2E8F0",
+    color: "#475569",
   },
   cardChevron: {
     width: 32,
@@ -584,7 +650,101 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  itemSeparator: {
+  historyPanel: {
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    gap: 12,
+  },
+  historyPanelTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginTop: 8,
+  },
+  historyEmptyPanel: {
+    padding: 20,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    gap: 8,
+  },
+  historyEmptyTitle: {
+    fontSize: 12,
+    color: "#94A3B8",
+  },
+  historyDoorCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  historyDoorHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  historyDoorTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  historyDoorDate: {
+    fontSize: 11,
+    color: "#94A3B8",
+  },
+  historyTimeline: {
+    gap: 12,
+  },
+  timelineRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  timelineLeft: {
+    alignItems: "center",
+    width: 16,
+  },
+  timelineDot: {
+    width: 8,
     height: 8,
+    borderRadius: 4,
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    marginTop: 4,
+    backgroundColor: "#E2E8F0",
+  },
+  timelineContent: {
+    flex: 1,
+    gap: 6,
+  },
+  timelineChip: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  timelineText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  timelineDate: {
+    fontSize: 11,
+    color: "#94A3B8",
+  },
+  itemSeparator: {
+    height: 10,
   },
 });
+
+
+
+

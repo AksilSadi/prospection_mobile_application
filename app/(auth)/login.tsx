@@ -57,7 +57,8 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={[styles.backgroundShape, { height: height * 0.4 }]} />
+      <View style={[styles.backgroundShape, { height: height * 0.42 }]} />
+      <View style={styles.backgroundBlob} />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.container}
@@ -143,7 +144,7 @@ export default function LoginScreen() {
                       <Feather
                         name={showPassword ? "eye-off" : "eye"}
                         size={20}
-                        color="#0047AB"
+                        color="#2563EB"
                       />
                     </Pressable>
                   </View>
@@ -190,7 +191,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#0047AB",
+    backgroundColor: "#2563EB",
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
   },
@@ -214,12 +215,12 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
+    borderColor: "rgba(255,255,255,0.45)",
   },
   appName: {
     fontSize: 32,
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontSize: 16,
-    color: "#E0E7FF",
+    color: "#DBEAFE",
     marginTop: 4,
     fontWeight: "500",
   },
@@ -304,16 +305,16 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   loginButton: {
-    backgroundColor: "#0047AB",
+    backgroundColor: "#2563EB",
     height: 54,
-    borderRadius: 14,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#0047AB",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowColor: "#2563EB",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    elevation: 6,
   },
   loginButtonPressed: {
     opacity: 0.9,
