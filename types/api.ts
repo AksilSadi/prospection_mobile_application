@@ -83,6 +83,39 @@ export type Immeuble = {
   portes?: Porte[];
 };
 
+export type CommercialInfo = {
+  id: number;
+  nom: string;
+  prenom: string;
+};
+
+export type ManagerInfo = {
+  id: number;
+  nom: string;
+  prenom: string;
+};
+
+export type PorteInfo = {
+  id: number;
+  numero: string;
+  etage: number;
+};
+
+export type StatusHistorique = {
+  id: number;
+  porteId: number;
+  commercialId?: number | null;
+  managerId?: number | null;
+  statut: string;
+  commentaire?: string | null;
+  rdvDate?: string | null;
+  rdvTime?: string | null;
+  createdAt: string;
+  porte?: PorteInfo | null;
+  commercial?: CommercialInfo | null;
+  manager?: ManagerInfo | null;
+};
+
 export type CreateImmeubleInput = {
   adresse: string;
   nbEtages: number;

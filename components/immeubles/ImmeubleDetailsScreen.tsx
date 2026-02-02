@@ -24,8 +24,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
-  Keyboard,
   FlatList,
+  Keyboard,
   Modal,
   Pressable,
   ScrollView,
@@ -194,7 +194,7 @@ export default function ImmeubleDetailsView({
   const [hasLocalUpdates, setHasLocalUpdates] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [isFabOpen, setIsFabOpen] = useState(false);
-  const [fabHint, setFabHint] = useState<string | null>(null);
+  const [showFabHints, setShowFabHints] = useState(false);
   const immeubleIdRef = useRef<number | null>(null);
   const DateTimePicker = useMemo<DateTimePickerType>(() => {
     try {
@@ -209,9 +209,12 @@ export default function ImmeubleDetailsView({
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const contentTranslate = useRef(new Animated.Value(12)).current;
+  const floorPlanScale = useRef(new Animated.Value(1)).current;
+  const floorPlanPulse = useRef(new Animated.Value(0)).current;
   const [isReady, setIsReady] = useState(false);
   const fabAnim = useRef(new Animated.Value(0)).current;
   const fabHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fabHintOpacity = useRef(new Animated.Value(0)).current;
   const progressFill = useRef(new Animated.Value(0)).current;
   const doorPagerRef = useRef<FlatList<Porte>>(null);
   const { add: addEtageToImmeuble, loading: addingEtage } =
@@ -330,6 +333,28 @@ export default function ImmeubleDetailsView({
       floorPlanSheetRef.current?.close();
     }
   }, [showFloorPlan]);
+
+  const triggerFloorPlan = () => {
+    Animated.sequence([
+      Animated.spring(floorPlanScale, {
+        toValue: 0.92,
+        useNativeDriver: true,
+      }),
+      Animated.spring(floorPlanScale, {
+        toValue: 1,
+        friction: 5,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    Animated.timing(floorPlanPulse, {
+      toValue: 1,
+      duration: 280,
+      useNativeDriver: true,
+    }).start(() => {
+      floorPlanPulse.setValue(0);
+      setShowFloorPlan(true);
+    });
+  };
 
   const showToast = (title: string, subtitle: string) => {
     setActionToast({ title, subtitle });
@@ -469,9 +494,7 @@ export default function ImmeubleDetailsView({
     );
     closeEditSheet();
     if (currentIndex < filteredPortes.length - 1) {
-      setCurrentIndex((prev) =>
-        Math.min(prev + 1, filteredPortes.length - 1),
-      );
+      setCurrentIndex((prev) => Math.min(prev + 1, filteredPortes.length - 1));
     }
   };
 
@@ -545,6 +568,13 @@ export default function ImmeubleDetailsView({
     return Array.from(grouped.entries()).sort((a, b) => b[0] - a[0]);
   }, [sortedPortes]);
 
+  const floors = useMemo(() => {
+    const unique = Array.from(new Set(sortedPortes.map((porte) => porte.etage)))
+      .filter((etage) => typeof etage === "number")
+      .sort((a, b) => b - a);
+    return unique;
+  }, [sortedPortes]);
+
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     sortedPortes.forEach((porte) => {
@@ -570,6 +600,18 @@ export default function ImmeubleDetailsView({
     setStatusFilters([]);
     setPendingStatusFilter(null);
     filterSheetRef.current?.dismiss();
+  };
+
+  const jumpToFloor = (etage: number) => {
+    const targetIndex = filteredPortes.findIndex(
+      (porte) => porte.etage === etage,
+    );
+    if (targetIndex === -1) {
+      showToast("Aucune porte", "Ce filtre ne contient pas cet etage");
+      return;
+    }
+    setCurrentIndex(targetIndex);
+    doorPagerRef.current?.scrollToIndex({ index: targetIndex, animated: true });
   };
 
   const getNextDoorNumber = (etage: number) => {
@@ -801,6 +843,9 @@ export default function ImmeubleDetailsView({
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }).start();
+      if (next) {
+        triggerFabHints();
+      }
       return next;
     });
   };
@@ -812,6 +857,9 @@ export default function ImmeubleDetailsView({
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start(() => setIsFabOpen(false));
+    fabHintOpacity.stopAnimation();
+    fabHintOpacity.setValue(0);
+    setShowFabHints(false);
   };
 
   const handleFabAction = (action: () => void) => {
@@ -819,22 +867,27 @@ export default function ImmeubleDetailsView({
     action();
   };
 
-  const showFabHint = (label: string) => {
+  const triggerFabHints = () => {
     if (fabHintTimeoutRef.current) {
       clearTimeout(fabHintTimeoutRef.current);
     }
-    setFabHint(label);
+    setShowFabHints(true);
+    fabHintOpacity.stopAnimation();
+    fabHintOpacity.setValue(0);
+    Animated.timing(fabHintOpacity, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
     fabHintTimeoutRef.current = setTimeout(() => {
-      setFabHint(null);
+      Animated.timing(fabHintOpacity, {
+        toValue: 0,
+        duration: 380,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowFabHints(false);
+      });
     }, 1400);
-  };
-
-  const hideFabHint = () => {
-    if (fabHintTimeoutRef.current) {
-      clearTimeout(fabHintTimeoutRef.current);
-      fabHintTimeoutRef.current = null;
-    }
-    setFabHint(null);
   };
 
   const advanceToNextDoor = (porteId: number, portes: Porte[]) => {
@@ -879,10 +932,14 @@ export default function ImmeubleDetailsView({
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <Pressable
-          style={styles.backButton}
+          style={({ pressed }) => [
+            styles.backButton,
+            pressed && styles.backButtonPressed,
+          ]}
+          android_ripple={{ color: "transparent", borderless: true }}
           onPress={() => setShowExitConfirm(true)}
         >
-          <Feather name="chevron-left" size={20} color="#2563EB" />
+          <Feather name="arrow-left" size={18} color="#2563EB" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -892,11 +949,29 @@ export default function ImmeubleDetailsView({
             {displayNbEtages} etages - {immeuble.nbPortesParEtage} portes/etage
           </Text>
         </View>
-        <Pressable
-          style={styles.floorPlanButton}
-          onPress={() => setShowFloorPlan(true)}
-        >
-          <Feather name="grid" size={18} color="#FFFFFF" />
+        <Pressable style={styles.floorPlanButton} onPress={triggerFloorPlan}>
+          <Animated.View
+            style={[
+              styles.floorPlanPulse,
+              {
+                opacity: floorPlanPulse.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 0.35],
+                }),
+                transform: [
+                  {
+                    scale: floorPlanPulse.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.6, 1.6],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+          <Animated.View style={{ transform: [{ scale: floorPlanScale }] }}>
+            <Feather name="grid" size={18} color="#FFFFFF" />
+          </Animated.View>
         </Pressable>
       </View>
 
@@ -1005,6 +1080,37 @@ export default function ImmeubleDetailsView({
                 </Pressable>
               </View>
 
+              <View style={styles.floorTabsWrap}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.floorTabs}
+                >
+                  {floors.map((etage) => {
+                    const isActive = currentPorte?.etage === etage;
+                    return (
+                      <Pressable
+                        key={`floor-${etage}`}
+                        style={[
+                          styles.floorTab,
+                          isActive && styles.floorTabActive,
+                        ]}
+                        onPress={() => jumpToFloor(etage)}
+                      >
+                        <Text
+                          style={[
+                            styles.floorTabText,
+                            isActive && styles.floorTabTextActive,
+                          ]}
+                        >
+                          Etage {etage}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
               {/* Carte de porte avec statuts (swipe horizontal) */}
               <FlatList
                 ref={doorPagerRef}
@@ -1053,7 +1159,11 @@ export default function ImmeubleDetailsView({
                               </Text>
                             </View>
                             <View style={styles.doorFloorBadge}>
-                              <Feather name="layers" size={12} color="#64748B" />
+                              <Feather
+                                name="layers"
+                                size={12}
+                                color="#64748B"
+                              />
                               <Text style={styles.doorFloorText}>
                                 Etage {item.etage ?? "--"}
                               </Text>
@@ -1072,7 +1182,10 @@ export default function ImmeubleDetailsView({
                               ]}
                             />
                             <Text
-                              style={[styles.statusBadgeText, { color: status.fg }]}
+                              style={[
+                                styles.statusBadgeText,
+                                { color: status.fg },
+                              ]}
                             >
                               {status.label}
                             </Text>
@@ -1083,7 +1196,9 @@ export default function ImmeubleDetailsView({
                           {visibleStatusOptions.map((option) => {
                             const isActiveStatus =
                               getDisplayStatusKey(item) === option.value;
-                            const cardBg = isActiveStatus ? option.accent : option.bg;
+                            const cardBg = isActiveStatus
+                              ? option.accent
+                              : option.bg;
                             const cardBorder = isActiveStatus
                               ? option.accent
                               : "#E2E8F0";
@@ -1100,7 +1215,10 @@ export default function ImmeubleDetailsView({
                               ? "#FFFFFF"
                               : option.fg;
                             return (
-                              <View key={option.value} style={styles.statusCardWrap}>
+                              <View
+                                key={option.value}
+                                style={styles.statusCardWrap}
+                              >
                                 <Pressable
                                   style={[
                                     styles.statusCard,
@@ -1109,7 +1227,9 @@ export default function ImmeubleDetailsView({
                                       borderColor: cardBorder,
                                     },
                                   ]}
-                                  onPress={() => handleStatusSelect(option.value, item)}
+                                  onPress={() =>
+                                    handleStatusSelect(option.value, item)
+                                  }
                                 >
                                   <View
                                     style={[
@@ -1132,7 +1252,10 @@ export default function ImmeubleDetailsView({
                                     {option.label}
                                   </Text>
                                   <Text
-                                    style={[styles.statusDesc, { color: descColor }]}
+                                    style={[
+                                      styles.statusDesc,
+                                      { color: descColor },
+                                    ]}
                                   >
                                     {option.description}
                                   </Text>
@@ -1141,7 +1264,6 @@ export default function ImmeubleDetailsView({
                             );
                           })}
                         </View>
-
                       </View>
                     </View>
                   );
@@ -1257,7 +1379,12 @@ export default function ImmeubleDetailsView({
                 ]}
               >
                 <View style={styles.sheetSectionHeader}>
-                  <View style={[styles.sheetSectionIcon, styles.sheetSectionIconBlue]}>
+                  <View
+                    style={[
+                      styles.sheetSectionIcon,
+                      styles.sheetSectionIconBlue,
+                    ]}
+                  >
                     <Feather name="calendar" size={14} color="#1D4ED8" />
                   </View>
                   <View style={styles.sheetSectionText}>
@@ -1343,11 +1470,18 @@ export default function ImmeubleDetailsView({
                 ]}
               >
                 <View style={styles.sheetSectionHeader}>
-                  <View style={[styles.sheetSectionIcon, styles.sheetSectionIconGreen]}>
+                  <View
+                    style={[
+                      styles.sheetSectionIcon,
+                      styles.sheetSectionIconGreen,
+                    ]}
+                  >
                     <Feather name="award" size={14} color="#047857" />
                   </View>
                   <View style={styles.sheetSectionText}>
-                    <Text style={styles.sheetSectionTitle}>Contrats signes</Text>
+                    <Text style={styles.sheetSectionTitle}>
+                      Contrats signes
+                    </Text>
                     <Text style={styles.sheetSectionSubtitle}>
                       Nombre total confirme
                     </Text>
@@ -1366,7 +1500,9 @@ export default function ImmeubleDetailsView({
                     <Feather name="minus" size={16} color="#111827" />
                   </Pressable>
                   <View style={styles.counterValueWrap}>
-                    <Text style={styles.counterValue}>{editForm.nbContrats}</Text>
+                    <Text style={styles.counterValue}>
+                      {editForm.nbContrats}
+                    </Text>
                     <Text style={styles.counterLabel}>contrats</Text>
                   </View>
                   <Pressable
@@ -1484,7 +1620,9 @@ export default function ImmeubleDetailsView({
             <View style={styles.floorPlanCurrentCard}>
               <View style={styles.floorPlanCurrentBadge}>
                 <Text style={styles.floorPlanCurrentNumber}>
-                  {currentPorte?.nomPersonnalise || currentPorte?.numero || "--"}
+                  {currentPorte?.nomPersonnalise ||
+                    currentPorte?.numero ||
+                    "--"}
                 </Text>
               </View>
               <View style={styles.floorPlanCurrentInfo}>
@@ -1516,7 +1654,9 @@ export default function ImmeubleDetailsView({
                     const isActive = porte.id === currentPorte?.id;
                     const isVisited = status !== null;
                     const chipBg = isVisited ? status?.accent : "#F1F5F9";
-                    const chipBorder = isActive ? status?.accent : "transparent";
+                    const chipBorder = isActive
+                      ? status?.accent
+                      : "transparent";
                     const chipText = isVisited ? "#FFFFFF" : "#64748B";
 
                     return (
@@ -1532,7 +1672,10 @@ export default function ImmeubleDetailsView({
                         ]}
                       >
                         <Text
-                          style={[styles.floorPlanDoorChipText, { color: chipText }]}
+                          style={[
+                            styles.floorPlanDoorChipText,
+                            { color: chipText },
+                          ]}
                         >
                           {porte.nomPersonnalise || porte.numero}
                         </Text>
@@ -1612,7 +1755,8 @@ export default function ImmeubleDetailsView({
                   <View
                     style={[
                       styles.filterRadioCircle,
-                      pendingStatusFilter === null && styles.filterRadioCircleActive,
+                      pendingStatusFilter === null &&
+                        styles.filterRadioCircleActive,
                     ]}
                   >
                     {pendingStatusFilter === null && (
@@ -1623,7 +1767,8 @@ export default function ImmeubleDetailsView({
                     <Text
                       style={[
                         styles.filterRadioLabel,
-                        pendingStatusFilter === null && styles.filterRadioLabelActive,
+                        pendingStatusFilter === null &&
+                          styles.filterRadioLabelActive,
                       ]}
                     >
                       Toutes les portes
@@ -1652,7 +1797,9 @@ export default function ImmeubleDetailsView({
                       isSelected && styles.filterRadioItemActive,
                       count === 0 && styles.filterRadioItemDisabled,
                     ]}
-                    onPress={() => count > 0 && togglePendingFilter(option.value)}
+                    onPress={() =>
+                      count > 0 && togglePendingFilter(option.value)
+                    }
                     disabled={count === 0}
                   >
                     <View style={styles.filterRadioContent}>
@@ -1665,7 +1812,12 @@ export default function ImmeubleDetailsView({
                         ]}
                       >
                         {isSelected && (
-                          <View style={[styles.filterRadioDot, { backgroundColor: option.accent }]} />
+                          <View
+                            style={[
+                              styles.filterRadioDot,
+                              { backgroundColor: option.accent },
+                            ]}
+                          />
                         )}
                       </View>
                       <View style={styles.filterRadioTextContainer}>
@@ -1680,7 +1832,8 @@ export default function ImmeubleDetailsView({
                         <Text
                           style={[
                             styles.filterRadioDescription,
-                            count === 0 && styles.filterRadioDescriptionDisabled,
+                            count === 0 &&
+                              styles.filterRadioDescriptionDisabled,
                           ]}
                         >
                           {option.description}
@@ -1718,7 +1871,10 @@ export default function ImmeubleDetailsView({
               onPress={applyStatusFilters}
             >
               <Text style={styles.filterApplyButtonText}>
-                Appliquer {pendingStatusFilter ? `(${statusCounts[pendingStatusFilter] ?? 0})` : `(${sortedPortes.length})`}
+                Appliquer{" "}
+                {pendingStatusFilter
+                  ? `(${statusCounts[pendingStatusFilter] ?? 0})`
+                  : `(${sortedPortes.length})`}
               </Text>
             </Pressable>
           </View>
@@ -1810,7 +1966,10 @@ export default function ImmeubleDetailsView({
       ) : null}
 
       <View
-        style={[styles.fabMenu, { bottom: insets.bottom + (isTablet ? 28 : 24) }]}
+        style={[
+          styles.fabMenu,
+          { bottom: insets.bottom + (isTablet ? 28 : 24) },
+        ]}
         pointerEvents={isFabOpen ? "auto" : "box-none"}
       >
         <View
@@ -1858,8 +2017,10 @@ export default function ImmeubleDetailsView({
                 : -135;
             const radius = isTablet ? 160 : 130;
             const chipSize = isTablet ? 64 : 56;
-            const hintOffsetX = chipSize * 1.2;
-            const hintOffsetY = -(chipSize * 1.1);
+            const angleRad = (Math.PI / 180) * angle;
+            const dirX = Math.cos(angleRad);
+            const dirY = Math.sin(angleRad);
+            const hintDistance = chipSize * 1.05;
             const targetX = Math.cos((Math.PI / 180) * angle) * radius;
             const targetY = Math.sin((Math.PI / 180) * angle) * radius;
             const translateX = fabAnim.interpolate({
@@ -1872,11 +2033,11 @@ export default function ImmeubleDetailsView({
             });
             const hintTranslateX = Animated.add(
               translateX,
-              new Animated.Value(-hintOffsetX),
+              new Animated.Value(dirX * hintDistance),
             );
             const hintTranslateY = Animated.add(
               translateY,
-              new Animated.Value(hintOffsetY),
+              new Animated.Value(dirY * hintDistance),
             );
             const scale = fabAnim.interpolate({
               inputRange: [0, 1],
@@ -1916,10 +2077,7 @@ export default function ImmeubleDetailsView({
                         borderRadius: chipSize / 2,
                       },
                     ]}
-                    delayLongPress={250}
                     onPress={() => handleFabAction(action.onPress)}
-                    onLongPress={() => showFabHint(action.label)}
-                    onPressOut={hideFabHint}
                   >
                     <Feather
                       name={action.icon as keyof typeof Feather.glyphMap}
@@ -1928,7 +2086,7 @@ export default function ImmeubleDetailsView({
                     />
                   </Pressable>
                 </Animated.View>
-                {fabHint === action.label ? (
+                {showFabHints ? (
                   <Animated.View
                     style={[
                       styles.fabHintWrap,
@@ -1937,16 +2095,13 @@ export default function ImmeubleDetailsView({
                           { translateX: hintTranslateX },
                           { translateY: hintTranslateY },
                         ],
-                        opacity,
+                        opacity: Animated.multiply(opacity, fabHintOpacity),
                       },
                     ]}
                     pointerEvents="none"
                   >
                     <View
-                      style={[
-                        styles.fabHint,
-                        isDanger && styles.fabHintDanger,
-                      ]}
+                      style={[styles.fabHint, isDanger && styles.fabHintDanger]}
                     >
                       <Text
                         style={[
@@ -2016,6 +2171,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 16,
+    paddingLeft: 12,
     paddingBottom: 14,
     backgroundColor: "#FFFFFF",
     flexDirection: "row",
@@ -2032,12 +2188,12 @@ const styles = StyleSheet.create({
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 14,
-    backgroundColor: "#EFF6FF",
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#BFDBFE",
+  },
+  backButtonPressed: {
+    backgroundColor: "#EFF6FF",
   },
   headerText: {
     flex: 1,
@@ -2064,6 +2220,14 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
+    overflow: "visible",
+  },
+  floorPlanPulse: {
+    position: "absolute",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#2563EB",
   },
   content: {
     padding: 16,
@@ -3373,6 +3537,43 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: 12,
     fontWeight: "600",
+  },
+  floorTabsWrap: {
+    backgroundColor: "#E2E8F0",
+    borderRadius: 999,
+    padding: 6,
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  floorTabs: {
+    gap: 8,
+    paddingHorizontal: 4,
+    width: "100%",
+  },
+  floorTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  floorTabActive: {
+    backgroundColor: "#2563EB",
+    borderColor: "#2563EB",
+    shadowColor: "#1D4ED8",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  floorTabText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#475569",
+  },
+  floorTabTextActive: {
+    color: "#FFFFFF",
   },
   statusHeaderRow: {
     flexDirection: "row",

@@ -1,7 +1,10 @@
 import { useProfileSheet } from "@/hooks/use-profile-sheet";
+import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
+import { authService } from "@/services/auth";
+import type { Commercial, Manager } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
-import { useEffect, useRef } from "react";
-import { Animated, Pressable, StyleSheet, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type AnimatedHeaderProps = {
@@ -13,6 +16,10 @@ const PAGE_TITLES = ["Dashboard", "Immeubles", "Historique"];
 export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
   const { open } = useProfileSheet();
   const insets = useSafeAreaInsets();
+  const [userId, setUserId] = useState<number | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const { data: profile } = useWorkspaceProfile(userId, role);
+  const [initials, setInitials] = useState("?");
 
   const fadeAnims = useRef([
     new Animated.Value(1),
@@ -25,6 +32,16 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
     new Animated.Value(20),
     new Animated.Value(20),
   ]).current;
+
+  useEffect(() => {
+    const loadIdentity = async () => {
+      const id = await authService.getUserId();
+      const userRole = await authService.getUserRole();
+      setUserId(id);
+      setRole(userRole);
+    };
+    void loadIdentity();
+  }, []);
 
   useEffect(() => {
     PAGE_TITLES.forEach((_, index) => {
@@ -43,6 +60,15 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
       ]).start();
     });
   }, [currentIndex, fadeAnims, translateAnims]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const nom = (profile as Commercial).nom || (profile as Manager).nom || "";
+    const prenom =
+      (profile as Commercial).prenom || (profile as Manager).prenom || "";
+    const computed = `${prenom.charAt(0)}${nom.charAt(0)}`.toUpperCase();
+    setInitials(computed || "?");
+  }, [profile]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
@@ -68,7 +94,7 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
 
         <Pressable style={styles.profileButton} onPress={open}>
           <View style={styles.profileIcon}>
-            <Feather name="user" size={18} color="#2563EB" />
+            <Text style={styles.profileInitials}>{initials}</Text>
           </View>
         </Pressable>
       </View>
@@ -118,5 +144,10 @@ const styles = StyleSheet.create({
     borderColor: "#DBEAFE",
     alignItems: "center",
     justifyContent: "center",
+  },
+  profileInitials: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2563EB",
   },
 });

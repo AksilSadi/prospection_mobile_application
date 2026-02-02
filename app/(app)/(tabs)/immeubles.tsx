@@ -143,9 +143,11 @@ export default function ImmeublesScreen({
   }, [immeubles, query]);
 
   const immeublesEnCours = useMemo(() => {
-    return filteredImmeubles.filter((imm) => {
+    const filtered = filteredImmeubles.filter((imm) => {
       const portes = imm.portes || [];
-      const prospectees = portes.filter((porte) => porte.statut !== "NON_VISITE").length;
+      const prospectees = portes.filter(
+        (porte) => porte.statut !== "NON_VISITE",
+      ).length;
       const total = portes.length;
       const percent = total === 0 ? 0 : Math.round((prospectees / total) * 100);
       if (progressFilter === "all") return true;
@@ -155,6 +157,11 @@ export default function ImmeublesScreen({
       if (progressFilter === "high") return percent >= 70 && percent < 100;
       if (progressFilter === "complete") return percent === 100;
       return true;
+    });
+    return [...filtered].sort((a, b) => {
+      const aTime = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+      const bTime = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+      return bTime - aTime;
     });
   }, [filteredImmeubles, progressFilter]);
 
@@ -283,103 +290,158 @@ export default function ImmeublesScreen({
           contentContainerStyle={styles.content}
           ListHeaderComponent={
             <View style={styles.headerBlock}>
-              <View style={styles.headerRow}>
-                <View>
-                  <Text style={styles.subtitle}>Vue globale de vos immeubles</Text>
-                </View>
-                <View style={styles.headerBadge}>
-                  <Feather name="home" size={16} color="#2563EB" />
-                </View>
-              </View>
-
               <View style={styles.summaryRow}>
                 <View style={styles.summaryCardPrimary}>
                   <View style={styles.summaryIconPrimary}>
                     <Feather name="layers" size={16} color="#FFFFFF" />
                   </View>
-                  <Text style={styles.summaryValue}>{immeublesEnCours.length}</Text>
+                  <Text style={styles.summaryValue}>
+                    {immeublesEnCours.length}
+                  </Text>
                   <Text style={styles.summaryLabel}>Immeubles a finir</Text>
                 </View>
                 <View style={styles.summaryCardSecondary}>
                   <View style={styles.summaryIconSecondary}>
                     <Feather name="grid" size={16} color="#2563EB" />
                   </View>
-                  <Text style={styles.summaryValueSecondary}>{totalPortes}</Text>
-                  <Text style={styles.summaryLabelSecondary}>Portes totales</Text>
+                  <Text style={styles.summaryValueSecondary}>
+                    {totalPortes}
+                  </Text>
+                  <Text style={styles.summaryLabelSecondary}>
+                    Portes totales
+                  </Text>
                 </View>
               </View>
 
-
               <View style={styles.filterRow}>
                 <Pressable
-                  style={[styles.filterChip, progressFilter === "all" && styles.filterChipActive]}
+                  style={[
+                    styles.filterChip,
+                    progressFilter === "all" && styles.filterChipActive,
+                  ]}
                   onPress={() => setProgressFilter("all")}
                 >
-                  <Feather name="layers" size={12} color={progressFilter === "all" ? "#FFFFFF" : "#2563EB"} />
+                  <Feather
+                    name="layers"
+                    size={12}
+                    color={progressFilter === "all" ? "#FFFFFF" : "#2563EB"}
+                  />
                   <Text
-                    style={[styles.filterChipText, progressFilter === "all" && styles.filterChipTextActive]}
+                    style={[
+                      styles.filterChipText,
+                      progressFilter === "all" && styles.filterChipTextActive,
+                    ]}
                   >
                     Tous
                   </Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.filterChip, progressFilter === "incomplete" && styles.filterChipActive]}
+                  style={[
+                    styles.filterChip,
+                    progressFilter === "incomplete" && styles.filterChipActive,
+                  ]}
                   onPress={() => setProgressFilter("incomplete")}
                 >
                   <Feather
                     name="activity"
                     size={12}
-                    color={progressFilter === "incomplete" ? "#FFFFFF" : "#2563EB"}
+                    color={
+                      progressFilter === "incomplete" ? "#FFFFFF" : "#2563EB"
+                    }
                   />
                   <Text
                     style={[
                       styles.filterChipText,
-                      progressFilter === "incomplete" && styles.filterChipTextActive,
+                      progressFilter === "incomplete" &&
+                        styles.filterChipTextActive,
                     ]}
                   >
                     En cours
                   </Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.filterChip, progressFilter === "low" && styles.filterChipActive]}
+                  style={[
+                    styles.filterChip,
+                    progressFilter === "low" && styles.filterChipActive,
+                  ]}
                   onPress={() => setProgressFilter("low")}
                 >
-                  <Feather name="trending-down" size={12} color={progressFilter === "low" ? "#FFFFFF" : "#EF4444"} />
+                  <Feather
+                    name="trending-down"
+                    size={12}
+                    color={progressFilter === "low" ? "#FFFFFF" : "#EF4444"}
+                  />
                   <Text
-                    style={[styles.filterChipText, progressFilter === "low" && styles.filterChipTextActive]}
+                    style={[
+                      styles.filterChipText,
+                      progressFilter === "low" && styles.filterChipTextActive,
+                    ]}
                   >
                     0-35%
                   </Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.filterChip, progressFilter === "mid" && styles.filterChipActive]}
+                  style={[
+                    styles.filterChip,
+                    progressFilter === "mid" && styles.filterChipActive,
+                  ]}
                   onPress={() => setProgressFilter("mid")}
                 >
-                  <Feather name="bar-chart-2" size={12} color={progressFilter === "mid" ? "#FFFFFF" : "#F59E0B"} />
+                  <Feather
+                    name="bar-chart-2"
+                    size={12}
+                    color={progressFilter === "mid" ? "#FFFFFF" : "#F59E0B"}
+                  />
                   <Text
-                    style={[styles.filterChipText, progressFilter === "mid" && styles.filterChipTextActive]}
+                    style={[
+                      styles.filterChipText,
+                      progressFilter === "mid" && styles.filterChipTextActive,
+                    ]}
                   >
                     35-70%
                   </Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.filterChip, progressFilter === "high" && styles.filterChipActive]}
+                  style={[
+                    styles.filterChip,
+                    progressFilter === "high" && styles.filterChipActive,
+                  ]}
                   onPress={() => setProgressFilter("high")}
                 >
-                  <Feather name="trending-up" size={12} color={progressFilter === "high" ? "#FFFFFF" : "#22C55E"} />
+                  <Feather
+                    name="trending-up"
+                    size={12}
+                    color={progressFilter === "high" ? "#FFFFFF" : "#22C55E"}
+                  />
                   <Text
-                    style={[styles.filterChipText, progressFilter === "high" && styles.filterChipTextActive]}
+                    style={[
+                      styles.filterChipText,
+                      progressFilter === "high" && styles.filterChipTextActive,
+                    ]}
                   >
                     70-99%
                   </Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.filterChip, progressFilter === "complete" && styles.filterChipActive]}
+                  style={[
+                    styles.filterChip,
+                    progressFilter === "complete" && styles.filterChipActive,
+                  ]}
                   onPress={() => setProgressFilter("complete")}
                 >
-                  <Feather name="check" size={12} color={progressFilter === "complete" ? "#FFFFFF" : "#16A34A"} />
+                  <Feather
+                    name="check"
+                    size={12}
+                    color={
+                      progressFilter === "complete" ? "#FFFFFF" : "#16A34A"
+                    }
+                  />
                   <Text
-                    style={[styles.filterChipText, progressFilter === "complete" && styles.filterChipTextActive]}
+                    style={[
+                      styles.filterChipText,
+                      progressFilter === "complete" &&
+                        styles.filterChipTextActive,
+                    ]}
                   >
                     100%
                   </Text>
@@ -416,17 +478,21 @@ export default function ImmeublesScreen({
             <View style={styles.row}>
               {pair.map((immeuble, index) => {
                 const portes = immeuble.portes || [];
-                const total = portes.length || immeuble.nbEtages * immeuble.nbPortesParEtage;
+                const total =
+                  portes.length ||
+                  immeuble.nbEtages * immeuble.nbPortesParEtage;
                 const prospectees = portes.length
-                  ? portes.filter((porte) => porte.statut !== "NON_VISITE").length
+                  ? portes.filter((porte) => porte.statut !== "NON_VISITE")
+                      .length
                   : 0;
-                const progressPercent = total === 0 ? 0 : Math.round((prospectees / total) * 100);
+                const progressPercent =
+                  total === 0 ? 0 : Math.round((prospectees / total) * 100);
                 const progressColor =
                   progressPercent < 35
                     ? "#EF4444"
                     : progressPercent < 70
-                    ? "#F59E0B"
-                    : "#22C55E";
+                      ? "#F59E0B"
+                      : "#22C55E";
                 const cardLabel = `Appartement ${String.fromCharCode(65 + (index % 26))}`;
                 const anim = getCardAnimation(immeuble.id);
                 return (
@@ -479,14 +545,19 @@ export default function ImmeublesScreen({
                       </View>
                       <View style={styles.cardContent}>
                         <Text
-                          style={[styles.cardTitle, !isTablet && styles.cardTitleCompact]}
+                          style={[
+                            styles.cardTitle,
+                            !isTablet && styles.cardTitleCompact,
+                          ]}
                           numberOfLines={2}
                         >
                           {immeuble.adresse}
                         </Text>
                         <View style={styles.cardMetaRow}>
                           <Feather name="grid" size={11} color="#64748B" />
-                          <Text style={styles.cardMeta}>{immeuble.nbEtages} etages</Text>
+                          <Text style={styles.cardMeta}>
+                            {immeuble.nbEtages} etages
+                          </Text>
                           <Text style={styles.cardMeta}>•</Text>
                           <Text style={styles.cardMeta}>{total} portes</Text>
                         </View>
@@ -495,11 +566,19 @@ export default function ImmeublesScreen({
                             <View
                               style={[
                                 styles.progressFill,
-                                { width: `${progressPercent}%`, backgroundColor: progressColor },
+                                {
+                                  width: `${progressPercent}%`,
+                                  backgroundColor: progressColor,
+                                },
                               ]}
                             />
                           </View>
-                          <Text style={[styles.progressText, { color: progressColor }]}>
+                          <Text
+                            style={[
+                              styles.progressText,
+                              { color: progressColor },
+                            ]}
+                          >
                             {progressPercent}%
                           </Text>
                         </View>
