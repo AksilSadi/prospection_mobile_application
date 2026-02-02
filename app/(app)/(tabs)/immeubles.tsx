@@ -22,12 +22,14 @@ type ImmeublesScreenProps = {
   isActive?: boolean;
   onSwipeLockChange?: (locked: boolean) => void;
   onHamburgerVisibilityChange?: (visible: boolean) => void;
+  onHeaderVisibilityChange?: (visible: boolean) => void;
 };
 
 export default function ImmeublesScreen({
   isActive = true,
   onSwipeLockChange,
   onHamburgerVisibilityChange,
+  onHeaderVisibilityChange,
 }: ImmeublesScreenProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -110,6 +112,11 @@ export default function ImmeublesScreen({
     if (!onHamburgerVisibilityChange || !isActive) return;
     onHamburgerVisibilityChange(selectedImmeubleId === null);
   }, [isActive, onHamburgerVisibilityChange, selectedImmeubleId]);
+
+  useEffect(() => {
+    if (!onHeaderVisibilityChange || !isActive) return;
+    onHeaderVisibilityChange(selectedImmeubleId === null);
+  }, [isActive, onHeaderVisibilityChange, selectedImmeubleId]);
 
   const {
     data: profile,
@@ -459,7 +466,10 @@ export default function ImmeublesScreen({
                   >
                     <Pressable
                       style={styles.card}
-                      onPress={() => setSelectedImmeubleId(immeuble.id)}
+                      onPress={() => {
+                        onHeaderVisibilityChange?.(false);
+                        setSelectedImmeubleId(immeuble.id);
+                      }}
                     >
                       <View style={styles.cardHeader}>
                         <View style={styles.cardIcon}>

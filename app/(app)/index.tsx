@@ -13,6 +13,7 @@ function AppContent() {
   const [index, setIndex] = useState(0);
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [showHeader, setShowHeader] = useState(true);
   const { sheetRef } = useProfileSheet();
 
   useEffect(() => {
@@ -29,7 +30,7 @@ function AppContent() {
 
   return (
     <>
-      <AnimatedHeader currentIndex={index} />
+      {showHeader ? <AnimatedHeader currentIndex={index} /> : null}
       {connectionDetails ? (
         <View style={styles.livekitHost}>
           <LiveKitRoom
@@ -44,7 +45,11 @@ function AppContent() {
           />
         </View>
       ) : null}
-      <SwipeTabs index={index} onIndexChange={setIndex} />
+      <SwipeTabs
+        index={index}
+        onIndexChange={setIndex}
+        onHeaderVisibilityChange={setShowHeader}
+      />
       <ProfileSheet ref={sheetRef} userId={userId} role={role} />
     </>
   );

@@ -17,9 +17,14 @@ const routes = [
 type SwipeTabsProps = {
   index: number;
   onIndexChange: (index: number) => void;
+  onHeaderVisibilityChange?: (visible: boolean) => void;
 };
 
-export default function SwipeTabs({ index, onIndexChange }: SwipeTabsProps) {
+export default function SwipeTabs({
+  index,
+  onIndexChange,
+  onHeaderVisibilityChange,
+}: SwipeTabsProps) {
   const tabRoutes = useMemo(() => routes, []);
   const [swipeEnabled, setSwipeEnabled] = useState(true);
   const [showHamburger, setShowHamburger] = useState(true);
@@ -48,6 +53,7 @@ export default function SwipeTabs({ index, onIndexChange }: SwipeTabsProps) {
                 isActive={index === 1}
                 onSwipeLockChange={(locked) => setSwipeEnabled(!locked)}
                 onHamburgerVisibilityChange={setShowHamburger}
+                onHeaderVisibilityChange={onHeaderVisibilityChange}
               />
             );
           }
