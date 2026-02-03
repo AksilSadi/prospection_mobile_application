@@ -32,12 +32,19 @@ export type Statistic = {
   id: number;
   commercialId?: number | null;
   managerId?: number | null;
+  directeurId?: number | null;
   immeubleId?: number | null;
   zoneId?: number | null;
   contratsSignes: number;
   immeublesVisites: number;
   rendezVousPris: number;
   refus: number;
+  absents?: number;
+  argumentes?: number;
+  nbImmeublesProspectes?: number;
+  nbPortesProspectes?: number;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type Porte = {

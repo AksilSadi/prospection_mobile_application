@@ -214,6 +214,24 @@ export default function ImmeublesScreen({
     Animated.stagger(30, animations).start();
   }, [ANIMATED_CARD_LIMIT, immeublesEnCours, isActive, selectedImmeubleId]);
 
+  useEffect(() => {
+    if (selectedImmeubleId === null) return;
+    detailsOpacity.setValue(0);
+    detailsTranslate.setValue(24);
+    Animated.parallel([
+      Animated.timing(detailsOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(detailsTranslate, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [detailsOpacity, detailsTranslate, selectedImmeubleId]);
+
   const immeublePairs = useMemo(() => {
     const pairs: Immeuble[][] = [];
     for (let i = 0; i < immeublesEnCours.length; i += 2) {
@@ -269,6 +287,9 @@ export default function ImmeublesScreen({
               }),
             ]).start(() => {
               setSelectedImmeubleId(null);
+              onSwipeLockChange?.(false);
+              onHamburgerVisibilityChange?.(true);
+              onHeaderVisibilityChange?.(true);
               setIsExitingDetails(false);
               if (detailsDirty) {
                 void refetch();
@@ -504,26 +525,26 @@ export default function ImmeublesScreen({
                         styles.cardWrap,
                         {
                           opacity: animValue,
-                        transform: [
-                          {
-                            translateY: animValue.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [16, 0],
-                            }),
-                          },
-                          {
-                            translateX: animValue.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [12, 0],
-                            }),
-                          },
-                          {
-                            scale: animValue.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0.96, 1],
-                            }),
-                          },
-                        ],
+                          transform: [
+                            {
+                              translateY: animValue.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [16, 0],
+                              }),
+                            },
+                            {
+                              translateX: animValue.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [12, 0],
+                              }),
+                            },
+                            {
+                              scale: animValue.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0.96, 1],
+                              }),
+                            },
+                          ],
                         },
                       ]}
                     >
@@ -531,6 +552,8 @@ export default function ImmeublesScreen({
                         style={styles.card}
                         onPress={() => {
                           onHeaderVisibilityChange?.(false);
+                          onHamburgerVisibilityChange?.(false);
+                          onSwipeLockChange?.(true);
                           setSelectedImmeubleId(immeuble.id);
                         }}
                       >
