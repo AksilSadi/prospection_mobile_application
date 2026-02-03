@@ -38,11 +38,13 @@ export default function HamburgerMenuOverlay({ currentIndex, onNavigate }: Hambu
 
   const [userName, setUserName] = useState<string>("");
   const [userRole, setUserRole] = useState<string>("");
+  const [isManager, setIsManager] = useState(false);
 
   useEffect(() => {
     const loadUserInfo = async () => {
       const role = await authService.getUserRole();
       setUserRole(role === "manager" ? "Manager" : "Commercial");
+      setIsManager(role === "manager");
       // You could also fetch user name from profile here if needed
       setUserName("Pro-Win");
     };
@@ -139,11 +141,19 @@ export default function HamburgerMenuOverlay({ currentIndex, onNavigate }: Hambu
             onPress={() => handleNavigate(2)}
             isActive={currentIndex === 2}
           />
+          {isManager ? (
+            <MenuItem
+              icon="users"
+              label="Équipe"
+              onPress={() => handleNavigate(3)}
+              isActive={currentIndex === 3}
+            />
+          ) : null}
           <MenuItem
             icon="clock"
             label="Historique"
-            onPress={() => handleNavigate(3)}
-            isActive={currentIndex === 3}
+            onPress={() => handleNavigate(isManager ? 4 : 3)}
+            isActive={currentIndex === (isManager ? 4 : 3)}
           />
         </View>
       </Animated.View>

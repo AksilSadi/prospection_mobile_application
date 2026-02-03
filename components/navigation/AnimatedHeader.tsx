@@ -11,13 +11,21 @@ type AnimatedHeaderProps = {
   currentIndex: number;
 };
 
-const PAGE_TITLES = ["Dashboard", "Immeubles", "Statistiques", "Historique"];
+const BASE_TITLES = ["Dashboard", "Immeubles", "Statistiques", "Historique"];
+const MANAGER_TITLES = [
+  "Dashboard",
+  "Immeubles",
+  "Statistiques",
+  "Équipe",
+  "Historique",
+];
 
 export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
   const { open } = useProfileSheet();
   const insets = useSafeAreaInsets();
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [titles, setTitles] = useState(BASE_TITLES);
   const { data: profile } = useWorkspaceProfile(userId, role);
   const [initials, setInitials] = useState("?");
 
@@ -26,10 +34,12 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
     new Animated.Value(0),
     new Animated.Value(0),
     new Animated.Value(0),
+    new Animated.Value(0),
   ]).current;
 
   const translateAnims = useRef([
     new Animated.Value(0),
+    new Animated.Value(20),
     new Animated.Value(20),
     new Animated.Value(20),
     new Animated.Value(20),
@@ -41,12 +51,13 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
       const userRole = await authService.getUserRole();
       setUserId(id);
       setRole(userRole);
+      setTitles(userRole === "manager" ? MANAGER_TITLES : BASE_TITLES);
     };
     void loadIdentity();
   }, []);
 
   useEffect(() => {
-    PAGE_TITLES.forEach((_, index) => {
+    titles.forEach((_, index) => {
       const isActive = index === currentIndex;
       Animated.parallel([
         Animated.timing(fadeAnims[index], {
@@ -61,7 +72,7 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
         }),
       ]).start();
     });
-  }, [currentIndex, fadeAnims, translateAnims]);
+  }, [currentIndex, fadeAnims, titles, translateAnims]);
 
   useEffect(() => {
     if (!profile) return;
@@ -76,7 +87,7 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
     <View style={[styles.container, { paddingTop: insets.top + 12 }]}>
       <View style={styles.content}>
         <View style={styles.titleContainer}>
-          {PAGE_TITLES.map((title, index) => (
+          {titles.map((title, index) => (
             <Animated.Text
               key={title}
               style={[

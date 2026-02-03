@@ -6,15 +6,23 @@ import HamburgerMenuOverlay from "@/components/navigation/HamburgerMenuOverlay";
 import DashboardScreen from "@/app/(app)/(tabs)/dashboard";
 import ImmeublesScreen from "@/app/(app)/(tabs)/immeubles";
 import StatistiquesScreen from "@/app/(app)/(tabs)/statistiques";
+import EquipeScreen from "@/app/(app)/(tabs)/equipe";
 import HistoriqueScreen from "@/app/(app)/(tabs)/historique";
 import { useHamburgerMenu } from "@/hooks/use-hamburger-menu";
+import { authService } from "@/services/auth";
 
-const routes = [
-  { key: "dashboard", title: "Dashboard", icon: "bar-chart-2" },
-  { key: "immeubles", title: "Immeubles", icon: "home" },
-  { key: "statistiques", title: "Statistiques", icon: "pie-chart" },
-  { key: "historique", title: "Historique", icon: "clock" },
-];
+const buildRoutes = (isManager: boolean) => {
+  const baseRoutes = [
+    { key: "dashboard", title: "Dashboard", icon: "bar-chart-2" },
+    { key: "immeubles", title: "Immeubles", icon: "home" },
+    { key: "statistiques", title: "Statistiques", icon: "pie-chart" },
+  ];
+  if (isManager) {
+    baseRoutes.push({ key: "equipe", title: "Équipe", icon: "users" });
+  }
+  baseRoutes.push({ key: "historique", title: "Historique", icon: "clock" });
+  return baseRoutes;
+};
 
 type SwipeTabsProps = {
   index: number;
@@ -27,10 +35,19 @@ export default function SwipeTabs({
   onIndexChange,
   onHeaderVisibilityChange,
 }: SwipeTabsProps) {
-  const tabRoutes = useMemo(() => routes, []);
+  const [isManager, setIsManager] = useState(false);
+  const tabRoutes = useMemo(() => buildRoutes(isManager), [isManager]);
   const [swipeEnabled, setSwipeEnabled] = useState(true);
   const [showHamburger, setShowHamburger] = useState(true);
   const { close, isVisible } = useHamburgerMenu();
+
+  useEffect(() => {
+    const loadRole = async () => {
+      const role = await authService.getUserRole();
+      setIsManager(role === "manager");
+    };
+    void loadRole();
+  }, []);
 
   useEffect(() => {
     if (!showHamburger && isVisible) {
@@ -61,6 +78,9 @@ export default function SwipeTabs({
           }
           if (route.key === "historique") {
             return <HistoriqueScreen />;
+          }
+          if (route.key === "equipe") {
+            return <EquipeScreen />;
           }
           if (route.key === "statistiques") {
             return <StatistiquesScreen />;
