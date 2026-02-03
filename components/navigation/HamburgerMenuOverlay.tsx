@@ -134,10 +134,16 @@ export default function HamburgerMenuOverlay({ currentIndex, onNavigate }: Hambu
             isActive={currentIndex === 1}
           />
           <MenuItem
-            icon="clock"
-            label="Historique"
+            icon="pie-chart"
+            label="Statistiques"
             onPress={() => handleNavigate(2)}
             isActive={currentIndex === 2}
+          />
+          <MenuItem
+            icon="clock"
+            label="Historique"
+            onPress={() => handleNavigate(3)}
+            isActive={currentIndex === 3}
           />
         </View>
       </Animated.View>

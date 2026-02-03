@@ -5,12 +5,14 @@ import HamburgerButton from "@/components/navigation/HamburgerButton";
 import HamburgerMenuOverlay from "@/components/navigation/HamburgerMenuOverlay";
 import DashboardScreen from "@/app/(app)/(tabs)/dashboard";
 import ImmeublesScreen from "@/app/(app)/(tabs)/immeubles";
+import StatistiquesScreen from "@/app/(app)/(tabs)/statistiques";
 import HistoriqueScreen from "@/app/(app)/(tabs)/historique";
 import { useHamburgerMenu } from "@/hooks/use-hamburger-menu";
 
 const routes = [
   { key: "dashboard", title: "Dashboard", icon: "bar-chart-2" },
   { key: "immeubles", title: "Immeubles", icon: "home" },
+  { key: "statistiques", title: "Statistiques", icon: "pie-chart" },
   { key: "historique", title: "Historique", icon: "clock" },
 ];
 
@@ -59,6 +61,9 @@ export default function SwipeTabs({
           }
           if (route.key === "historique") {
             return <HistoriqueScreen />;
+          }
+          if (route.key === "statistiques") {
+            return <StatistiquesScreen />;
           }
           return <DashboardScreen />;
         }}

@@ -11,7 +11,7 @@ type AnimatedHeaderProps = {
   currentIndex: number;
 };
 
-const PAGE_TITLES = ["Dashboard", "Immeubles", "Historique"];
+const PAGE_TITLES = ["Dashboard", "Immeubles", "Statistiques", "Historique"];
 
 export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
   const { open } = useProfileSheet();
@@ -25,10 +25,12 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
     new Animated.Value(1),
     new Animated.Value(0),
     new Animated.Value(0),
+    new Animated.Value(0),
   ]).current;
 
   const translateAnims = useRef([
     new Animated.Value(0),
+    new Animated.Value(20),
     new Animated.Value(20),
     new Animated.Value(20),
   ]).current;
