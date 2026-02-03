@@ -6,6 +6,10 @@ export const GET_MANAGER_PERSONAL = `
       prenom
       email
       numTelephone
+      zones {
+        id
+        nom
+      }
       immeubles {
         id
         adresse
@@ -29,6 +33,39 @@ export const GET_MANAGER_PERSONAL = `
           derniereVisite
         }
       }
+      commercials {
+        id
+        nom
+        prenom
+        email
+        numTel
+        managerId
+        zones {
+          id
+          nom
+        }
+        immeubles {
+          id
+          adresse
+          nbEtages
+          nbPortesParEtage
+          updatedAt
+        }
+        statistics {
+          id
+          commercialId
+          contratsSignes
+          immeublesVisites
+          rendezVousPris
+          refus
+          absents
+          argumentes
+          nbImmeublesProspectes
+          nbPortesProspectes
+          createdAt
+          updatedAt
+        }
+      }
       statistics {
         id
         managerId
@@ -36,6 +73,12 @@ export const GET_MANAGER_PERSONAL = `
         immeublesVisites
         rendezVousPris
         refus
+        absents
+        argumentes
+        nbImmeublesProspectes
+        nbPortesProspectes
+        createdAt
+        updatedAt
       }
       personalStatistics {
         id
@@ -44,6 +87,26 @@ export const GET_MANAGER_PERSONAL = `
         immeublesVisites
         rendezVousPris
         refus
+        absents
+        argumentes
+        nbImmeublesProspectes
+        nbPortesProspectes
+        createdAt
+        updatedAt
+      }
+      teamStatistics {
+        id
+        managerId
+        contratsSignes
+        immeublesVisites
+        rendezVousPris
+        refus
+        absents
+        argumentes
+        nbImmeublesProspectes
+        nbPortesProspectes
+        createdAt
+        updatedAt
       }
     }
   }

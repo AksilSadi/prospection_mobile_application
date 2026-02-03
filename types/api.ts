@@ -47,6 +47,11 @@ export type Statistic = {
   updatedAt?: string;
 };
 
+export type Zone = {
+  id: number;
+  nom: string;
+};
+
 export type Porte = {
   id: number;
   numero: string;
@@ -145,6 +150,7 @@ export type Commercial = {
   managerId?: number | null;
   immeubles?: Immeuble[];
   statistics?: Statistic[];
+  zones?: Zone[];
 };
 
 export type Manager = {
@@ -156,6 +162,9 @@ export type Manager = {
   immeubles?: Immeuble[];
   statistics?: Statistic[];
   personalStatistics?: Statistic[];
+  commercials?: Commercial[];
+  teamStatistics?: Statistic[];
+  zones?: Zone[];
 };
 
 export type CommercialTeamRanking = {
