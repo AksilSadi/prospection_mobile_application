@@ -606,6 +606,7 @@ export default function ImmeubleDetailsView({
     const targetIndex = filteredPortes.findIndex(
       (porte) => porte.etage === etage,
     );
+
     if (targetIndex === -1) {
       showToast("Aucune porte", "Ce filtre ne contient pas cet etage");
       return;
@@ -1084,6 +1085,7 @@ export default function ImmeubleDetailsView({
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
+                  style={styles.floorTabsScroll}
                   contentContainerStyle={styles.floorTabs}
                 >
                   {floors.map((etage) => {
@@ -3544,11 +3546,17 @@ const styles = StyleSheet.create({
     padding: 6,
     marginTop: 10,
     marginBottom: 10,
+    alignSelf: "center",
+    flexGrow: 0,
+    flexShrink: 0,
+  },
+  floorTabsScroll: {
+    alignSelf: "center",
+    flexGrow: 0,
   },
   floorTabs: {
     gap: 8,
     paddingHorizontal: 4,
-    width: "100%",
   },
   floorTab: {
     paddingHorizontal: 16,

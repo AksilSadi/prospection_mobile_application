@@ -37,7 +37,10 @@ export default function ImmeublesScreen({
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const searchInputRef = useRef<TextInput | null>(null);
   const [progressFilter, setProgressFilter] = useState("incomplete");
+  const [showFilterChips, setShowFilterChips] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [selectedImmeubleId, setSelectedImmeubleId] = useState<number | null>(
@@ -45,11 +48,18 @@ export default function ImmeublesScreen({
   );
   const [detailsDirty, setDetailsDirty] = useState(false);
   const cardAnimationsRef = useRef<Map<number, Animated.Value>>(new Map());
+  const hasAnimatedOnce = useRef(false);
+  const ANIMATED_CARD_LIMIT = 12;
   const listOpacity = useRef(new Animated.Value(1)).current;
   const listTranslate = useRef(new Animated.Value(0)).current;
   const detailsOpacity = useRef(new Animated.Value(0)).current;
   const detailsTranslate = useRef(new Animated.Value(24)).current;
   const [isExitingDetails, setIsExitingDetails] = useState(false);
+
+  // Filter chips animation
+  const filterScaleY = useRef(new Animated.Value(1)).current;
+  const filterOpacity = useRef(new Animated.Value(1)).current;
+  const filterTranslateY = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -118,6 +128,45 @@ export default function ImmeublesScreen({
     onHeaderVisibilityChange(selectedImmeubleId === null);
   }, [isActive, onHeaderVisibilityChange, selectedImmeubleId]);
 
+  // Animate filter chips when toggled
+  useEffect(() => {
+    if (showFilterChips) {
+      filterScaleY.setValue(0);
+      filterOpacity.setValue(0);
+      filterTranslateY.setValue(-10);
+      Animated.parallel([
+        Animated.timing(filterScaleY, {
+          toValue: 1,
+          duration: 280,
+          useNativeDriver: true,
+        }),
+        Animated.timing(filterOpacity, {
+          toValue: 1,
+          duration: 240,
+          useNativeDriver: true,
+        }),
+        Animated.timing(filterTranslateY, {
+          toValue: 0,
+          duration: 280,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(filterScaleY, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(filterOpacity, {
+          toValue: 0,
+          duration: 160,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [showFilterChips, filterScaleY, filterOpacity, filterTranslateY]);
+
   const {
     data: profile,
     loading,
@@ -176,19 +225,30 @@ export default function ImmeublesScreen({
   useEffect(() => {
     if (selectedImmeubleId !== null || !isActive) return;
     if (immeublesEnCours.length === 0) return;
-    immeublesEnCours.forEach((imm) => {
+    if (hasAnimatedOnce.current) {
+      immeublesEnCours.forEach((imm) => {
+        getCardAnimation(imm.id).setValue(1);
+      });
+      return;
+    }
+    hasAnimatedOnce.current = true;
+    const animatedItems = immeublesEnCours.slice(0, ANIMATED_CARD_LIMIT);
+    const staticItems = immeublesEnCours.slice(ANIMATED_CARD_LIMIT);
+    animatedItems.forEach((imm) => {
       getCardAnimation(imm.id).setValue(0);
     });
-    const animations = immeublesEnCours.map((imm) =>
-      Animated.spring(getCardAnimation(imm.id), {
+    staticItems.forEach((imm) => {
+      getCardAnimation(imm.id).setValue(1);
+    });
+    const animations = animatedItems.map((imm) =>
+      Animated.timing(getCardAnimation(imm.id), {
         toValue: 1,
-        friction: 6,
-        tension: 90,
+        duration: 280,
         useNativeDriver: true,
       }),
     );
     Animated.stagger(80, animations).start();
-  }, [immeublesEnCours, isActive, selectedImmeubleId]);
+  }, [ANIMATED_CARD_LIMIT, immeublesEnCours, isActive, selectedImmeubleId]);
 
   const immeublePairs = useMemo(() => {
     const pairs: Immeuble[][] = [];
@@ -197,6 +257,8 @@ export default function ImmeublesScreen({
     }
     return pairs;
   }, [immeublesEnCours]);
+
+  const listData = useMemo(() => [{ _type: "controls" }, ...immeublePairs], [immeublePairs]);
 
   const totalPortes = useMemo(() => {
     return immeubles.reduce(
@@ -285,9 +347,14 @@ export default function ImmeublesScreen({
         }}
       >
         <FlatList
-          data={immeublePairs}
-          keyExtractor={(item, index) => `pair-${index}`}
+          data={listData}
+          windowSize={7}
+          initialNumToRender={6}
+          maxToRenderPerBatch={8}
+          removeClippedSubviews
+          keyExtractor={(item, index) => (item._type ? `controls-${index}` : `pair-${index}`)}
           contentContainerStyle={styles.content}
+          stickyHeaderIndices={[1]}
           ListHeaderComponent={
             <View style={styles.headerBlock}>
               <View style={styles.summaryRow}>
@@ -313,155 +380,6 @@ export default function ImmeublesScreen({
                 </View>
               </View>
 
-              <View style={styles.filterRow}>
-                <Pressable
-                  style={[
-                    styles.filterChip,
-                    progressFilter === "all" && styles.filterChipActive,
-                  ]}
-                  onPress={() => setProgressFilter("all")}
-                >
-                  <Feather
-                    name="layers"
-                    size={12}
-                    color={progressFilter === "all" ? "#FFFFFF" : "#2563EB"}
-                  />
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      progressFilter === "all" && styles.filterChipTextActive,
-                    ]}
-                  >
-                    Tous
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.filterChip,
-                    progressFilter === "incomplete" && styles.filterChipActive,
-                  ]}
-                  onPress={() => setProgressFilter("incomplete")}
-                >
-                  <Feather
-                    name="activity"
-                    size={12}
-                    color={
-                      progressFilter === "incomplete" ? "#FFFFFF" : "#2563EB"
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      progressFilter === "incomplete" &&
-                        styles.filterChipTextActive,
-                    ]}
-                  >
-                    En cours
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.filterChip,
-                    progressFilter === "low" && styles.filterChipActive,
-                  ]}
-                  onPress={() => setProgressFilter("low")}
-                >
-                  <Feather
-                    name="trending-down"
-                    size={12}
-                    color={progressFilter === "low" ? "#FFFFFF" : "#EF4444"}
-                  />
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      progressFilter === "low" && styles.filterChipTextActive,
-                    ]}
-                  >
-                    0-35%
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.filterChip,
-                    progressFilter === "mid" && styles.filterChipActive,
-                  ]}
-                  onPress={() => setProgressFilter("mid")}
-                >
-                  <Feather
-                    name="bar-chart-2"
-                    size={12}
-                    color={progressFilter === "mid" ? "#FFFFFF" : "#F59E0B"}
-                  />
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      progressFilter === "mid" && styles.filterChipTextActive,
-                    ]}
-                  >
-                    35-70%
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.filterChip,
-                    progressFilter === "high" && styles.filterChipActive,
-                  ]}
-                  onPress={() => setProgressFilter("high")}
-                >
-                  <Feather
-                    name="trending-up"
-                    size={12}
-                    color={progressFilter === "high" ? "#FFFFFF" : "#22C55E"}
-                  />
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      progressFilter === "high" && styles.filterChipTextActive,
-                    ]}
-                  >
-                    70-99%
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.filterChip,
-                    progressFilter === "complete" && styles.filterChipActive,
-                  ]}
-                  onPress={() => setProgressFilter("complete")}
-                >
-                  <Feather
-                    name="check"
-                    size={12}
-                    color={
-                      progressFilter === "complete" ? "#FFFFFF" : "#16A34A"
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      progressFilter === "complete" &&
-                        styles.filterChipTextActive,
-                    ]}
-                  >
-                    100%
-                  </Text>
-                </Pressable>
-              </View>
-              <View style={styles.searchWrap}>
-                <View style={[styles.searchBar, styles.searchBarShadow]}>
-                  <View style={styles.searchIconWrap}>
-                    <Feather name="search" size={16} color="#2563EB" />
-                  </View>
-                  <TextInput
-                    placeholder="Rechercher un immeuble"
-                    placeholderTextColor="#94A3B8"
-                    style={styles.searchInput}
-                    value={query}
-                    onChangeText={setQuery}
-                  />
-                </View>
-              </View>
-
               {loading && <Text style={styles.helper}>Chargement...</Text>}
               {error && <Text style={styles.error}>{error}</Text>}
             </View>
@@ -474,8 +392,213 @@ export default function ImmeublesScreen({
               </View>
             ) : null
           }
-          renderItem={({ item: pair }) => (
-            <View style={styles.row}>
+          renderItem={({ item: pair }) =>
+            pair._type === "controls" ? (
+              <View style={styles.controlsSticky}>
+                {!isSearchFocused && (
+                  <Animated.View
+                    style={[
+                      styles.filterRowAnimated,
+                      {
+                        opacity: filterOpacity,
+                        transform: [
+                          { scaleY: filterScaleY },
+                          { translateY: filterTranslateY },
+                        ],
+                      },
+                    ]}
+                  >
+                    <View style={styles.filterRow}>
+                      <Pressable
+                        style={[
+                          styles.filterChip,
+                          progressFilter === "all" && styles.filterChipActive,
+                        ]}
+                        onPress={() => setProgressFilter("all")}
+                      >
+                        <Feather
+                          name="layers"
+                          size={12}
+                          color={progressFilter === "all" ? "#FFFFFF" : "#2563EB"}
+                        />
+                        <Text
+                          style={[
+                            styles.filterChipText,
+                            progressFilter === "all" && styles.filterChipTextActive,
+                          ]}
+                        >
+                          Tous
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.filterChip,
+                          progressFilter === "incomplete" && styles.filterChipActive,
+                        ]}
+                        onPress={() => setProgressFilter("incomplete")}
+                      >
+                        <Feather
+                          name="activity"
+                          size={12}
+                          color={
+                            progressFilter === "incomplete" ? "#FFFFFF" : "#2563EB"
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.filterChipText,
+                            progressFilter === "incomplete" &&
+                              styles.filterChipTextActive,
+                          ]}
+                        >
+                          En cours
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.filterChip,
+                          progressFilter === "low" && styles.filterChipActive,
+                        ]}
+                        onPress={() => setProgressFilter("low")}
+                      >
+                        <Feather
+                          name="trending-down"
+                          size={12}
+                          color={progressFilter === "low" ? "#FFFFFF" : "#EF4444"}
+                        />
+                        <Text
+                          style={[
+                            styles.filterChipText,
+                            progressFilter === "low" && styles.filterChipTextActive,
+                          ]}
+                        >
+                          0-35%
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.filterChip,
+                          progressFilter === "mid" && styles.filterChipActive,
+                        ]}
+                        onPress={() => setProgressFilter("mid")}
+                      >
+                        <Feather
+                          name="bar-chart-2"
+                          size={12}
+                          color={progressFilter === "mid" ? "#FFFFFF" : "#F59E0B"}
+                        />
+                        <Text
+                          style={[
+                            styles.filterChipText,
+                            progressFilter === "mid" && styles.filterChipTextActive,
+                          ]}
+                        >
+                          35-70%
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.filterChip,
+                          progressFilter === "high" && styles.filterChipActive,
+                        ]}
+                        onPress={() => setProgressFilter("high")}
+                      >
+                        <Feather
+                          name="trending-up"
+                          size={12}
+                          color={progressFilter === "high" ? "#FFFFFF" : "#22C55E"}
+                        />
+                        <Text
+                          style={[
+                            styles.filterChipText,
+                            progressFilter === "high" && styles.filterChipTextActive,
+                          ]}
+                        >
+                          70-99%
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={[
+                          styles.filterChip,
+                          progressFilter === "complete" && styles.filterChipActive,
+                        ]}
+                        onPress={() => setProgressFilter("complete")}
+                      >
+                        <Feather
+                          name="check"
+                          size={12}
+                          color={
+                            progressFilter === "complete" ? "#FFFFFF" : "#16A34A"
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.filterChipText,
+                            progressFilter === "complete" &&
+                              styles.filterChipTextActive,
+                          ]}
+                        >
+                          100%
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </Animated.View>
+                )}
+                <View style={styles.searchWrapRow}>
+                  <View
+                    style={[
+                      styles.searchBar,
+                      styles.searchBarShadow,
+                      isSearchFocused && styles.searchBarFocused,
+                    ]}
+                  >
+                    <View style={styles.searchIconWrap}>
+                      <Feather name="search" size={16} color={isSearchFocused ? "#2563EB" : "#64748B"} />
+                    </View>
+                    <TextInput
+                      ref={searchInputRef}
+                      placeholder="Rechercher un immeuble, adresse, ville…"
+                      placeholderTextColor="#94A3B8"
+                      style={styles.searchInput}
+                      value={query}
+                      onChangeText={setQuery}
+                      onFocus={() => setIsSearchFocused(true)}
+                      onBlur={() => setIsSearchFocused(false)}
+                    />
+                    {query.length > 0 && (
+                      <Pressable
+                        style={styles.clearButton}
+                        onPress={() => {
+                          setQuery("");
+                          searchInputRef.current?.focus();
+                        }}
+                      >
+                        <Feather name="x" size={16} color="#64748B" />
+                      </Pressable>
+                    )}
+                    <Pressable
+                      style={[styles.filterButton, showFilterChips && styles.filterButtonActive]}
+                      onPress={() => setShowFilterChips(!showFilterChips)}
+                    >
+                      <Feather name="sliders" size={16} color={showFilterChips ? "#FFFFFF" : "#2563EB"} />
+                    </Pressable>
+                  </View>
+                  {isSearchFocused && (
+                    <Pressable
+                      style={styles.cancelButton}
+                      onPress={() => {
+                        setQuery("");
+                        setIsSearchFocused(false);
+                        searchInputRef.current?.blur();
+                      }}
+                    >
+                      <Text style={styles.cancelText}>Annuler</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+            ) : (
+              <View style={styles.row}>
               {pair.map((immeuble, index) => {
                 const portes = immeuble.portes || [];
                 const total =
@@ -495,33 +618,23 @@ export default function ImmeublesScreen({
                       : "#22C55E";
                 const cardLabel = `Appartement ${String.fromCharCode(65 + (index % 26))}`;
                 const anim = getCardAnimation(immeuble.id);
+                const animValue = anim;
                 return (
                   <Animated.View
                     key={immeuble.id}
                     style={[
                       styles.cardWrap,
                       {
+                        opacity: animValue,
                         transform: [
                           {
-                            translateY: anim.interpolate({
+                            translateY: animValue.interpolate({
                               inputRange: [0, 1],
-                              outputRange: [-24, 0],
+                              outputRange: [12, 0],
                             }),
                           },
                           {
-                            translateX: anim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [8, 0],
-                            }),
-                          },
-                          {
-                            rotate: anim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: ["-2deg", "0deg"],
-                            }),
-                          },
-                          {
-                            scale: anim.interpolate({
+                            scale: animValue.interpolate({
                               inputRange: [0, 1],
                               outputRange: [0.98, 1],
                             }),
@@ -661,36 +774,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   searchBar: {
-    width: "100%",
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 12,
     backgroundColor: "#F8FAFF",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderWidth: 1,
-    borderColor: "#D7E0F0",
+    borderColor: "#E2E8F0",
   },
   searchBarShadow: {
     shadowColor: "#0F172A",
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   searchIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 14,
     backgroundColor: "#E0EDFF",
     alignItems: "center",
     justifyContent: "center",
   },
   searchInput: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: "#0F172A",
+    paddingVertical: 2,
   },
   summaryRow: {
     flexDirection: "row",
@@ -752,6 +866,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
+  },
+  filterRowAnimated: {
+    overflow: "hidden",
   },
   filterChip: {
     flexDirection: "row",
@@ -946,5 +1063,47 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
+  },
+  controlsSticky: {
+    backgroundColor: "#F8FAFC",
+    paddingBottom: 12,
+    gap: 12,
+  },
+  searchWrapRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  searchBarFocused: {
+    borderColor: "#2563EB",
+    backgroundColor: "#FFFFFF",
+  },
+  clearButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#F1F5F9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  filterButtonActive: {
+    backgroundColor: "#2563EB",
+  },
+  cancelButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  cancelText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#2563EB",
   },
 });
