@@ -5,7 +5,10 @@ import { calculateRank, RANKS } from "@/utils/business/ranks";
 import { Feather } from "@expo/vector-icons";
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView as GestureScrollView } from "react-native-gesture-handler";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
 
 type WeeklyData = {
   day: string;
@@ -39,6 +42,8 @@ function SimpleBarChart({ data, color = "#2563EB" }: { data: WeeklyData[]; color
 export default function DashboardScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [activeChartIndex, setActiveChartIndex] = useState(0);
+  const chartScrollRef = useRef<GestureScrollView>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
   const conversionSheetRef = useRef<BottomSheet>(null);
 
@@ -221,33 +226,68 @@ export default function DashboardScreen() {
           )}
         </View>
 
-        {/* Weekly Prospection Chart */}
+        {/* Charts Slider */}
         <View style={styles.chartCard}>
-          <View style={styles.chartHeader}>
-            <Feather name="bar-chart-2" size={20} color="#2563EB" />
-            <Text style={styles.chartTitle}>Portes prospectées cette semaine</Text>
-          </View>
-          <SimpleBarChart data={weeklyData} />
-        </View>
-
-        {/* Weekly Contracts Chart */}
-        <View style={styles.chartCard}>
-          <View style={styles.chartHeader}>
-            <Feather name="file-text" size={20} color="#10B981" />
-            <View style={styles.chartTitleContainer}>
-              <Text style={styles.chartTitle}>Contrats signés cette semaine</Text>
-              <View style={styles.conversionContainer}>
-                <View style={styles.conversionBadge}>
-                  <Text style={styles.conversionRate}>{conversionRate}%</Text>
-                  <Text style={styles.conversionLabel}>taux conversion</Text>
-                </View>
-                <Pressable style={styles.conversionInfoButton} onPress={handleOpenConversionInfo}>
-                  <Feather name="help-circle" size={16} color="#059669" />
-                </Pressable>
+          <GestureScrollView
+            ref={chartScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={(event) => {
+              const scrollPosition = event.nativeEvent.contentOffset.x;
+              const index = Math.round(scrollPosition / (SCREEN_WIDTH - 52));
+              setActiveChartIndex(index);
+            }}
+            scrollEventThrottle={16}
+          >
+            {/* Weekly Prospection Chart */}
+            <View style={[styles.chartSlide, { width: SCREEN_WIDTH - 72 }]}>
+              <View style={styles.chartHeader}>
+                <Feather name="bar-chart-2" size={20} color="#2563EB" />
+                <Text style={styles.chartTitle}>Portes prospectées cette semaine</Text>
               </View>
+              <SimpleBarChart data={weeklyData} />
             </View>
+
+            {/* Weekly Contracts Chart */}
+            <View style={[styles.chartSlide, { width: SCREEN_WIDTH - 72 }]}>
+              <View style={styles.chartHeader}>
+                <Feather name="file-text" size={20} color="#10B981" />
+                <View style={styles.chartTitleContainer}>
+                  <Text style={styles.chartTitle}>Contrats signés cette semaine</Text>
+                  <View style={styles.conversionContainer}>
+                    <View style={styles.conversionBadge}>
+                      <Text style={styles.conversionRate}>{conversionRate}%</Text>
+                      <Text style={styles.conversionLabel}>taux conversion</Text>
+                    </View>
+                    <Pressable style={styles.conversionInfoButton} onPress={handleOpenConversionInfo}>
+                      <Feather name="help-circle" size={16} color="#059669" />
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+              <SimpleBarChart data={weeklyContracts} color="#10B981" />
+            </View>
+          </GestureScrollView>
+
+          {/* Pagination Indicators */}
+          <View style={styles.paginationContainer}>
+            {[0, 1].map((index) => (
+              <Pressable
+                key={index}
+                onPress={() => {
+                  chartScrollRef.current?.scrollTo({
+                    x: index * (SCREEN_WIDTH - 72),
+                    animated: true,
+                  });
+                }}
+                style={[
+                  styles.paginationDot,
+                  activeChartIndex === index && styles.paginationDotActive,
+                ]}
+              />
+            ))}
           </View>
-          <SimpleBarChart data={weeklyContracts} color="#10B981" />
         </View>
       </ScrollView>
 
@@ -431,7 +471,7 @@ const styles = StyleSheet.create({
   },
   chartCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 20,
+    borderRadius: 40,
     padding: 20,
     marginTop: 20,
     shadowColor: "#0F172A",
@@ -439,6 +479,26 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
+  },
+  chartSlide: {
+    paddingHorizontal: 0,
+  },
+  paginationContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 16,
+  },
+  paginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#E2E8F0",
+  },
+  paginationDotActive: {
+    width: 24,
+    backgroundColor: "#2563EB",
   },
   chartHeader: {
     flexDirection: "row",
@@ -533,6 +593,8 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 8,
+    paddingBottom: 200,
+
   },
   sheetHeader: {
     flexDirection: "row",
