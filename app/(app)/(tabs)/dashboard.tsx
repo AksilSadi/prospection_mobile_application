@@ -1,16 +1,46 @@
+import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
+import { authService } from "@/services/auth";
+import type { Commercial, Manager } from "@/types/api";
+import { calculateRank, RANKS } from "@/utils/business/ranks";
+import { Feather } from "@expo/vector-icons";
+import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
-import { authService } from "@/services/auth";
-import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
-import { calculateRank, RANKS } from "@/utils/business/ranks";
-import type { Commercial, Manager } from "@/types/api";
-import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
+
+type WeeklyData = {
+  day: string;
+  doors: number;
+};
+
+// Simple custom bar chart component
+function SimpleBarChart({ data, color = "#2563EB" }: { data: WeeklyData[]; color?: string }) {
+  const maxValue = Math.max(...data.map((d) => d.doors), 1);
+
+  return (
+    <View style={styles.chartContainer}>
+      {data.map((item, index) => {
+        const barHeight = (item.doors / maxValue) * 140;
+        return (
+          <View key={index} style={styles.barColumn}>
+            <View style={styles.barValueContainer}>
+              <Text style={[styles.barValue, { color }]}>{item.doors}</Text>
+            </View>
+            <View style={styles.barWrapper}>
+              <View style={[styles.bar, { height: barHeight, backgroundColor: color }]} />
+            </View>
+            <Text style={styles.dayLabel}>{item.day}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function DashboardScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const conversionSheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -73,6 +103,69 @@ export default function DashboardScreen() {
   const currentRankIndex = RANKS.findIndex((r) => r.name === rankInfo.name);
   const nextRank = RANKS[currentRankIndex + 1];
 
+  // Calculate weekly data from real backend data
+  const { weeklyData, weeklyContracts, conversionRate } = useMemo(() => {
+    if (!profile) {
+      return {
+        weeklyData: [],
+        weeklyContracts: [],
+        conversionRate: "0.0",
+      };
+    }
+
+    const immeubles = isManager
+      ? (profile as Manager).immeubles || []
+      : (profile as Commercial).immeubles || [];
+
+    // Get all doors from all buildings
+    const allDoors = immeubles.flatMap((immeuble) => immeuble.portes || []);
+
+    // Get dates for the last 7 days
+    const today = new Date();
+    const dayNames = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (6 - i));
+      return {
+        date: date.toISOString().split("T")[0],
+        dayName: dayNames[date.getDay()],
+      };
+    });
+
+    // Count doors visited per day
+    const doorsPerDay = last7Days.map(({ date, dayName }) => {
+      const count = allDoors.filter((door) => {
+        if (!door.derniereVisite) return false;
+        const visitDate = door.derniereVisite.split("T")[0];
+        return visitDate === date;
+      }).length;
+      return { day: dayName, doors: count };
+    });
+
+    // Count doors with contracts (nbContrats > 0)
+    // Note: We don't have contract dates, so we show total contracts per building visited each day
+    const contractsPerDay = last7Days.map(({ date, dayName }) => {
+      const doorsVisited = allDoors.filter((door) => {
+        if (!door.derniereVisite) return false;
+        const visitDate = door.derniereVisite.split("T")[0];
+        return visitDate === date;
+      });
+      const contractCount = doorsVisited.filter((door) => (door.nbContrats || 0) > 0).length;
+      return { day: dayName, doors: contractCount };
+    });
+
+    // Calculate conversion rate
+    const totalDoors = doorsPerDay.reduce((sum, d) => sum + d.doors, 0);
+    const totalContracts = contractsPerDay.reduce((sum, d) => sum + d.doors, 0);
+    const rate = totalDoors > 0 ? ((totalContracts / totalDoors) * 100).toFixed(1) : "0.0";
+
+    return {
+      weeklyData: doorsPerDay,
+      weeklyContracts: contractsPerDay,
+      conversionRate: rate,
+    };
+  }, [profile, isManager]);
+
   if (loading || !profile) {
     return (
       <View style={styles.container}>
@@ -85,6 +178,10 @@ export default function DashboardScreen() {
 
   const handleOpenInfo = () => {
     bottomSheetRef.current?.snapToIndex(0);
+  };
+
+  const handleOpenConversionInfo = () => {
+    conversionSheetRef.current?.snapToIndex(0);
   };
 
   return (
@@ -123,6 +220,35 @@ export default function DashboardScreen() {
             </View>
           )}
         </View>
+
+        {/* Weekly Prospection Chart */}
+        <View style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            <Feather name="bar-chart-2" size={20} color="#2563EB" />
+            <Text style={styles.chartTitle}>Portes prospectées cette semaine</Text>
+          </View>
+          <SimpleBarChart data={weeklyData} />
+        </View>
+
+        {/* Weekly Contracts Chart */}
+        <View style={styles.chartCard}>
+          <View style={styles.chartHeader}>
+            <Feather name="file-text" size={20} color="#10B981" />
+            <View style={styles.chartTitleContainer}>
+              <Text style={styles.chartTitle}>Contrats signés cette semaine</Text>
+              <View style={styles.conversionContainer}>
+                <View style={styles.conversionBadge}>
+                  <Text style={styles.conversionRate}>{conversionRate}%</Text>
+                  <Text style={styles.conversionLabel}>taux conversion</Text>
+                </View>
+                <Pressable style={styles.conversionInfoButton} onPress={handleOpenConversionInfo}>
+                  <Feather name="help-circle" size={16} color="#059669" />
+                </Pressable>
+              </View>
+            </View>
+          </View>
+          <SimpleBarChart data={weeklyContracts} color="#10B981" />
+        </View>
       </ScrollView>
 
       {/* Info Bottom Sheet */}
@@ -158,6 +284,44 @@ export default function DashboardScreen() {
           <Text style={styles.formulaNote}>
             Votre rang est calculé en fonction de ces actions. Plus vous êtes actif, plus vous gagnez de points !
           </Text>
+        </BottomSheetView>
+      </BottomSheet>
+
+      {/* Conversion Rate Explanation Bottom Sheet */}
+      <BottomSheet ref={conversionSheetRef} snapPoints={["35%"]} enablePanDownToClose index={-1}>
+        <BottomSheetView style={styles.sheetContainer}>
+          <View style={styles.sheetHeader}>
+            <Feather name="help-circle" size={20} color="#10B981" />
+            <Text style={styles.sheetTitle}>Taux de conversion</Text>
+          </View>
+          <View style={styles.explanationCard}>
+            <Text style={styles.explanationTitle}>Comment est-il calculé ?</Text>
+            <Text style={styles.explanationText}>
+              Le taux de conversion mesure l'efficacité de votre prospection.
+            </Text>
+            <View style={styles.formulaBox}>
+              <Text style={styles.formulaText}>
+                (Portes avec contrats ÷ Portes visitées) × 100
+              </Text>
+            </View>
+            <Text style={styles.explanationExample}>
+              <Text style={styles.boldText}>Exemple :</Text> Si vous visitez 100 portes et signez 13 contrats, votre taux est de 13%.
+            </Text>
+            <View style={styles.performanceIndicators}>
+              <View style={styles.performanceItem}>
+                <View style={[styles.performanceDot, { backgroundColor: "#10B981" }]} />
+                <Text style={styles.performanceText}>{">"} 20% = Excellent</Text>
+              </View>
+              <View style={styles.performanceItem}>
+                <View style={[styles.performanceDot, { backgroundColor: "#F59E0B" }]} />
+                <Text style={styles.performanceText}>10-20% = Bon</Text>
+              </View>
+              <View style={styles.performanceItem}>
+                <View style={[styles.performanceDot, { backgroundColor: "#EF4444" }]} />
+                <Text style={styles.performanceText}>{"<"} 10% = À améliorer</Text>
+              </View>
+            </View>
+          </View>
         </BottomSheetView>
       </BottomSheet>
     </>
@@ -265,6 +429,106 @@ const styles = StyleSheet.create({
     color: "#64748B",
     textAlign: "center",
   },
+  chartCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20,
+    marginTop: 20,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  chartHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 20,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+    flex: 1,
+  },
+  chartTitleContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  conversionContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  conversionBadge: {
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  conversionRate: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#10B981",
+  },
+  conversionLabel: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#059669",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  conversionInfoButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#F0FDF4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chartContainer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    height: 180,
+    paddingHorizontal: 4,
+  },
+  barColumn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  barValueContainer: {
+    height: 24,
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  barValue: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  barWrapper: {
+    width: "100%",
+    paddingHorizontal: 4,
+    height: 140,
+    justifyContent: "flex-end",
+  },
+  bar: {
+    width: "100%",
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    minHeight: 4,
+  },
+  dayLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 8,
+  },
   sheetContainer: {
     flex: 1,
     paddingHorizontal: 20,
@@ -317,5 +581,60 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: "center",
     paddingHorizontal: 10,
+  },
+  explanationCard: {
+    gap: 16,
+  },
+  explanationTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 4,
+  },
+  explanationText: {
+    fontSize: 14,
+    color: "#64748B",
+    lineHeight: 20,
+  },
+  formulaBox: {
+    backgroundColor: "#F0FDF4",
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D1FAE5",
+  },
+  formulaText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#059669",
+    textAlign: "center",
+  },
+  explanationExample: {
+    fontSize: 13,
+    color: "#64748B",
+    lineHeight: 20,
+  },
+  boldText: {
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  performanceIndicators: {
+    gap: 8,
+    marginTop: 8,
+  },
+  performanceItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  performanceDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  performanceText: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
   },
 });
