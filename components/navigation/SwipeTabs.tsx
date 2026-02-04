@@ -15,7 +15,7 @@ const buildRoutes = (isManager: boolean) => {
   const baseRoutes = [
     { key: "dashboard", title: "Dashboard", icon: "bar-chart-2" },
     { key: "immeubles", title: "Immeubles", icon: "home" },
-    { key: "statistiques", title: "Statistiques", icon: "pie-chart" },
+    { key: "statistiques", title: "Statistiques", icon: "trending-up" },
   ];
   if (isManager) {
     baseRoutes.push({ key: "equipe", title: "Équipe", icon: "users" });

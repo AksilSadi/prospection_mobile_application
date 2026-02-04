@@ -136,7 +136,7 @@ export default function HamburgerMenuOverlay({ currentIndex, onNavigate }: Hambu
             isActive={currentIndex === 1}
           />
           <MenuItem
-            icon="pie-chart"
+            icon="trending-up"
             label="Statistiques"
             onPress={() => handleNavigate(2)}
             isActive={currentIndex === 2}

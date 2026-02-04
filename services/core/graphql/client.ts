@@ -36,6 +36,21 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshAuthToken(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const { authService } = await import('@/services/auth');
+      const result = await authService.refreshToken();
+      return !!result;
+    })().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
 export class GraphQLClient {
   private endpoint: string;
   private defaultHeaders: Record<string, string>;
@@ -55,6 +70,15 @@ export class GraphQLClient {
     query: string,
     variables?: TVariables,
     headers?: Record<string, string>
+  ): Promise<TData> {
+    return this.requestInternal(query, variables, headers, true);
+  }
+
+  private async requestInternal<TData = any, TVariables = Record<string, any>>(
+    query: string,
+    variables?: TVariables,
+    headers?: Record<string, string>,
+    allowRefresh?: boolean
   ): Promise<TData> {
     if (!this.endpoint) {
       throw new GraphQLClientError(
@@ -92,6 +116,12 @@ export class GraphQLClient {
       return result.data;
     } catch (error) {
       if (error instanceof GraphQLClientError) {
+        if (allowRefresh && error.type === ErrorType.AUTHENTICATION) {
+          const refreshed = await refreshAuthToken();
+          if (refreshed) {
+            return this.requestInternal(query, variables, headers, false);
+          }
+        }
         throw error;
       }
 

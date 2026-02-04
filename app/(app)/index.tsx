@@ -1,9 +1,13 @@
-﻿import SwipeTabs from "@/components/navigation/SwipeTabs";
-import AnimatedHeader from "@/components/navigation/AnimatedHeader";
+﻿import AnimatedHeader from "@/components/navigation/AnimatedHeader";
+import SwipeTabs from "@/components/navigation/SwipeTabs";
 import ProfileSheet from "@/components/ProfileSheet";
+import { AudioSessionProvider } from "@/hooks/audio/use-audio-session";
 import { useAutoAudio } from "@/hooks/audio/use-auto-audio";
-import { ProfileSheetProvider, useProfileSheet } from "@/hooks/use-profile-sheet";
 import { HamburgerMenuProvider } from "@/hooks/use-hamburger-menu";
+import {
+  ProfileSheetProvider,
+  useProfileSheet,
+} from "@/hooks/use-profile-sheet";
 import { authService } from "@/services/auth";
 import { LiveKitRoom } from "@livekit/react-native";
 import { useEffect, useState } from "react";
@@ -27,9 +31,14 @@ function AppContent() {
   }, []);
 
   const { connectionDetails } = useAutoAudio(userId, role, true);
+  const isAudioConnected = !!connectionDetails;
+  const audioSessionValue = {
+    connectionDetails,
+    isConnected: isAudioConnected,
+  };
 
   return (
-    <>
+    <AudioSessionProvider value={audioSessionValue}>
       {showHeader ? <AnimatedHeader currentIndex={index} /> : null}
       {connectionDetails ? (
         <View style={styles.livekitHost}>
@@ -51,7 +60,7 @@ function AppContent() {
         onHeaderVisibilityChange={setShowHeader}
       />
       <ProfileSheet ref={sheetRef} userId={userId} role={role} />
-    </>
+    </AudioSessionProvider>
   );
 }
 

@@ -7,6 +7,7 @@ import { useCreatePorte } from "@/hooks/api/use-create-porte";
 import { useRemoveEtageFromImmeuble } from "@/hooks/api/use-remove-etage-from-immeuble";
 import { useRemovePorteFromEtage } from "@/hooks/api/use-remove-porte-from-etage";
 import { useUpdatePorte } from "@/hooks/api/use-update-porte";
+import { useRecording } from "@/hooks/audio/use-recording";
 import type {
   CreatePorteInput,
   Immeuble,
@@ -217,6 +218,15 @@ export default function ImmeubleDetailsView({
   const fabHintOpacity = useRef(new Animated.Value(0)).current;
   const progressFill = useRef(new Animated.Value(0)).current;
   const doorPagerRef = useRef<FlatList<Porte>>(null);
+  const {
+    isRecording,
+    isStarting,
+    isStopping,
+    error: recordingError,
+  } = useRecording({
+    enabled: true,
+    immeubleId: immeuble.id,
+  });
   const { add: addEtageToImmeuble, loading: addingEtage } =
     useAddEtageToImmeuble();
   const { create: createPorte, loading: creatingPorte } = useCreatePorte();
@@ -1610,7 +1620,7 @@ export default function ImmeubleDetailsView({
               <Feather name="grid" size={22} color="#2563EB" />
             </View>
             <View style={styles.floorPlanHeroText}>
-              <Text style={styles.floorPlanTitle}>Plan de l'immeuble</Text>
+              <Text style={styles.floorPlanTitle}>Plan de l&apos;immeuble</Text>
               <Text style={styles.floorPlanSubtitle}>
                 {sortedPortes.length} portes • {portesParEtage.length} etages
               </Text>
@@ -2470,7 +2480,6 @@ const styles = StyleSheet.create({
   doorPagerWrap: {
     paddingVertical: 12,
   },
-  doorPagerContent: {},
   doorPage: {
     paddingVertical: 6,
     paddingHorizontal: 8,

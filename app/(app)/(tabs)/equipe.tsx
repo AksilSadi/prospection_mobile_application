@@ -1,6 +1,6 @@
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
-import type { Commercial, Manager, Statistic } from "@/types/api";
+import type { Manager, Statistic } from "@/types/api";
 import { calculateRank } from "@/utils/business/ranks";
 import { Feather } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type PeriodKey = "7d" | "30d" | "90d" | "all";
 
-const PERIOD_OPTIONS: Array<{ key: PeriodKey; label: string }> = [
+const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
   { key: "7d", label: "7j" },
   { key: "30d", label: "30j" },
   { key: "90d", label: "90j" },
@@ -159,13 +159,6 @@ export default function EquipeScreen() {
         { paddingBottom: insets.bottom + 24 },
       ]}
     >
-      <View style={styles.headerBlock}>
-        <Text style={styles.title}>Équipe</Text>
-        <Text style={styles.subtitle}>
-          Suivi des performances de votre équipe commerciale.
-        </Text>
-      </View>
-
       <View style={styles.periodRow}>
         {PERIOD_OPTIONS.map((option) => {
           const selected = period === option.key;
@@ -198,7 +191,9 @@ export default function EquipeScreen() {
           </Text>
           <Text style={styles.kpiLabelPrimary}>Effectif</Text>
         </View>
-        <View style={[styles.kpiCardSecondary, isTablet && styles.kpiCardTablet]}>
+        <View
+          style={[styles.kpiCardSecondary, isTablet && styles.kpiCardTablet]}
+        >
           <View style={styles.kpiIconSecondary}>
             <Feather name="award" size={18} color="#2563EB" />
           </View>
@@ -281,7 +276,9 @@ export default function EquipeScreen() {
 
         {teamSnapshots.length === 0 ? (
           <View style={styles.emptyInline}>
-            <Text style={styles.emptyInlineText}>Aucun commercial assigné.</Text>
+            <Text style={styles.emptyInlineText}>
+              Aucun commercial assigné.
+            </Text>
           </View>
         ) : (
           <View style={styles.list}>
