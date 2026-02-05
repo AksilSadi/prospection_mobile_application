@@ -1,9 +1,10 @@
 import { gql } from "@/services/core/graphql";
-import type { Porte, Statistic } from "@/types/api";
+import type { Porte, Statistic, TimelinePoint } from "@/types/api";
 import {
   GET_PORTES_MODIFIED_TODAY,
   GET_PORTES_RDV_TODAY,
   GET_STATISTICS,
+  GET_STATS_TIMELINE_BY_COMMERCIAL,
 } from "./statistic.queries";
 
 export const statisticApi = {
@@ -28,5 +29,17 @@ export const statisticApi = {
       GET_PORTES_RDV_TODAY,
     );
     return response.portesRdvToday;
+  },
+
+  async getStatsTimelineByCommercial(
+    commercialId: number,
+    startDate?: string,
+    endDate?: string,
+  ): Promise<TimelinePoint[]> {
+    const response = await gql<
+      { statsTimelineByCommercial: TimelinePoint[] },
+      { commercialId: number; startDate?: string; endDate?: string }
+    >(GET_STATS_TIMELINE_BY_COMMERCIAL, { commercialId, startDate, endDate });
+    return response.statsTimelineByCommercial;
   },
 };

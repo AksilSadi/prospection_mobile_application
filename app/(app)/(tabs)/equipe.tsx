@@ -119,14 +119,11 @@ export default function EquipeScreen() {
     return teamSnapshots.reduce(
       (acc, commercial) => ({
         contratsSignes: acc.contratsSignes + commercial.stats.contratsSignes,
-        immeublesVisites:
-          acc.immeublesVisites + commercial.stats.immeublesVisites,
+        immeublesVisites: acc.immeublesVisites + commercial.stats.immeublesVisites,
         rendezVousPris: acc.rendezVousPris + commercial.stats.rendezVousPris,
         refus: acc.refus + commercial.stats.refus,
-        nbImmeublesProspectes:
-          acc.nbImmeublesProspectes + commercial.stats.nbImmeublesProspectes,
-        nbPortesProspectes:
-          acc.nbPortesProspectes + commercial.stats.nbPortesProspectes,
+        nbImmeublesProspectes: acc.nbImmeublesProspectes + commercial.stats.nbImmeublesProspectes,
+        nbPortesProspectes: acc.nbPortesProspectes + commercial.stats.nbPortesProspectes,
       }),
       { ...INITIAL_STATS },
     );
@@ -222,7 +219,7 @@ export default function EquipeScreen() {
             {loading ? "—" : teamTotals.nbPortesProspectes}
           </Text>
           <Text style={styles.kpiLabelLight}>Portes prospectées</Text>
-        </View>
+        </View> 
       </View>
 
       {topPerformer ? (

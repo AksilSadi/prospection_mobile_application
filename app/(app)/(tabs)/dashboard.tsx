@@ -3,14 +3,16 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { authService } from "@/services/auth";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
+import { useCommercialTimeline } from "@/hooks/api/use-commercial-timeline";
 import { calculateRank, RANKS } from "@/utils/business/ranks";
-import type { Commercial, Manager } from "@/types/api";
+import type { Commercial, Manager, TimelinePoint } from "@/types/api";
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 
 export default function DashboardScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const [period, setPeriod] = useState<"7d" | "30d">("7d");
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -23,6 +25,20 @@ export default function DashboardScreen() {
   }, []);
 
   const { data: profile, loading } = useWorkspaceProfile(userId, role);
+  const commercialId = role === "commercial" ? userId : null;
+  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const { startDate, endDate } = useMemo(() => {
+    const days = period === "30d" ? 30 : 7;
+    const end = new Date(`${todayKey}T23:59:59.999Z`);
+    const start = new Date(end);
+    start.setDate(start.getDate() - (days - 1));
+    return { startDate: start.toISOString(), endDate: end.toISOString() };
+  }, [period, todayKey]);
+  const { data: timeline, loading: loadingTimeline } = useCommercialTimeline(
+    commercialId,
+    startDate,
+    endDate,
+  );
 
   const isManager = role === "manager";
   const stats = useMemo(() => {
@@ -73,6 +89,42 @@ export default function DashboardScreen() {
   const currentRankIndex = RANKS.findIndex((r) => r.name === rankInfo.name);
   const nextRank = RANKS[currentRankIndex + 1];
 
+  const timelineBuckets = useMemo(() => {
+    const days = period === "30d" ? 30 : 7;
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    const start = new Date(end);
+    start.setDate(end.getDate() - (days - 1));
+
+    const byDay = new Map<string, TimelinePoint>();
+    (timeline || []).forEach((point) => {
+      const dayKey = point.date.slice(0, 10);
+      byDay.set(dayKey, point);
+    });
+
+    const items: Array<{
+      date: string;
+      rdvPris: number;
+      portes: number;
+    }> = [];
+
+    for (let i = 0; i < days; i += 1) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const key = d.toISOString().slice(0, 10);
+      const point = byDay.get(key);
+      items.push({
+        date: key,
+        rdvPris: point?.rdvPris || 0,
+        portes: point?.portesProspectees || 0,
+      });
+    }
+    return items;
+  }, [period, timeline]);
+
+  const maxRdv = Math.max(1, ...timelineBuckets.map((item) => item.rdvPris));
+  const maxPortes = Math.max(1, ...timelineBuckets.map((item) => item.portes));
+
   if (loading || !profile) {
     return (
       <View style={styles.container}>
@@ -122,6 +174,93 @@ export default function DashboardScreen() {
               <Text style={styles.progressText}>{rankInfo.pointsToNext} points restants</Text>
             </View>
           )}
+        </View>
+
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <View style={styles.sectionTitleWrap}>
+              <Text style={styles.sectionTitle}>Activité</Text>
+              <Text style={styles.sectionSubtitle}>
+                RDV pris & portes prospectées par jour
+              </Text>
+            </View>
+            <View style={styles.periodRow}>
+              <Pressable
+                style={[styles.periodChip, period === "7d" && styles.periodChipActive]}
+                onPress={() => setPeriod("7d")}
+              >
+                <Text
+                  style={[
+                    styles.periodChipText,
+                    period === "7d" && styles.periodChipTextActive,
+                  ]}
+                >
+                  7j
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.periodChip, period === "30d" && styles.periodChipActive]}
+                onPress={() => setPeriod("30d")}
+              >
+                <Text
+                  style={[
+                    styles.periodChipText,
+                    period === "30d" && styles.periodChipTextActive,
+                  ]}
+                >
+                  30j
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: "#2563EB" }]} />
+              <Text style={styles.legendLabel}>RDV pris</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: "#10B981" }]} />
+              <Text style={styles.legendLabel}>Portes prospectées</Text>
+            </View>
+          </View>
+
+          <View style={styles.chartRow}>
+            {timelineBuckets.map((item, index) => (
+              <View key={item.date} style={styles.chartItem}>
+                <View style={styles.chartBars}>
+                  <View
+                    style={[
+                      styles.chartBar,
+                      {
+                        height: `${Math.max(12, (item.rdvPris / maxRdv) * 100)}%`,
+                        backgroundColor: "#2563EB",
+                      },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.chartBar,
+                      {
+                        height: `${Math.max(12, (item.portes / maxPortes) * 100)}%`,
+                        backgroundColor: "#10B981",
+                      },
+                    ]}
+                  />
+                </View>
+                {period === "7d" ? (
+                  <Text style={styles.chartLabel}>{index + 1}</Text>
+                ) : (
+                  <Text style={styles.chartLabel}>
+                    {item.date.slice(8, 10)}
+                  </Text>
+                )}
+              </View>
+            ))}
+            {loadingTimeline && (
+              <Text style={styles.chartHelper}>Chargement…</Text>
+            )}
+          </View>
         </View>
       </ScrollView>
 
@@ -191,6 +330,112 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
+  },
+  sectionCard: {
+    marginTop: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  sectionTitleWrap: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  periodRow: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  periodChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+  },
+  periodChipActive: {
+    borderColor: "#2563EB",
+    backgroundColor: "#2563EB",
+  },
+  periodChipText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  periodChipTextActive: {
+    color: "#FFFFFF",
+  },
+  legendRow: {
+    flexDirection: "row",
+    gap: 14,
+    marginTop: 12,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendLabel: {
+    fontSize: 11,
+    color: "#64748B",
+  },
+  chartRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    marginTop: 12,
+    minHeight: 140,
+  },
+  chartItem: {
+    flex: 1,
+    alignItems: "center",
+    gap: 6,
+  },
+  chartBars: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 4,
+    height: 110,
+    width: "100%",
+    justifyContent: "center",
+  },
+  chartBar: {
+    width: 8,
+    borderRadius: 6,
+  },
+  chartLabel: {
+    fontSize: 10,
+    color: "#94A3B8",
+  },
+  chartHelper: {
+    fontSize: 11,
+    color: "#94A3B8",
+    marginLeft: 8,
   },
   rankHeader: {
     flexDirection: "row",

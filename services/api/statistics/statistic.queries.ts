@@ -58,3 +58,25 @@ export const GET_PORTES_RDV_TODAY = `
     }
   }
 `;
+
+export const GET_STATS_TIMELINE_BY_COMMERCIAL = `
+  query StatsTimelineByCommercial(
+    $commercialId: Int!
+    $startDate: DateTime
+    $endDate: DateTime
+  ) {
+    statsTimelineByCommercial(
+      commercialId: $commercialId
+      startDate: $startDate
+      endDate: $endDate
+    ) {
+      date
+      rdvPris
+      portesProspectees
+      contratsSignes
+      refus
+      absents
+      argumentes
+    }
+  }
+`;

@@ -47,6 +47,16 @@ export type Statistic = {
   updatedAt?: string;
 };
 
+export type TimelinePoint = {
+  date: string;
+  rdvPris: number;
+  portesProspectees: number;
+  contratsSignes: number;
+  refus: number;
+  absents: number;
+  argumentes: number;
+};
+
 export type Zone = {
   id: number;
   nom: string;
