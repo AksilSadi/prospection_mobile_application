@@ -3,16 +3,19 @@ import { useCommercialTimeline } from "@/hooks/api/use-commercial-timeline";
 import { authService } from "@/services/auth";
 import type { Statistic, TimelinePoint } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import { Calendar } from "react-native-calendars";
-import { LineChart } from "react-native-gifted-charts";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useIsFocused } from "@react-navigation/native";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Pie,
-  PolarChart,
-} from "victory-native";
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import { Calendar } from "react-native-calendars";
+import { BarChart, LineChart } from "react-native-gifted-charts";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pie, PolarChart } from "victory-native";
 
 export default function StatistiquesScreen() {
   const insets = useSafeAreaInsets();
@@ -221,13 +224,41 @@ export default function StatistiquesScreen() {
   }, [chartDomain]);
 
   const yAxisLabels = useMemo(() => {
-    return [0, yAxisStep, chartDomain.y[1]].map((val) => String(val));
+    return [chartDomain.y[1], yAxisStep, 0].map((val) => String(val));
   }, [chartDomain, yAxisStep]);
+
+  const maxContrats = useMemo(() => {
+    return timelineBuckets.reduce(
+      (max, item) => Math.max(max, item.contrats),
+      0,
+    );
+  }, [timelineBuckets]);
+
+  const contratsDomain = useMemo(() => {
+    const maxVal = Math.max(1, maxContrats);
+    const exponent = Math.floor(Math.log10(maxVal));
+    const base = maxVal / Math.pow(10, exponent);
+    const stepBase = base <= 1 ? 1 : base <= 2 ? 2 : base <= 5 ? 5 : 10;
+    const step = stepBase * Math.pow(10, exponent);
+    const roundedMax = Math.max(step * 2, Math.ceil(maxVal / step) * step);
+    return { y: [0, roundedMax] as [number, number] };
+  }, [maxContrats]);
+
+  const contratsStep = useMemo(() => {
+    return Math.max(1, Math.round(contratsDomain.y[1] / 2));
+  }, [contratsDomain]);
+
+  const contratsYAxisLabels = useMemo(() => {
+    return [contratsDomain.y[1], contratsStep, 0].map((val) => String(val));
+  }, [contratsDomain, contratsStep]);
 
   const rangeLabel = useMemo(() => {
     if (!timelineBuckets.length) return "—";
     const start = formatDayLabel(timelineBuckets[0].date, true);
-    const end = formatDayLabel(timelineBuckets[timelineBuckets.length - 1].date, true);
+    const end = formatDayLabel(
+      timelineBuckets[timelineBuckets.length - 1].date,
+      true,
+    );
     return `${start} - ${end}`;
   }, [timelineBuckets]);
 
@@ -239,6 +270,20 @@ export default function StatistiquesScreen() {
     }));
   }, [axisLabels, timelineBuckets]);
 
+  const rdvChartData = useMemo(() => {
+    return timelineBuckets.map((item, index) => ({
+      value: item.rdvPris,
+      label: axisLabels[index] ?? "",
+    }));
+  }, [axisLabels, timelineBuckets]);
+
+  const contratsChartData = useMemo(() => {
+    return timelineBuckets.map((item, index) => ({
+      value: item.contrats,
+      label: axisLabels[index] ?? "",
+    }));
+  }, [axisLabels, timelineBuckets]);
+
   return (
     <ScrollView
       style={styles.container}
@@ -247,11 +292,6 @@ export default function StatistiquesScreen() {
         { paddingBottom: insets.bottom + 24 },
       ]}
     >
-      <View style={styles.headerBlock}>
-        <Text style={styles.title}>Statistiques</Text>
-        <Text style={styles.subtitle}>KPIs & tendances commerciales.</Text>
-      </View>
-
       <View style={styles.kpiGrid}>
         <View style={styles.kpiCard}>
           <View style={styles.kpiHeader}>
@@ -260,7 +300,9 @@ export default function StatistiquesScreen() {
               <Feather name="home" size={18} color="#2563EB" />
             </View>
           </View>
-          <Text style={styles.kpiValue}>{isLoading ? "--" : immeublesProspectes}</Text>
+          <Text style={styles.kpiValue}>
+            {isLoading ? "--" : immeublesProspectes}
+          </Text>
           <Text style={styles.kpiHint}>Total prospectés</Text>
         </View>
         <View style={styles.kpiCard}>
@@ -270,7 +312,9 @@ export default function StatistiquesScreen() {
               <Feather name="grid" size={18} color="#2563EB" />
             </View>
           </View>
-          <Text style={styles.kpiValue}>{isLoading ? "--" : portesProspectees}</Text>
+          <Text style={styles.kpiValue}>
+            {isLoading ? "--" : portesProspectees}
+          </Text>
           <Text style={styles.kpiHint}>Total prospectées</Text>
         </View>
         <View style={styles.kpiCard}>
@@ -353,7 +397,9 @@ export default function StatistiquesScreen() {
             animationDuration={350}
             spacing={Math.max(
               28,
-              Math.floor((chartWidth - 80) / Math.max(1, portesChartData.length - 1)),
+              Math.floor(
+                (chartWidth - 80) / Math.max(1, portesChartData.length - 1),
+              ),
             )}
             initialSpacing={12}
             endSpacing={12}
@@ -390,6 +436,95 @@ export default function StatistiquesScreen() {
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeaderRow}>
           <View>
+            <Text style={styles.sectionTitle}>Rendez-vous / jour</Text>
+            <Text style={styles.sectionSubtitle}>{rangeLabel}</Text>
+          </View>
+        </View>
+        <View style={styles.giftedChartWrap}>
+          <BarChart
+            data={rdvChartData}
+            barWidth={16}
+            spacing={Math.max(
+              22,
+              Math.floor(
+                (chartWidth - 80) / Math.max(1, rdvChartData.length - 1),
+              ),
+            )}
+            initialSpacing={10}
+            endSpacing={10}
+            height={180}
+            maxValue={chartDomain.y[1]}
+            noOfSections={2}
+            stepValue={yAxisStep}
+            yAxisLabelWidth={32}
+            yAxisTextStyle={styles.yAxisLabel}
+            yAxisColor="transparent"
+            yAxisThickness={0}
+            xAxisColor="transparent"
+            xAxisThickness={0}
+            xAxisLabelTextStyle={styles.axisLabel}
+            showYAxisIndices={false}
+            isAnimated
+            animationDuration={350}
+            frontColor="#10B981"
+            hideRules
+            rulesColor="transparent"
+            yAxisLabelTexts={yAxisLabels}
+          />
+        </View>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={styles.sectionTitle}>Contrats signés / jour</Text>
+            <Text style={styles.sectionSubtitle}>{rangeLabel}</Text>
+          </View>
+        </View>
+        <View style={styles.giftedChartWrap}>
+          <LineChart
+            data={contratsChartData}
+            areaChart
+            curved
+            thickness={2}
+            color="#F59E0B"
+            startFillColor="rgba(245, 158, 11, 0.18)"
+            endFillColor="rgba(245, 158, 11, 0)"
+            startOpacity={0.25}
+            endOpacity={0}
+            maxValue={chartDomain.y[1]}
+            noOfSections={2}
+            stepValue={yAxisStep}
+            yAxisLabelWidth={32}
+            yAxisTextStyle={styles.yAxisLabel}
+            yAxisColor="transparent"
+            yAxisThickness={0}
+            xAxisColor="transparent"
+            xAxisThickness={0}
+            hideRules
+            rulesColor="transparent"
+            yAxisLabelTexts={yAxisLabels}
+            xAxisLabelTextStyle={styles.axisLabel}
+            showYAxisIndices={false}
+            spacing={Math.max(
+              28,
+              Math.floor(
+                (chartWidth - 80) / Math.max(1, contratsChartData.length - 1),
+              ),
+            )}
+            initialSpacing={12}
+            endSpacing={12}
+            hideDataPoints
+            isAnimated
+            animateOnDataChange
+            animationDuration={350}
+          />
+        </View>
+      </View>
+
+      <View style={styles.sectionCard}>
+        <View style={styles.sectionHeaderRow}>
+          <View>
             <Text style={styles.sectionTitle}>Calendrier RDV</Text>
             <Text style={styles.sectionSubtitle}>Jours avec rendez-vous</Text>
           </View>
@@ -418,11 +553,18 @@ export default function StatistiquesScreen() {
         <View style={styles.sectionHeaderRow}>
           <View>
             <Text style={styles.sectionTitle}>Répartition des statuts</Text>
-            <Text style={styles.sectionSubtitle}>Contrats, RDV, refus, absents</Text>
+            <Text style={styles.sectionSubtitle}>
+              Contrats, RDV, refus, absents
+            </Text>
           </View>
         </View>
         <View style={styles.chartCard}>
-          <View style={[styles.chartSurface, { width: pieRenderSize, height: pieRenderSize }]}>
+          <View
+            style={[
+              styles.chartSurface,
+              { width: pieRenderSize, height: pieRenderSize },
+            ]}
+          >
             <PolarChart
               data={pieData}
               labelKey="label"
@@ -438,7 +580,9 @@ export default function StatistiquesScreen() {
             <View style={styles.pieLegend}>
               {piePercentages.map((item) => (
                 <View key={item.label} style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                  <View
+                    style={[styles.legendDot, { backgroundColor: item.color }]}
+                  />
                   <Text style={styles.legendLabel}>
                     {item.label} · {item.percent}%
                   </Text>
@@ -584,7 +728,7 @@ const styles = StyleSheet.create({
   },
   chartCard: {
     alignItems: "center",
-    },
+  },
   chartSurface: {
     alignSelf: "center",
     backgroundColor: "#FFFFFF",

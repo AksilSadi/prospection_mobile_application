@@ -429,8 +429,17 @@ export default function ImmeubleDetailsView({
     if (!value) return "Choisir une heure";
     return value;
   };
-  const getDateValue = (value: string) =>
-    value ? new Date(`${value}T00:00:00`) : new Date();
+  const getDateValue = (value: string) => {
+    if (!value) return new Date();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return new Date(`${value}T00:00:00`);
+    }
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+    return new Date();
+  };
   const getTimeValue = (value: string) => {
     if (!value) return new Date();
     const [hh, mm] = value.split(":");
