@@ -1,4 +1,5 @@
-ï»¿import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
+import { useCommercialTimeline } from "@/hooks/api/use-commercial-timeline";
+import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
 import type { Commercial, Manager } from "@/types/api";
 import { calculateRank, RANKS } from "@/utils/business/ranks";
@@ -60,6 +61,7 @@ function SimpleBarChart({
 export default function DashboardScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [period, setPeriod] = useState<"7d" | "30d">("7d");
   const [activeChartIndex, setActiveChartIndex] = useState(0);
   const chartScrollRef = useRef<GestureScrollView>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -298,7 +300,7 @@ export default function DashboardScreen() {
               <View style={styles.chartHeader}>
                 <Feather name="bar-chart-2" size={20} color="#2563EB" />
                 <Text style={styles.chartTitle}>
-                  Portes prospectÃ©es cette semaine
+                  Portes prospectées cette semaine
                 </Text>
               </View>
               <SimpleBarChart data={weeklyData} />
@@ -310,7 +312,7 @@ export default function DashboardScreen() {
                 <Feather name="file-text" size={20} color="#10B981" />
                 <View style={styles.chartTitleContainer}>
                   <Text style={styles.chartTitle}>
-                    Contrats signÃ©s cette semaine
+                    Contrats signés cette semaine
                   </Text>
                   <View style={styles.conversionContainer}>
                     <View style={styles.conversionBadge}>
@@ -374,7 +376,7 @@ export default function DashboardScreen() {
               >
                 <Feather name="check-circle" size={16} color="#10B981" />
               </View>
-              <Text style={styles.formulaItemLabel}>Contrat signÃ©</Text>
+              <Text style={styles.formulaItemLabel}>Contrat signé</Text>
               <Text style={styles.formulaItemValue}>100 pts</Text>
             </View>
             <View style={styles.formulaItem}>
@@ -392,12 +394,12 @@ export default function DashboardScreen() {
               >
                 <Feather name="home" size={16} color="#3B82F6" />
               </View>
-              <Text style={styles.formulaItemLabel}>Immeuble visitÃ©</Text>
+              <Text style={styles.formulaItemLabel}>Immeuble visité</Text>
               <Text style={styles.formulaItemValue}>5 pts</Text>
             </View>
           </View>
           <Text style={styles.formulaNote}>
-            Votre rang est calculÃ© en fonction de ces actions. Plus vous Ãªtes
+            Votre rang est calculé en fonction de ces actions. Plus vous êtes
             actif, plus vous gagnez de points !
           </Text>
         </BottomSheetView>
@@ -417,14 +419,14 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.explanationCard}>
             <Text style={styles.explanationTitle}>
-              Comment est-il calculÃ© ?
+              Comment est-il calculé ?
             </Text>
             <Text style={styles.explanationText}>
-              Le taux de conversion mesure l'efficacitÃ© de votre prospection.
+              Le taux de conversion mesure l'efficacité de votre prospection.
             </Text>
             <View style={styles.formulaBox}>
               <Text style={styles.formulaText}>
-                (Portes avec contrats Ã· Portes visitÃ©es) Ã— 100
+                (Portes avec contrats ÷ Portes visitées) × 100
               </Text>
             </View>
             <Text style={styles.explanationExample}>
@@ -460,7 +462,7 @@ export default function DashboardScreen() {
                   ]}
                 />
                 <Text style={styles.performanceText}>
-                  {"<"} 10% = Ã€ amÃ©liorer
+                  {"<"} 10% = À améliorer
                 </Text>
               </View>
             </View>
@@ -908,3 +910,5 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 });
+
+
