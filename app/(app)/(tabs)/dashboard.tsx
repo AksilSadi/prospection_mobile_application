@@ -1,18 +1,69 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
+﻿import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
-import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
-import { useCommercialTimeline } from "@/hooks/api/use-commercial-timeline";
+import type { Commercial, Manager } from "@/types/api";
 import { calculateRank, RANKS } from "@/utils/business/ranks";
-import type { Commercial, Manager, TimelinePoint } from "@/types/api";
+import { Feather } from "@expo/vector-icons";
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Dimensions,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { ScrollView as GestureScrollView } from "react-native-gesture-handler";
+
+const SCREEN_WIDTH = Dimensions.get("window").width;
+
+type WeeklyData = {
+  day: string;
+  doors: number;
+};
+
+// Simple custom bar chart component
+function SimpleBarChart({
+  data,
+  color = "#2563EB",
+}: {
+  data: WeeklyData[];
+  color?: string;
+}) {
+  const maxValue = Math.max(...data.map((d) => d.doors), 1);
+
+  return (
+    <View style={styles.chartContainer}>
+      {data.map((item, index) => {
+        const barHeight = (item.doors / maxValue) * 140;
+        return (
+          <View key={index} style={styles.barColumn}>
+            <View style={styles.barValueContainer}>
+              <Text style={[styles.barValue, { color }]}>{item.doors}</Text>
+            </View>
+            <View style={styles.barWrapper}>
+              <View
+                style={[
+                  styles.bar,
+                  { height: barHeight, backgroundColor: color },
+                ]}
+              />
+            </View>
+            <Text style={styles.dayLabel}>{item.day}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function DashboardScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [activeChartIndex, setActiveChartIndex] = useState(0);
+  const chartScrollRef = useRef<GestureScrollView>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const [period, setPeriod] = useState<"7d" | "30d">("7d");
+  const conversionSheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -47,7 +98,9 @@ export default function DashboardScreen() {
     }
 
     const statsArray = isManager
-      ? (profile as Manager).personalStatistics || (profile as Manager).statistics || []
+      ? (profile as Manager).personalStatistics ||
+        (profile as Manager).statistics ||
+        []
       : (profile as Commercial).statistics || [];
 
     return statsArray.reduce(
@@ -56,13 +109,19 @@ export default function DashboardScreen() {
         immeublesVisites: acc.immeublesVisites + (stat.immeublesVisites || 0),
         rendezVousPris: acc.rendezVousPris + (stat.rendezVousPris || 0),
       }),
-      { contratsSignes: 0, immeublesVisites: 0, rendezVousPris: 0 }
+      { contratsSignes: 0, immeublesVisites: 0, rendezVousPris: 0 },
     );
   }, [profile, isManager]);
 
   const rankInfo = useMemo(() => {
-    const result = calculateRank(stats.contratsSignes, stats.rendezVousPris, stats.immeublesVisites);
-    const currentRankIndex = RANKS.findIndex((r) => r.name === result.rank.name);
+    const result = calculateRank(
+      stats.contratsSignes,
+      stats.rendezVousPris,
+      stats.immeublesVisites,
+    );
+    const currentRankIndex = RANKS.findIndex(
+      (r) => r.name === result.rank.name,
+    );
     const nextRank = RANKS[currentRankIndex + 1];
     const isMaxRank = !nextRank;
 
@@ -89,41 +148,71 @@ export default function DashboardScreen() {
   const currentRankIndex = RANKS.findIndex((r) => r.name === rankInfo.name);
   const nextRank = RANKS[currentRankIndex + 1];
 
-  const timelineBuckets = useMemo(() => {
-    const days = period === "30d" ? 30 : 7;
-    const end = new Date();
-    end.setHours(0, 0, 0, 0);
-    const start = new Date(end);
-    start.setDate(end.getDate() - (days - 1));
+  // Calculate weekly data from real backend data
+  const { weeklyData, weeklyContracts, conversionRate } = useMemo(() => {
+    if (!profile) {
+      return {
+        weeklyData: [],
+        weeklyContracts: [],
+        conversionRate: "0.0",
+      };
+    }
 
-    const byDay = new Map<string, TimelinePoint>();
-    (timeline || []).forEach((point) => {
-      const dayKey = point.date.slice(0, 10);
-      byDay.set(dayKey, point);
+    const immeubles = isManager
+      ? (profile as Manager).immeubles || []
+      : (profile as Commercial).immeubles || [];
+
+    // Get all doors from all buildings
+    const allDoors = immeubles.flatMap((immeuble) => immeuble.portes || []);
+
+    // Get dates for the last 7 days
+    const today = new Date();
+    const dayNames = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (6 - i));
+      return {
+        date: date.toISOString().split("T")[0],
+        dayName: dayNames[date.getDay()],
+      };
     });
 
-    const items: Array<{
-      date: string;
-      rdvPris: number;
-      portes: number;
-    }> = [];
+    // Count doors visited per day
+    const doorsPerDay = last7Days.map(({ date, dayName }) => {
+      const count = allDoors.filter((door) => {
+        if (!door.derniereVisite) return false;
+        const visitDate = door.derniereVisite.split("T")[0];
+        return visitDate === date;
+      }).length;
+      return { day: dayName, doors: count };
+    });
 
-    for (let i = 0; i < days; i += 1) {
-      const d = new Date(start);
-      d.setDate(start.getDate() + i);
-      const key = d.toISOString().slice(0, 10);
-      const point = byDay.get(key);
-      items.push({
-        date: key,
-        rdvPris: point?.rdvPris || 0,
-        portes: point?.portesProspectees || 0,
+    // Count doors with contracts (nbContrats > 0)
+    // Note: We don't have contract dates, so we show total contracts per building visited each day
+    const contractsPerDay = last7Days.map(({ date, dayName }) => {
+      const doorsVisited = allDoors.filter((door) => {
+        if (!door.derniereVisite) return false;
+        const visitDate = door.derniereVisite.split("T")[0];
+        return visitDate === date;
       });
-    }
-    return items;
-  }, [period, timeline]);
+      const contractCount = doorsVisited.filter(
+        (door) => (door.nbContrats || 0) > 0,
+      ).length;
+      return { day: dayName, doors: contractCount };
+    });
 
-  const maxRdv = Math.max(1, ...timelineBuckets.map((item) => item.rdvPris));
-  const maxPortes = Math.max(1, ...timelineBuckets.map((item) => item.portes));
+    // Calculate conversion rate
+    const totalDoors = doorsPerDay.reduce((sum, d) => sum + d.doors, 0);
+    const totalContracts = contractsPerDay.reduce((sum, d) => sum + d.doors, 0);
+    const rate =
+      totalDoors > 0 ? ((totalContracts / totalDoors) * 100).toFixed(1) : "0.0";
+
+    return {
+      weeklyData: doorsPerDay,
+      weeklyContracts: contractsPerDay,
+      conversionRate: rate,
+    };
+  }, [profile, isManager]);
 
   if (loading || !profile) {
     return (
@@ -139,9 +228,16 @@ export default function DashboardScreen() {
     bottomSheetRef.current?.snapToIndex(0);
   };
 
+  const handleOpenConversionInfo = () => {
+    conversionSheetRef.current?.snapToIndex(0);
+  };
+
   return (
     <>
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+      >
         {/* Rank Card - Compact */}
         <View style={styles.mainCard}>
           {/* Rank Header */}
@@ -156,7 +252,9 @@ export default function DashboardScreen() {
             <Pressable style={styles.infoButton} onPress={handleOpenInfo}>
               <Feather name="info" size={18} color="#2563EB" />
             </Pressable>
-            {rankInfo.isMaxRank && <Feather name="check-circle" size={20} color="#10B981" />}
+            {rankInfo.isMaxRank && (
+              <Feather name="check-circle" size={20} color="#10B981" />
+            )}
           </View>
 
           {/* Progress Bar */}
@@ -168,104 +266,102 @@ export default function DashboardScreen() {
               </View>
               <View style={styles.progressBar}>
                 <View
-                  style={[styles.progressFill, { width: `${rankInfo.progressPercent}%` }]}
+                  style={[
+                    styles.progressFill,
+                    { width: `${rankInfo.progressPercent}%` },
+                  ]}
                 />
               </View>
-              <Text style={styles.progressText}>{rankInfo.pointsToNext} points restants</Text>
+              <Text style={styles.progressText}>
+                {rankInfo.pointsToNext} points restants
+              </Text>
             </View>
           )}
         </View>
 
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={styles.sectionTitleWrap}>
-              <Text style={styles.sectionTitle}>Activité</Text>
-              <Text style={styles.sectionSubtitle}>
-                RDV pris & portes prospectées par jour
-              </Text>
-            </View>
-            <View style={styles.periodRow}>
-              <Pressable
-                style={[styles.periodChip, period === "7d" && styles.periodChipActive]}
-                onPress={() => setPeriod("7d")}
-              >
-                <Text
-                  style={[
-                    styles.periodChipText,
-                    period === "7d" && styles.periodChipTextActive,
-                  ]}
-                >
-                  7j
+        {/* Charts Slider */}
+        <View style={styles.chartCard}>
+          <GestureScrollView
+            ref={chartScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onScroll={(event) => {
+              const scrollPosition = event.nativeEvent.contentOffset.x;
+              const index = Math.round(scrollPosition / (SCREEN_WIDTH - 52));
+              setActiveChartIndex(index);
+            }}
+            scrollEventThrottle={16}
+          >
+            {/* Weekly Prospection Chart */}
+            <View style={[styles.chartSlide, { width: SCREEN_WIDTH - 72 }]}>
+              <View style={styles.chartHeader}>
+                <Feather name="bar-chart-2" size={20} color="#2563EB" />
+                <Text style={styles.chartTitle}>
+                  Portes prospectées cette semaine
                 </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.periodChip, period === "30d" && styles.periodChipActive]}
-                onPress={() => setPeriod("30d")}
-              >
-                <Text
-                  style={[
-                    styles.periodChipText,
-                    period === "30d" && styles.periodChipTextActive,
-                  ]}
-                >
-                  30j
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: "#2563EB" }]} />
-              <Text style={styles.legendLabel}>RDV pris</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: "#10B981" }]} />
-              <Text style={styles.legendLabel}>Portes prospectées</Text>
-            </View>
-          </View>
-
-          <View style={styles.chartRow}>
-            {timelineBuckets.map((item, index) => (
-              <View key={item.date} style={styles.chartItem}>
-                <View style={styles.chartBars}>
-                  <View
-                    style={[
-                      styles.chartBar,
-                      {
-                        height: `${Math.max(12, (item.rdvPris / maxRdv) * 100)}%`,
-                        backgroundColor: "#2563EB",
-                      },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.chartBar,
-                      {
-                        height: `${Math.max(12, (item.portes / maxPortes) * 100)}%`,
-                        backgroundColor: "#10B981",
-                      },
-                    ]}
-                  />
-                </View>
-                {period === "7d" ? (
-                  <Text style={styles.chartLabel}>{index + 1}</Text>
-                ) : (
-                  <Text style={styles.chartLabel}>
-                    {item.date.slice(8, 10)}
-                  </Text>
-                )}
               </View>
+              <SimpleBarChart data={weeklyData} />
+            </View>
+
+            {/* Weekly Contracts Chart */}
+            <View style={[styles.chartSlide, { width: SCREEN_WIDTH - 72 }]}>
+              <View style={styles.chartHeader}>
+                <Feather name="file-text" size={20} color="#10B981" />
+                <View style={styles.chartTitleContainer}>
+                  <Text style={styles.chartTitle}>
+                    Contrats signés cette semaine
+                  </Text>
+                  <View style={styles.conversionContainer}>
+                    <View style={styles.conversionBadge}>
+                      <Text style={styles.conversionRate}>
+                        {conversionRate}%
+                      </Text>
+                      <Text style={styles.conversionLabel}>
+                        taux conversion
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={styles.conversionInfoButton}
+                      onPress={handleOpenConversionInfo}
+                    >
+                      <Feather name="help-circle" size={16} color="#059669" />
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+              <SimpleBarChart data={weeklyContracts} color="#10B981" />
+            </View>
+          </GestureScrollView>
+
+          {/* Pagination Indicators */}
+          <View style={styles.paginationContainer}>
+            {[0, 1].map((index) => (
+              <Pressable
+                key={index}
+                onPress={() => {
+                  chartScrollRef.current?.scrollTo({
+                    x: index * (SCREEN_WIDTH - 72),
+                    animated: true,
+                  });
+                }}
+                style={[
+                  styles.paginationDot,
+                  activeChartIndex === index && styles.paginationDotActive,
+                ]}
+              />
             ))}
-            {loadingTimeline && (
-              <Text style={styles.chartHelper}>Chargement…</Text>
-            )}
           </View>
         </View>
       </ScrollView>
 
       {/* Info Bottom Sheet */}
-      <BottomSheet ref={bottomSheetRef} snapPoints={["40%"]} enablePanDownToClose index={-1}>
+      <BottomSheet
+        ref={bottomSheetRef}
+        snapPoints={["40%"]}
+        enablePanDownToClose
+        index={-1}
+      >
         <BottomSheetView style={styles.sheetContainer}>
           <View style={styles.sheetHeader}>
             <Feather name="info" size={20} color="#2563EB" />
@@ -273,21 +369,27 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.formulaGrid}>
             <View style={styles.formulaItem}>
-              <View style={[styles.formulaIcon, { backgroundColor: "#ECFDF5" }]}>
+              <View
+                style={[styles.formulaIcon, { backgroundColor: "#ECFDF5" }]}
+              >
                 <Feather name="check-circle" size={16} color="#10B981" />
               </View>
               <Text style={styles.formulaItemLabel}>Contrat signé</Text>
               <Text style={styles.formulaItemValue}>100 pts</Text>
             </View>
             <View style={styles.formulaItem}>
-              <View style={[styles.formulaIcon, { backgroundColor: "#F5F3FF" }]}>
+              <View
+                style={[styles.formulaIcon, { backgroundColor: "#F5F3FF" }]}
+              >
                 <Feather name="calendar" size={16} color="#8B5CF6" />
               </View>
               <Text style={styles.formulaItemLabel}>RDV pris</Text>
               <Text style={styles.formulaItemValue}>20 pts</Text>
             </View>
             <View style={styles.formulaItem}>
-              <View style={[styles.formulaIcon, { backgroundColor: "#EFF6FF" }]}>
+              <View
+                style={[styles.formulaIcon, { backgroundColor: "#EFF6FF" }]}
+              >
                 <Feather name="home" size={16} color="#3B82F6" />
               </View>
               <Text style={styles.formulaItemLabel}>Immeuble visité</Text>
@@ -295,8 +397,74 @@ export default function DashboardScreen() {
             </View>
           </View>
           <Text style={styles.formulaNote}>
-            Votre rang est calculé en fonction de ces actions. Plus vous êtes actif, plus vous gagnez de points !
+            Votre rang est calculé en fonction de ces actions. Plus vous êtes
+            actif, plus vous gagnez de points !
           </Text>
+        </BottomSheetView>
+      </BottomSheet>
+
+      {/* Conversion Rate Explanation Bottom Sheet */}
+      <BottomSheet
+        ref={conversionSheetRef}
+        snapPoints={["35%"]}
+        enablePanDownToClose
+        index={-1}
+      >
+        <BottomSheetView style={styles.sheetContainer}>
+          <View style={styles.sheetHeader}>
+            <Feather name="help-circle" size={20} color="#10B981" />
+            <Text style={styles.sheetTitle}>Taux de conversion</Text>
+          </View>
+          <View style={styles.explanationCard}>
+            <Text style={styles.explanationTitle}>
+              Comment est-il calculé ?
+            </Text>
+            <Text style={styles.explanationText}>
+              Le taux de conversion mesure l'efficacité de votre prospection.
+            </Text>
+            <View style={styles.formulaBox}>
+              <Text style={styles.formulaText}>
+                (Portes avec contrats ÷ Portes visitées) × 100
+              </Text>
+            </View>
+            <Text style={styles.explanationExample}>
+              <Text style={styles.boldText}>Exemple :</Text> Si vous visitez 100
+              portes et signez 13 contrats, votre taux est de 13%.
+            </Text>
+            <View style={styles.performanceIndicators}>
+              <View style={styles.performanceItem}>
+                <View
+                  style={[
+                    styles.performanceDot,
+                    { backgroundColor: "#10B981" },
+                  ]}
+                />
+                <Text style={styles.performanceText}>
+                  {">"} 20% = Excellent
+                </Text>
+              </View>
+              <View style={styles.performanceItem}>
+                <View
+                  style={[
+                    styles.performanceDot,
+                    { backgroundColor: "#F59E0B" },
+                  ]}
+                />
+                <Text style={styles.performanceText}>10-20% = Bon</Text>
+              </View>
+              <View style={styles.performanceItem}>
+                <View
+                  style={[
+                    styles.performanceDot,
+                    { backgroundColor: "#EF4444" },
+                  ]}
+                />
+                <Text style={styles.performanceText}>
+                  {"<"} 10% = À améliorer
+                </Text>
+              </View>
+            </View>
+          </View>
         </BottomSheetView>
       </BottomSheet>
     </>
@@ -510,10 +678,131 @@ const styles = StyleSheet.create({
     color: "#64748B",
     textAlign: "center",
   },
+  chartCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 40,
+    padding: 20,
+    marginTop: 20,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  chartSlide: {
+    paddingHorizontal: 0,
+  },
+  paginationContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 16,
+  },
+  paginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#E2E8F0",
+  },
+  paginationDotActive: {
+    width: 24,
+    backgroundColor: "#2563EB",
+  },
+  chartHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 20,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+    flex: 1,
+  },
+  chartTitleContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  conversionContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  conversionBadge: {
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  conversionRate: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#10B981",
+  },
+  conversionLabel: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "#059669",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  conversionInfoButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#F0FDF4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chartContainer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    height: 180,
+    paddingHorizontal: 4,
+  },
+  barColumn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-end",
+  },
+  barValueContainer: {
+    height: 24,
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  barValue: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  barWrapper: {
+    width: "100%",
+    paddingHorizontal: 4,
+    height: 140,
+    justifyContent: "flex-end",
+  },
+  bar: {
+    width: "100%",
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    minHeight: 4,
+  },
+  dayLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 8,
+  },
   sheetContainer: {
     flex: 1,
     paddingHorizontal: 20,
     paddingTop: 8,
+    paddingBottom: 200,
   },
   sheetHeader: {
     flexDirection: "row",
@@ -562,5 +851,60 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     textAlign: "center",
     paddingHorizontal: 10,
+  },
+  explanationCard: {
+    gap: 16,
+  },
+  explanationTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 4,
+  },
+  explanationText: {
+    fontSize: 14,
+    color: "#64748B",
+    lineHeight: 20,
+  },
+  formulaBox: {
+    backgroundColor: "#F0FDF4",
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#D1FAE5",
+  },
+  formulaText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#059669",
+    textAlign: "center",
+  },
+  explanationExample: {
+    fontSize: 13,
+    color: "#64748B",
+    lineHeight: 20,
+  },
+  boldText: {
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  performanceIndicators: {
+    gap: 8,
+    marginTop: 8,
+  },
+  performanceItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  performanceDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  performanceText: {
+    fontSize: 12,
+    color: "#64748B",
+    fontWeight: "500",
   },
 });
