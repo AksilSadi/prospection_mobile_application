@@ -13,6 +13,10 @@ export function useWorkspaceProfile(userId: number | null, role: string | null) 
       }
       return api.commercials.getFullById(userId);
     },
-    [userId, role]
+    [userId, role],
+    {
+      cacheKey: `workspace-profile:${role ?? "unknown"}:${userId ?? 0}`,
+      cacheTimeMs: 60_000,
+    },
   );
 }

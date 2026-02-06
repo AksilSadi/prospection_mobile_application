@@ -5,7 +5,7 @@ import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
 import type { Immeuble } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
@@ -25,6 +25,30 @@ type ImmeublesScreenProps = {
   onHeaderVisibilityChange?: (visible: boolean) => void;
 };
 
+type ListRow = { _type: "controls" } | Immeuble[];
+
+const CONTROLS_ROW_HEIGHT = 170;
+const DATA_ROW_HEIGHT = 208;
+
+const FILTER_CHIPS: {
+  key: string;
+  label: string;
+  icon: keyof typeof Feather.glyphMap;
+  color: string;
+}[] = [
+  { key: "all", label: "Tous", icon: "layers", color: "#2563EB" },
+  {
+    key: "incomplete",
+    label: "En cours",
+    icon: "activity",
+    color: "#2563EB",
+  },
+  { key: "low", label: "0-35%", icon: "trending-down", color: "#EF4444" },
+  { key: "mid", label: "35-70%", icon: "bar-chart-2", color: "#F59E0B" },
+  { key: "high", label: "70-99%", icon: "trending-up", color: "#22C55E" },
+  { key: "complete", label: "100%", icon: "check", color: "#16A34A" },
+];
+
 export default function ImmeublesScreen({
   isActive = true,
   onSwipeLockChange,
@@ -39,19 +63,6 @@ export default function ImmeublesScreen({
   const [query, setQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const FILTER_CHIPS = [
-    { key: "all", label: "Tous", icon: "layers", color: "#2563EB" },
-    {
-      key: "incomplete",
-      label: "En cours",
-      icon: "activity",
-      color: "#2563EB",
-    },
-    { key: "low", label: "0-35%", icon: "trending-down", color: "#EF4444" },
-    { key: "mid", label: "35-70%", icon: "bar-chart-2", color: "#F59E0B" },
-    { key: "high", label: "70-99%", icon: "trending-up", color: "#22C55E" },
-    { key: "complete", label: "100%", icon: "check", color: "#16A34A" },
-  ];
   const searchInputRef = useRef<TextInput | null>(null);
   const filterChipAnimsRef = useRef(new Map<string, Animated.Value>()).current;
   const [filtersVisible, setFiltersVisible] = useState(false);
@@ -119,6 +130,7 @@ export default function ImmeublesScreen({
   } = useWorkspaceProfile(userId, role);
   const { create, loading: creating } = useCreateImmeuble();
   const isProfileReady = userId !== null && role !== null;
+  const isInitialLoading = !isProfileReady || (loading && !profile);
 
   useEffect(() => {
     let isMounted = true;
@@ -240,9 +252,72 @@ export default function ImmeublesScreen({
     return pairs;
   }, [immeublesEnCours]);
 
-  const listData = useMemo(
+  const listData = useMemo<ListRow[]>(
     () => [{ _type: "controls" }, ...immeublePairs],
     [immeublePairs],
+  );
+
+  const getRowKey = useCallback((row: ListRow, index: number) => {
+    if (!Array.isArray(row)) {
+      return `controls-${index}`;
+    }
+    return row.map((immeuble) => String(immeuble.id)).join("-");
+  }, []);
+
+  const getItemLayout = useCallback(
+    (_data: ArrayLike<ListRow> | null | undefined, index: number) => {
+      if (index === 0) {
+        return { length: CONTROLS_ROW_HEIGHT, offset: 0, index };
+      }
+      return {
+        length: DATA_ROW_HEIGHT,
+        offset: CONTROLS_ROW_HEIGHT + (index - 1) * DATA_ROW_HEIGHT,
+        index,
+      };
+    },
+    [],
+  );
+
+  const progressByImmeubleId = useMemo(() => {
+    const entries: Record<
+      number,
+      { total: number; prospectees: number; progressPercent: number; progressColor: string }
+    > = {};
+
+    for (const immeuble of immeublesEnCours) {
+      const portes = immeuble.portes || [];
+      const total = portes.length || immeuble.nbEtages * immeuble.nbPortesParEtage;
+      const prospectees = portes.length
+        ? portes.filter((porte) => porte.statut !== "NON_VISITE").length
+        : 0;
+      const progressPercent =
+        total === 0 ? 0 : Math.round((prospectees / total) * 100);
+      const progressColor =
+        progressPercent < 35
+          ? "#EF4444"
+          : progressPercent < 70
+            ? "#F59E0B"
+            : "#22C55E";
+
+      entries[immeuble.id] = {
+        total,
+        prospectees,
+        progressPercent,
+        progressColor,
+      };
+    }
+
+    return entries;
+  }, [immeublesEnCours]);
+
+  const handleOpenImmeuble = useCallback(
+    (immeubleId: number) => {
+      onHeaderVisibilityChange?.(false);
+      onHamburgerVisibilityChange?.(false);
+      onSwipeLockChange?.(true);
+      setSelectedImmeubleId(immeubleId);
+    },
+    [onHamburgerVisibilityChange, onHeaderVisibilityChange, onSwipeLockChange],
   );
 
   const totalPortes = useMemo(() => {
@@ -260,6 +335,46 @@ export default function ImmeublesScreen({
     [immeubles, selectedImmeubleId],
   );
 
+  const handleCloseDetails = useCallback(() => {
+    if (isExitingDetails) return;
+    setIsExitingDetails(true);
+    Animated.parallel([
+      Animated.timing(detailsOpacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+      Animated.timing(detailsTranslate, {
+        toValue: 24,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setSelectedImmeubleId(null);
+      onSwipeLockChange?.(false);
+      onHamburgerVisibilityChange?.(true);
+      onHeaderVisibilityChange?.(true);
+      setIsExitingDetails(false);
+      if (detailsDirty) {
+        void refetch();
+        setDetailsDirty(false);
+      }
+    });
+  }, [
+    detailsDirty,
+    detailsOpacity,
+    detailsTranslate,
+    isExitingDetails,
+    onHamburgerVisibilityChange,
+    onHeaderVisibilityChange,
+    onSwipeLockChange,
+    refetch,
+  ]);
+
+  const handleRefreshImmeuble = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+
   if (selectedImmeuble) {
     return (
       <Animated.View
@@ -271,40 +386,15 @@ export default function ImmeublesScreen({
       >
         <ImmeubleDetailsView
           immeuble={selectedImmeuble}
-          onBack={() => {
-            if (isExitingDetails) return;
-            setIsExitingDetails(true);
-            Animated.parallel([
-              Animated.timing(detailsOpacity, {
-                toValue: 0,
-                duration: 180,
-                useNativeDriver: true,
-              }),
-              Animated.timing(detailsTranslate, {
-                toValue: 24,
-                duration: 180,
-                useNativeDriver: true,
-              }),
-            ]).start(() => {
-              setSelectedImmeubleId(null);
-              onSwipeLockChange?.(false);
-              onHamburgerVisibilityChange?.(true);
-              onHeaderVisibilityChange?.(true);
-              setIsExitingDetails(false);
-              if (detailsDirty) {
-                void refetch();
-                setDetailsDirty(false);
-              }
-            });
-          }}
+          onBack={handleCloseDetails}
           onDirtyChange={setDetailsDirty}
-          onRefreshImmeuble={() => void refetch()}
+          onRefreshImmeuble={handleRefreshImmeuble}
         />
       </Animated.View>
     );
   }
 
-  if (!isProfileReady || loading) {
+  if (isInitialLoading) {
     return (
       <View style={styles.container}>
         <View style={styles.skeletonHeader}>
@@ -334,15 +424,15 @@ export default function ImmeublesScreen({
           transform: [{ translateY: listTranslate }],
         }}
       >
-        <FlatList
+        <FlatList<ListRow>
           data={listData}
           windowSize={7}
           initialNumToRender={6}
           maxToRenderPerBatch={8}
+          updateCellsBatchingPeriod={24}
           removeClippedSubviews
-          keyExtractor={(item, index) =>
-            item._type ? `controls-${index}` : `pair-${index}`
-          }
+          keyExtractor={getRowKey}
+          getItemLayout={getItemLayout}
           contentContainerStyle={styles.content}
           stickyHeaderIndices={[1]}
           ListHeaderComponent={
@@ -382,8 +472,8 @@ export default function ImmeublesScreen({
               </View>
             ) : null
           }
-          renderItem={({ item: pair }) =>
-            pair._type === "controls" ? (
+          renderItem={({ item: row }) =>
+            !Array.isArray(row) ? (
               <View style={styles.controlsSticky}>
                 {!isSearchFocused && filtersVisible && (
                   <View style={styles.filterRow}>
@@ -498,26 +588,16 @@ export default function ImmeublesScreen({
               </View>
             ) : (
               <View style={styles.row}>
-                {pair.map((immeuble, index) => {
-                  const portes = immeuble.portes || [];
-                  const total =
-                    portes.length ||
-                    immeuble.nbEtages * immeuble.nbPortesParEtage;
-                  const prospectees = portes.length
-                    ? portes.filter((porte) => porte.statut !== "NON_VISITE")
-                        .length
-                    : 0;
-                  const progressPercent =
-                    total === 0 ? 0 : Math.round((prospectees / total) * 100);
-                  const progressColor =
-                    progressPercent < 35
-                      ? "#EF4444"
-                      : progressPercent < 70
-                        ? "#F59E0B"
-                        : "#22C55E";
-                  const cardLabel = `Appartement ${String.fromCharCode(65 + (index % 26))}`;
-                  const anim = getCardAnimation(immeuble.id);
-                  const animValue = anim;
+                {row.map((immeuble, index) => {
+                   const progress = progressByImmeubleId[immeuble.id] ?? {
+                     total: 0,
+                     prospectees: 0,
+                     progressPercent: 0,
+                     progressColor: "#22C55E",
+                   };
+                   const cardLabel = `Appartement ${String.fromCharCode(65 + (index % 26))}`;
+                   const anim = getCardAnimation(immeuble.id);
+                   const animValue = anim;
                   return (
                     <Animated.View
                       key={immeuble.id}
@@ -548,15 +628,10 @@ export default function ImmeublesScreen({
                         },
                       ]}
                     >
-                      <Pressable
-                        style={styles.card}
-                        onPress={() => {
-                          onHeaderVisibilityChange?.(false);
-                          onHamburgerVisibilityChange?.(false);
-                          onSwipeLockChange?.(true);
-                          setSelectedImmeubleId(immeuble.id);
-                        }}
-                      >
+                       <Pressable
+                         style={styles.card}
+                         onPress={() => handleOpenImmeuble(immeuble.id)}
+                       >
                         <View style={styles.cardHeader}>
                           <View style={styles.cardIcon}>
                             <Feather name="home" size={18} color="#2563EB" />
@@ -579,7 +654,7 @@ export default function ImmeublesScreen({
                               {immeuble.nbEtages} etages
                             </Text>
                             <Text style={styles.cardMeta}>•</Text>
-                            <Text style={styles.cardMeta}>{total} portes</Text>
+                             <Text style={styles.cardMeta}>{progress.total} portes</Text>
                           </View>
                           <View style={styles.progressRow}>
                             <View style={styles.progressTrack}>
@@ -587,27 +662,27 @@ export default function ImmeublesScreen({
                                 style={[
                                   styles.progressFill,
                                   {
-                                    width: `${progressPercent}%`,
-                                    backgroundColor: progressColor,
-                                  },
-                                ]}
-                              />
+                                      width: `${progress.progressPercent}%`,
+                                      backgroundColor: progress.progressColor,
+                                    },
+                                  ]}
+                               />
                             </View>
                             <Text
                               style={[
-                                styles.progressText,
-                                { color: progressColor },
-                              ]}
-                            >
-                              {progressPercent}%
-                            </Text>
-                          </View>
-                        </View>
+                                 styles.progressText,
+                                 { color: progress.progressColor },
+                               ]}
+                             >
+                               {progress.progressPercent}%
+                             </Text>
+                           </View>
+                         </View>
                       </Pressable>
                     </Animated.View>
                   );
                 })}
-                {pair.length === 1 && <View style={styles.cardPlaceholder} />}
+                {row.length === 1 && <View style={styles.cardPlaceholder} />}
               </View>
             )
           }

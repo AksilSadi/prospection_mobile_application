@@ -17,5 +17,9 @@ export function useCommercialTimeline(
       );
     },
     [commercialId, startDate, endDate],
+    {
+      cacheKey: `commercial-timeline:${commercialId ?? 0}:${startDate ?? "none"}:${endDate ?? "none"}`,
+      cacheTimeMs: 30_000,
+    },
   );
 }

@@ -4,8 +4,10 @@ import { authService } from "@/services/auth";
 import type { Statistic, TimelinePoint } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
+  Easing,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,14 +19,31 @@ import { BarChart, LineChart } from "react-native-gifted-charts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Pie, PolarChart } from "victory-native";
 
+const MONTH_NAMES = [
+  "janvier",
+  "fevrier",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "aout",
+  "septembre",
+  "octobre",
+  "novembre",
+  "decembre",
+];
+
 export default function StatistiquesScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isFocused = useIsFocused();
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  const [period, setPeriod] = useState<"7d" | "30d">("7d");
+  const periodLabel = "7 derniers jours";
   const [chartKey, setChartKey] = useState(0);
+  const contentOpacity = useRef(new Animated.Value(0)).current;
+  const skeletonPulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     let isMounted = true;
@@ -51,12 +70,12 @@ export default function StatistiquesScreen() {
   const statsState = useCommercialStatistics(commercialId);
   const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const { startDate, endDate } = useMemo(() => {
-    const days = period === "30d" ? 30 : 7;
+    const days = 7;
     const end = new Date(`${todayKey}T23:59:59.999Z`);
     const start = new Date(end);
     start.setDate(start.getDate() - (days - 1));
     return { startDate: start.toISOString(), endDate: end.toISOString() };
-  }, [period, todayKey]);
+  }, [todayKey]);
 
   const timelineState = useCommercialTimeline(commercialId, startDate, endDate);
 
@@ -79,8 +98,34 @@ export default function StatistiquesScreen() {
 
   const isLoading = statsState.loading || timelineState.loading;
 
+  useEffect(() => {
+    if (!isLoading) {
+      skeletonPulse.setValue(0);
+      return;
+    }
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
+    return () => {
+      pulse.stop();
+    };
+  }, [isLoading, skeletonPulse]);
+
   const timelineBuckets = useMemo(() => {
-    const days = period === "30d" ? 30 : 7;
+    const days = 7;
     const end = new Date(`${todayKey}T00:00:00.000Z`);
     const start = new Date(end);
     start.setDate(start.getDate() - (days - 1));
@@ -103,25 +148,18 @@ export default function StatistiquesScreen() {
         contrats: point?.contratsSignes || 0,
       };
     });
-  }, [period, timelineState.data, todayKey]);
+  }, [timelineState.data, todayKey]);
 
   const chartWidth = Math.min(width - 40, 520);
   const pieSize = 240;
   const pieRenderSize = Math.min(chartWidth, pieSize);
-  const monthNames = [
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-  ];
+  const formatDayLabel = useCallback((dateKey: string, withMonth = false) => {
+    const date = new Date(`${dateKey}T00:00:00`);
+    const day = String(date.getDate()).padStart(2, "0");
+    if (!withMonth) return day;
+    const month = MONTH_NAMES[date.getMonth()] ?? "";
+    return `${day} ${month}`;
+  }, []);
 
   const pieData = useMemo(() => {
     const base = [
@@ -174,36 +212,32 @@ export default function StatistiquesScreen() {
     return marks;
   }, [timelineBuckets]);
 
-  const formatDayLabel = (dateKey: string, withMonth = false) => {
-    const date = new Date(`${dateKey}T00:00:00`);
-    const day = String(date.getDate()).padStart(2, "0");
-    if (!withMonth) return day;
-    const month = monthNames[date.getMonth()] ?? "";
-    return `${day} ${month}`;
-  };
+  const calendarTheme = useMemo(
+    () => ({
+      backgroundColor: "#FFFFFF",
+      calendarBackground: "#FFFFFF",
+      textSectionTitleColor: "#64748B",
+      selectedDayBackgroundColor: "#2563EB",
+      selectedDayTextColor: "#FFFFFF",
+      todayTextColor: "#2563EB",
+      dayTextColor: "#0F172A",
+      monthTextColor: "#0F172A",
+      arrowColor: "#2563EB",
+      textDayFontSize: 13,
+      textMonthFontSize: 16,
+      textDayHeaderFontSize: 11,
+    }),
+    [],
+  );
 
   const axisLabels = useMemo(() => {
     if (!timelineBuckets.length) return [];
-    if (period === "7d") {
-      const days = ["D", "L", "M", "M", "J", "V", "S"];
-      return timelineBuckets.map((item) => {
-        const day = new Date(`${item.date}T00:00:00`).getDay();
-        return days[day];
-      });
-    }
-    return timelineBuckets
-      .map((item, index) => ({
-        label: formatDayLabel(item.date, true),
-        index,
-      }))
-      .filter(
-        (item) =>
-          item.index === 0 ||
-          item.index === timelineBuckets.length - 1 ||
-          item.index % 5 === 0,
-      )
-      .map((item) => item.label);
-  }, [period, timelineBuckets]);
+    const days = ["D", "L", "M", "M", "J", "V", "S"];
+    return timelineBuckets.map((item) => {
+      const day = new Date(`${item.date}T00:00:00`).getDay();
+      return days[day];
+    });
+  }, [timelineBuckets]);
 
   const maxPortes = useMemo(() => {
     return timelineBuckets.reduce((max, item) => Math.max(max, item.portes), 0);
@@ -227,31 +261,6 @@ export default function StatistiquesScreen() {
     return [chartDomain.y[1], yAxisStep, 0].map((val) => String(val));
   }, [chartDomain, yAxisStep]);
 
-  const maxContrats = useMemo(() => {
-    return timelineBuckets.reduce(
-      (max, item) => Math.max(max, item.contrats),
-      0,
-    );
-  }, [timelineBuckets]);
-
-  const contratsDomain = useMemo(() => {
-    const maxVal = Math.max(1, maxContrats);
-    const exponent = Math.floor(Math.log10(maxVal));
-    const base = maxVal / Math.pow(10, exponent);
-    const stepBase = base <= 1 ? 1 : base <= 2 ? 2 : base <= 5 ? 5 : 10;
-    const step = stepBase * Math.pow(10, exponent);
-    const roundedMax = Math.max(step * 2, Math.ceil(maxVal / step) * step);
-    return { y: [0, roundedMax] as [number, number] };
-  }, [maxContrats]);
-
-  const contratsStep = useMemo(() => {
-    return Math.max(1, Math.round(contratsDomain.y[1] / 2));
-  }, [contratsDomain]);
-
-  const contratsYAxisLabels = useMemo(() => {
-    return [contratsDomain.y[1], contratsStep, 0].map((val) => String(val));
-  }, [contratsDomain, contratsStep]);
-
   const rangeLabel = useMemo(() => {
     if (!timelineBuckets.length) return "—";
     const start = formatDayLabel(timelineBuckets[0].date, true);
@@ -260,29 +269,130 @@ export default function StatistiquesScreen() {
       true,
     );
     return `${start} - ${end}`;
-  }, [timelineBuckets]);
+  }, [formatDayLabel, timelineBuckets]);
 
-  const portesChartData = useMemo(() => {
-    return timelineBuckets.map((item, index) => ({
-      value: item.portes,
-      label: axisLabels[index] ?? "",
-      dataPointText: String(item.portes),
-    }));
+  const { portesChartData, rdvChartData, contratsChartData } = useMemo(() => {
+    const portes: { value: number; label: string; dataPointText: string }[] = [];
+    const rdvPoints: { value: number; label: string }[] = [];
+    const contratsPoints: { value: number; label: string }[] = [];
+
+    for (let index = 0; index < timelineBuckets.length; index += 1) {
+      const item = timelineBuckets[index];
+      const label = axisLabels[index] ?? "";
+      portes.push({
+        value: item.portes,
+        label,
+        dataPointText: String(item.portes),
+      });
+      rdvPoints.push({ value: item.rdvPris, label });
+      contratsPoints.push({ value: item.contrats, label });
+    }
+
+    return {
+      portesChartData: portes,
+      rdvChartData: rdvPoints,
+      contratsChartData: contratsPoints,
+    };
   }, [axisLabels, timelineBuckets]);
 
-  const rdvChartData = useMemo(() => {
-    return timelineBuckets.map((item, index) => ({
-      value: item.rdvPris,
-      label: axisLabels[index] ?? "",
-    }));
-  }, [axisLabels, timelineBuckets]);
+  const renderPortesPointerLabel = useCallback(
+    (items: { value?: number }[]) => {
+      const item = items?.[0];
+      return (
+        <View style={styles.tooltipBubble}>
+          <Text style={styles.tooltipValue}>{item?.value ?? 0} portes</Text>
+        </View>
+      );
+    },
+    [],
+  );
 
-  const contratsChartData = useMemo(() => {
-    return timelineBuckets.map((item, index) => ({
-      value: item.contrats,
-      label: axisLabels[index] ?? "",
-    }));
-  }, [axisLabels, timelineBuckets]);
+  const lineChartSpacing = useMemo(
+    () =>
+      Math.max(
+        28,
+        Math.floor((chartWidth - 80) / Math.max(1, portesChartData.length - 1)),
+      ),
+    [chartWidth, portesChartData.length],
+  );
+
+  const barChartSpacing = useMemo(
+    () =>
+      Math.max(
+        22,
+        Math.floor((chartWidth - 80) / Math.max(1, rdvChartData.length - 1)),
+      ),
+    [chartWidth, rdvChartData.length],
+  );
+
+  const contratsLineSpacing = useMemo(
+    () =>
+      Math.max(
+        28,
+        Math.floor((chartWidth - 80) / Math.max(1, contratsChartData.length - 1)),
+      ),
+    [chartWidth, contratsChartData.length],
+  );
+
+  useEffect(() => {
+    if (isLoading) {
+      contentOpacity.setValue(0);
+      return;
+    }
+
+    Animated.timing(contentOpacity, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+      isInteraction: false,
+    }).start();
+  }, [contentOpacity, isLoading]);
+
+  if (isLoading) {
+    const skeletonOpacity = skeletonPulse.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.45, 0.9],
+    });
+
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+      >
+        <View style={styles.kpiGrid}>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Animated.View
+              key={`kpi-skeleton-${index}`}
+              style={[styles.kpiCard, { opacity: skeletonOpacity }]}
+            >
+              <View style={styles.kpiSkeletonTop} />
+              <View style={styles.kpiSkeletonValue} />
+              <View style={styles.kpiSkeletonHint} />
+            </Animated.View>
+          ))}
+        </View>
+
+        {Array.from({ length: 5 }).map((_, index) => (
+          <Animated.View
+            key={`section-skeleton-${index}`}
+            style={[
+              styles.sectionCard,
+              styles.sectionCardTopSpacing,
+              { opacity: skeletonOpacity },
+            ]}
+          >
+            <View style={styles.sectionSkeletonTitle} />
+            <View style={styles.sectionSkeletonSubtitle} />
+            <View style={styles.sectionSkeletonChart} />
+          </Animated.View>
+        ))}
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView
@@ -292,6 +402,7 @@ export default function StatistiquesScreen() {
         { paddingBottom: insets.bottom + 24 },
       ]}
     >
+      <Animated.View style={{ opacity: contentOpacity }}>
       <View style={styles.kpiGrid}>
         <View style={styles.kpiCard}>
           <View style={styles.kpiHeader}>
@@ -359,11 +470,11 @@ export default function StatistiquesScreen() {
         </View>
       </View>
 
-      <View style={styles.sectionCard}>
+      <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
         <View style={styles.sectionHeaderRow}>
           <View>
             <Text style={styles.sectionTitle}>Portes / jour</Text>
-            <Text style={styles.sectionSubtitle}>{rangeLabel}</Text>
+            <Text style={styles.sectionSubtitle}>{periodLabel} · {rangeLabel}</Text>
           </View>
         </View>
         <View style={styles.giftedChartWrap}>
@@ -395,12 +506,7 @@ export default function StatistiquesScreen() {
             isAnimated
             animateOnDataChange
             animationDuration={350}
-            spacing={Math.max(
-              28,
-              Math.floor(
-                (chartWidth - 80) / Math.max(1, portesChartData.length - 1),
-              ),
-            )}
+            spacing={lineChartSpacing}
             initialSpacing={12}
             endSpacing={12}
             hideDataPoints
@@ -418,38 +524,24 @@ export default function StatistiquesScreen() {
               pointerLabelHeight: 40,
               autoAdjustPointerLabelPosition: true,
               shiftPointerLabelY: -40,
-              pointerLabelComponent: (items) => {
-                const item = items?.[0];
-                return (
-                  <View style={styles.tooltipBubble}>
-                    <Text style={styles.tooltipValue}>
-                      {item?.value ?? 0} portes
-                    </Text>
-                  </View>
-                );
-              },
-            }}
-          />
+               pointerLabelComponent: renderPortesPointerLabel,
+             }}
+           />
         </View>
       </View>
 
-      <View style={styles.sectionCard}>
+      <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
         <View style={styles.sectionHeaderRow}>
           <View>
             <Text style={styles.sectionTitle}>Rendez-vous / jour</Text>
-            <Text style={styles.sectionSubtitle}>{rangeLabel}</Text>
+            <Text style={styles.sectionSubtitle}>{periodLabel} · {rangeLabel}</Text>
           </View>
         </View>
         <View style={styles.giftedChartWrap}>
           <BarChart
             data={rdvChartData}
             barWidth={16}
-            spacing={Math.max(
-              22,
-              Math.floor(
-                (chartWidth - 80) / Math.max(1, rdvChartData.length - 1),
-              ),
-            )}
+            spacing={barChartSpacing}
             initialSpacing={10}
             endSpacing={10}
             height={180}
@@ -474,11 +566,11 @@ export default function StatistiquesScreen() {
         </View>
       </View>
 
-      <View style={styles.sectionCard}>
+      <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
         <View style={styles.sectionHeaderRow}>
           <View>
             <Text style={styles.sectionTitle}>Contrats signés / jour</Text>
-            <Text style={styles.sectionSubtitle}>{rangeLabel}</Text>
+            <Text style={styles.sectionSubtitle}>{periodLabel} · {rangeLabel}</Text>
           </View>
         </View>
         <View style={styles.giftedChartWrap}>
@@ -506,12 +598,7 @@ export default function StatistiquesScreen() {
             yAxisLabelTexts={yAxisLabels}
             xAxisLabelTextStyle={styles.axisLabel}
             showYAxisIndices={false}
-            spacing={Math.max(
-              28,
-              Math.floor(
-                (chartWidth - 80) / Math.max(1, contratsChartData.length - 1),
-              ),
-            )}
+            spacing={contratsLineSpacing}
             initialSpacing={12}
             endSpacing={12}
             hideDataPoints
@@ -522,7 +609,7 @@ export default function StatistiquesScreen() {
         </View>
       </View>
 
-      <View style={styles.sectionCard}>
+      <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
         <View style={styles.sectionHeaderRow}>
           <View>
             <Text style={styles.sectionTitle}>Calendrier RDV</Text>
@@ -532,24 +619,11 @@ export default function StatistiquesScreen() {
         <Calendar
           markedDates={markedDates}
           markingType="custom"
-          theme={{
-            backgroundColor: "#FFFFFF",
-            calendarBackground: "#FFFFFF",
-            textSectionTitleColor: "#64748B",
-            selectedDayBackgroundColor: "#2563EB",
-            selectedDayTextColor: "#FFFFFF",
-            todayTextColor: "#2563EB",
-            dayTextColor: "#0F172A",
-            monthTextColor: "#0F172A",
-            arrowColor: "#2563EB",
-            textDayFontSize: 13,
-            textMonthFontSize: 16,
-            textDayHeaderFontSize: 11,
-          }}
+          theme={calendarTheme}
         />
       </View>
 
-      <View style={styles.sectionCard}>
+      <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
         <View style={styles.sectionHeaderRow}>
           <View>
             <Text style={styles.sectionTitle}>Répartition des statuts</Text>
@@ -592,6 +666,7 @@ export default function StatistiquesScreen() {
           )}
         </View>
       </View>
+      </Animated.View>
     </ScrollView>
   );
 }
@@ -673,6 +748,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
     gap: 16,
+  },
+  sectionCardTopSpacing: {
+    marginTop: 10,
   },
   sectionHeaderRow: {
     flexDirection: "row",
@@ -810,5 +888,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#94A3B8",
     textAlign: "center",
+  },
+  kpiSkeletonTop: {
+    width: "52%",
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#E2E8F0",
+  },
+  kpiSkeletonValue: {
+    marginTop: 16,
+    width: "64%",
+    height: 28,
+    borderRadius: 12,
+    backgroundColor: "#E2E8F0",
+  },
+  kpiSkeletonHint: {
+    marginTop: 10,
+    width: "58%",
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#E2E8F0",
+  },
+  sectionSkeletonTitle: {
+    width: "40%",
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#E2E8F0",
+  },
+  sectionSkeletonSubtitle: {
+    width: "58%",
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#E2E8F0",
+  },
+  sectionSkeletonChart: {
+    marginTop: 8,
+    height: 170,
+    borderRadius: 14,
+    backgroundColor: "#E2E8F0",
   },
 });

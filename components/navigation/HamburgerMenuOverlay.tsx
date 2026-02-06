@@ -2,7 +2,7 @@ import { useHamburgerMenu } from "@/hooks/use-hamburger-menu";
 import { authService } from "@/services/auth";
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -13,7 +13,7 @@ type MenuItemProps = {
   isActive: boolean;
 };
 
-function MenuItem({ icon, label, onPress, isActive }: MenuItemProps) {
+const MenuItem = memo(function MenuItem({ icon, label, onPress, isActive }: MenuItemProps) {
   return (
     <Pressable style={styles.menuItem} onPress={onPress}>
       <View style={[styles.menuIconContainer, isActive && styles.menuIconContainerActive]}>
@@ -23,7 +23,7 @@ function MenuItem({ icon, label, onPress, isActive }: MenuItemProps) {
       {isActive && <View style={styles.activeIndicator} />}
     </Pressable>
   );
-}
+});
 
 type HamburgerMenuOverlayProps = {
   currentIndex: number;
@@ -81,10 +81,55 @@ export default function HamburgerMenuOverlay({ currentIndex, onNavigate }: Hambu
     }
   }, [isVisible, slideAnim, fadeAnim]);
 
-  const handleNavigate = (index: number) => {
+  const handleNavigate = useCallback((index: number) => {
     onNavigate(index);
     close();
-  };
+  }, [close, onNavigate]);
+
+  const menuItems = useMemo(
+    () => [
+      {
+        key: "dashboard",
+        icon: "bar-chart-2" as keyof typeof Feather.glyphMap,
+        label: "Dashboard",
+        targetIndex: 0,
+        isActive: currentIndex === 0,
+      },
+      {
+        key: "immeubles",
+        icon: "home" as keyof typeof Feather.glyphMap,
+        label: "Immeubles",
+        targetIndex: 1,
+        isActive: currentIndex === 1,
+      },
+      {
+        key: "statistiques",
+        icon: "trending-up" as keyof typeof Feather.glyphMap,
+        label: "Statistiques",
+        targetIndex: 2,
+        isActive: currentIndex === 2,
+      },
+      ...(isManager
+        ? [
+            {
+              key: "equipe",
+              icon: "users" as keyof typeof Feather.glyphMap,
+              label: "Équipe",
+              targetIndex: 3,
+              isActive: currentIndex === 3,
+            },
+          ]
+        : []),
+      {
+        key: "historique",
+        icon: "clock" as keyof typeof Feather.glyphMap,
+        label: "Historique",
+        targetIndex: isManager ? 4 : 3,
+        isActive: currentIndex === (isManager ? 4 : 3),
+      },
+    ],
+    [currentIndex, isManager],
+  );
 
   if (!isVisible) return null;
 
@@ -123,38 +168,15 @@ export default function HamburgerMenuOverlay({ currentIndex, onNavigate }: Hambu
 
         <View style={styles.menuSection}>
           <Text style={styles.sectionTitle}>Navigation</Text>
-          <MenuItem
-            icon="bar-chart-2"
-            label="Dashboard"
-            onPress={() => handleNavigate(0)}
-            isActive={currentIndex === 0}
-          />
-          <MenuItem
-            icon="home"
-            label="Immeubles"
-            onPress={() => handleNavigate(1)}
-            isActive={currentIndex === 1}
-          />
-          <MenuItem
-            icon="trending-up"
-            label="Statistiques"
-            onPress={() => handleNavigate(2)}
-            isActive={currentIndex === 2}
-          />
-          {isManager ? (
+          {menuItems.map((item) => (
             <MenuItem
-              icon="users"
-              label="Équipe"
-              onPress={() => handleNavigate(3)}
-              isActive={currentIndex === 3}
+              key={item.key}
+              icon={item.icon}
+              label={item.label}
+              isActive={item.isActive}
+              onPress={() => handleNavigate(item.targetIndex)}
             />
-          ) : null}
-          <MenuItem
-            icon="clock"
-            label="Historique"
-            onPress={() => handleNavigate(isManager ? 4 : 3)}
-            isActive={currentIndex === (isManager ? 4 : 3)}
-          />
+          ))}
         </View>
       </Animated.View>
     </View>

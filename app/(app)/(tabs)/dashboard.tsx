@@ -1,13 +1,14 @@
-import { useCommercialTimeline } from "@/hooks/api/use-commercial-timeline";
-import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
+ï»¿import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
 import type { Commercial, Manager } from "@/types/api";
 import { calculateRank, RANKS } from "@/utils/business/ranks";
 import { Feather } from "@expo/vector-icons";
 import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Dimensions,
+  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +18,7 @@ import {
 import { ScrollView as GestureScrollView } from "react-native-gesture-handler";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
+const DAY_NAMES = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 
 type WeeklyData = {
   day: string;
@@ -24,7 +26,7 @@ type WeeklyData = {
 };
 
 // Simple custom bar chart component
-function SimpleBarChart({
+const SimpleBarChart = memo(function SimpleBarChart({
   data,
   color = "#2563EB",
 }: {
@@ -56,16 +58,16 @@ function SimpleBarChart({
       })}
     </View>
   );
-}
+});
 
 export default function DashboardScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  const [period, setPeriod] = useState<"7d" | "30d">("7d");
   const [activeChartIndex, setActiveChartIndex] = useState(0);
   const chartScrollRef = useRef<GestureScrollView>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
   const conversionSheetRef = useRef<BottomSheet>(null);
+  const contentOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -78,20 +80,6 @@ export default function DashboardScreen() {
   }, []);
 
   const { data: profile, loading } = useWorkspaceProfile(userId, role);
-  const commercialId = role === "commercial" ? userId : null;
-  const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const { startDate, endDate } = useMemo(() => {
-    const days = period === "30d" ? 30 : 7;
-    const end = new Date(`${todayKey}T23:59:59.999Z`);
-    const start = new Date(end);
-    start.setDate(start.getDate() - (days - 1));
-    return { startDate: start.toISOString(), endDate: end.toISOString() };
-  }, [period, todayKey]);
-  const { data: timeline, loading: loadingTimeline } = useCommercialTimeline(
-    commercialId,
-    startDate,
-    endDate,
-  );
 
   const isManager = role === "manager";
   const stats = useMemo(() => {
@@ -147,8 +135,36 @@ export default function DashboardScreen() {
     };
   }, [stats]);
 
-  const currentRankIndex = RANKS.findIndex((r) => r.name === rankInfo.name);
-  const nextRank = RANKS[currentRankIndex + 1];
+  const nextRank = rankInfo.nextRank;
+
+  const handleChartsMomentumEnd = useCallback((event: any) => {
+    const scrollPosition = event.nativeEvent.contentOffset.x;
+    const index = Math.round(scrollPosition / (SCREEN_WIDTH - 52));
+    setActiveChartIndex(index);
+  }, []);
+
+  const handlePaginationPress = useCallback((targetIndex: number) => {
+    chartScrollRef.current?.scrollTo({
+      x: targetIndex * (SCREEN_WIDTH - 72),
+      animated: true,
+    });
+    setActiveChartIndex(targetIndex);
+  }, []);
+
+  useEffect(() => {
+    if (loading || !profile) {
+      contentOpacity.setValue(0);
+      return;
+    }
+
+    Animated.timing(contentOpacity, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+      isInteraction: false,
+    }).start();
+  }, [contentOpacity, loading, profile]);
 
   // Calculate weekly data from real backend data
   const { weeklyData, weeklyContracts, conversionRate } = useMemo(() => {
@@ -164,44 +180,42 @@ export default function DashboardScreen() {
       ? (profile as Manager).immeubles || []
       : (profile as Commercial).immeubles || [];
 
-    // Get all doors from all buildings
     const allDoors = immeubles.flatMap((immeuble) => immeuble.portes || []);
 
-    // Get dates for the last 7 days
     const today = new Date();
-    const dayNames = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
     const last7Days = Array.from({ length: 7 }, (_, i) => {
       const date = new Date(today);
       date.setDate(date.getDate() - (6 - i));
       return {
         date: date.toISOString().split("T")[0],
-        dayName: dayNames[date.getDay()],
+        dayName: DAY_NAMES[date.getDay()],
       };
     });
 
-    // Count doors visited per day
-    const doorsPerDay = last7Days.map(({ date, dayName }) => {
-      const count = allDoors.filter((door) => {
-        if (!door.derniereVisite) return false;
-        const visitDate = door.derniereVisite.split("T")[0];
-        return visitDate === date;
-      }).length;
-      return { day: dayName, doors: count };
-    });
+    const visitsByDate = new Map<
+      string,
+      { doors: number; contracts: number }
+    >();
+    for (const door of allDoors) {
+      if (!door.derniereVisite) continue;
+      const visitDate = door.derniereVisite.split("T")[0];
+      const current = visitsByDate.get(visitDate) ?? { doors: 0, contracts: 0 };
+      current.doors += 1;
+      if ((door.nbContrats || 0) > 0) {
+        current.contracts += 1;
+      }
+      visitsByDate.set(visitDate, current);
+    }
 
-    // Count doors with contracts (nbContrats > 0)
-    // Note: We don't have contract dates, so we show total contracts per building visited each day
-    const contractsPerDay = last7Days.map(({ date, dayName }) => {
-      const doorsVisited = allDoors.filter((door) => {
-        if (!door.derniereVisite) return false;
-        const visitDate = door.derniereVisite.split("T")[0];
-        return visitDate === date;
-      });
-      const contractCount = doorsVisited.filter(
-        (door) => (door.nbContrats || 0) > 0,
-      ).length;
-      return { day: dayName, doors: contractCount };
-    });
+    const doorsPerDay = last7Days.map(({ date, dayName }) => ({
+      day: dayName,
+      doors: visitsByDate.get(date)?.doors ?? 0,
+    }));
+
+    const contractsPerDay = last7Days.map(({ date, dayName }) => ({
+      day: dayName,
+      doors: visitsByDate.get(date)?.contracts ?? 0,
+    }));
 
     // Calculate conversion rate
     const totalDoors = doorsPerDay.reduce((sum, d) => sum + d.doors, 0);
@@ -216,6 +230,14 @@ export default function DashboardScreen() {
     };
   }, [profile, isManager]);
 
+  const handleOpenInfo = useCallback(() => {
+    bottomSheetRef.current?.snapToIndex(0);
+  }, []);
+
+  const handleOpenConversionInfo = useCallback(() => {
+    conversionSheetRef.current?.snapToIndex(0);
+  }, []);
+
   if (loading || !profile) {
     return (
       <View style={styles.container}>
@@ -226,135 +248,119 @@ export default function DashboardScreen() {
     );
   }
 
-  const handleOpenInfo = () => {
-    bottomSheetRef.current?.snapToIndex(0);
-  };
-
-  const handleOpenConversionInfo = () => {
-    conversionSheetRef.current?.snapToIndex(0);
-  };
-
   return (
     <>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.contentContainer}
       >
-        {/* Rank Card - Compact */}
-        <View style={styles.mainCard}>
-          {/* Rank Header */}
-          <View style={styles.rankHeader}>
-            <View style={styles.rankBadge}>
-              <Feather name="award" size={24} color="#F59E0B" />
+        <Animated.View style={{ opacity: contentOpacity }}>
+          {/* Rank Card - Compact */}
+          <View style={styles.mainCard}>
+            {/* Rank Header */}
+            <View style={styles.rankHeader}>
+              <View style={styles.rankBadge}>
+                <Feather name="award" size={24} color="#F59E0B" />
+              </View>
+              <View style={styles.rankInfo}>
+                <Text style={styles.rankTitle}>{rankInfo.name}</Text>
+                <Text style={styles.rankPoints}>{rankInfo.points} points</Text>
+              </View>
+              <Pressable style={styles.infoButton} onPress={handleOpenInfo}>
+                <Feather name="info" size={18} color="#2563EB" />
+              </Pressable>
+              {rankInfo.isMaxRank && (
+                <Feather name="check-circle" size={20} color="#10B981" />
+              )}
             </View>
-            <View style={styles.rankInfo}>
-              <Text style={styles.rankTitle}>{rankInfo.name}</Text>
-              <Text style={styles.rankPoints}>{rankInfo.points} points</Text>
-            </View>
-            <Pressable style={styles.infoButton} onPress={handleOpenInfo}>
-              <Feather name="info" size={18} color="#2563EB" />
-            </Pressable>
-            {rankInfo.isMaxRank && (
-              <Feather name="check-circle" size={20} color="#10B981" />
+
+            {/* Progress Bar */}
+            {!rankInfo.isMaxRank && nextRank && (
+              <View style={styles.progressSection}>
+                <View style={styles.progressHeader}>
+                  <Text style={styles.progressLabel}>Prochain rang</Text>
+                  <Text style={styles.nextRankName}>{nextRank.name}</Text>
+                </View>
+                <View style={styles.progressBar}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${rankInfo.progressPercent}%` },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.progressText}>
+                  {rankInfo.pointsToNext} points restants
+                </Text>
+              </View>
             )}
           </View>
 
-          {/* Progress Bar */}
-          {!rankInfo.isMaxRank && nextRank && (
-            <View style={styles.progressSection}>
-              <View style={styles.progressHeader}>
-                <Text style={styles.progressLabel}>Prochain rang</Text>
-                <Text style={styles.nextRankName}>{nextRank.name}</Text>
-              </View>
-              <View style={styles.progressBar}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${rankInfo.progressPercent}%` },
-                  ]}
-                />
-              </View>
-              <Text style={styles.progressText}>
-                {rankInfo.pointsToNext} points restants
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Charts Slider */}
-        <View style={styles.chartCard}>
-          <GestureScrollView
-            ref={chartScrollRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onScroll={(event) => {
-              const scrollPosition = event.nativeEvent.contentOffset.x;
-              const index = Math.round(scrollPosition / (SCREEN_WIDTH - 52));
-              setActiveChartIndex(index);
-            }}
-            scrollEventThrottle={16}
-          >
-            {/* Weekly Prospection Chart */}
-            <View style={[styles.chartSlide, { width: SCREEN_WIDTH - 72 }]}>
-              <View style={styles.chartHeader}>
-                <Feather name="bar-chart-2" size={20} color="#2563EB" />
-                <Text style={styles.chartTitle}>
-                  Portes prospectées cette semaine
-                </Text>
-              </View>
-              <SimpleBarChart data={weeklyData} />
-            </View>
-
-            {/* Weekly Contracts Chart */}
-            <View style={[styles.chartSlide, { width: SCREEN_WIDTH - 72 }]}>
-              <View style={styles.chartHeader}>
-                <Feather name="file-text" size={20} color="#10B981" />
-                <View style={styles.chartTitleContainer}>
+          {/* Charts Slider */}
+          <View style={styles.chartCard}>
+            <GestureScrollView
+              ref={chartScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={handleChartsMomentumEnd}
+            >
+              {/* Weekly Prospection Chart */}
+              <View style={[styles.chartSlide, { width: SCREEN_WIDTH - 72 }]}>
+                <View style={styles.chartHeader}>
+                  <Feather name="bar-chart-2" size={20} color="#2563EB" />
                   <Text style={styles.chartTitle}>
-                    Contrats signés cette semaine
+                    Portes prospectÃ©es cette semaine
                   </Text>
-                  <View style={styles.conversionContainer}>
-                    <View style={styles.conversionBadge}>
-                      <Text style={styles.conversionRate}>
-                        {conversionRate}%
-                      </Text>
-                      <Text style={styles.conversionLabel}>
-                        taux conversion
-                      </Text>
+                </View>
+                <SimpleBarChart data={weeklyData} />
+              </View>
+
+              {/* Weekly Contracts Chart */}
+              <View style={[styles.chartSlide, { width: SCREEN_WIDTH - 72 }]}>
+                <View style={styles.chartHeader}>
+                  <Feather name="file-text" size={20} color="#10B981" />
+                  <View style={styles.chartTitleContainer}>
+                    <Text style={styles.chartTitle}>
+                      Contrats signï¿½s cette semaine
+                    </Text>
+                    <View style={styles.conversionContainer}>
+                      <View style={styles.conversionBadge}>
+                        <Text style={styles.conversionRate}>
+                          {conversionRate}%
+                        </Text>
+                        <Text style={styles.conversionLabel}>
+                          taux conversion
+                        </Text>
+                      </View>
+                      <Pressable
+                        style={styles.conversionInfoButton}
+                        onPress={handleOpenConversionInfo}
+                      >
+                        <Feather name="help-circle" size={16} color="#059669" />
+                      </Pressable>
                     </View>
-                    <Pressable
-                      style={styles.conversionInfoButton}
-                      onPress={handleOpenConversionInfo}
-                    >
-                      <Feather name="help-circle" size={16} color="#059669" />
-                    </Pressable>
                   </View>
                 </View>
+                <SimpleBarChart data={weeklyContracts} color="#10B981" />
               </View>
-              <SimpleBarChart data={weeklyContracts} color="#10B981" />
-            </View>
-          </GestureScrollView>
+            </GestureScrollView>
 
-          {/* Pagination Indicators */}
-          <View style={styles.paginationContainer}>
-            {[0, 1].map((index) => (
-              <Pressable
-                key={index}
-                onPress={() => {
-                  chartScrollRef.current?.scrollTo({
-                    x: index * (SCREEN_WIDTH - 72),
-                    animated: true,
-                  });
-                }}
-                style={[
-                  styles.paginationDot,
-                  activeChartIndex === index && styles.paginationDotActive,
-                ]}
-              />
-            ))}
+            {/* Pagination Indicators */}
+            <View style={styles.paginationContainer}>
+              {[0, 1].map((index) => (
+                <Pressable
+                  key={index}
+                  onPress={() => handlePaginationPress(index)}
+                  style={[
+                    styles.paginationDot,
+                    activeChartIndex === index && styles.paginationDotActive,
+                  ]}
+                />
+              ))}
+            </View>
           </View>
-        </View>
+        </Animated.View>
       </ScrollView>
 
       {/* Info Bottom Sheet */}
@@ -376,7 +382,7 @@ export default function DashboardScreen() {
               >
                 <Feather name="check-circle" size={16} color="#10B981" />
               </View>
-              <Text style={styles.formulaItemLabel}>Contrat signé</Text>
+              <Text style={styles.formulaItemLabel}>Contrat signï¿½</Text>
               <Text style={styles.formulaItemValue}>100 pts</Text>
             </View>
             <View style={styles.formulaItem}>
@@ -394,12 +400,12 @@ export default function DashboardScreen() {
               >
                 <Feather name="home" size={16} color="#3B82F6" />
               </View>
-              <Text style={styles.formulaItemLabel}>Immeuble visité</Text>
+              <Text style={styles.formulaItemLabel}>Immeuble visitï¿½</Text>
               <Text style={styles.formulaItemValue}>5 pts</Text>
             </View>
           </View>
           <Text style={styles.formulaNote}>
-            Votre rang est calculé en fonction de ces actions. Plus vous êtes
+            Votre rang est calculï¿½ en fonction de ces actions. Plus vous ï¿½tes
             actif, plus vous gagnez de points !
           </Text>
         </BottomSheetView>
@@ -419,14 +425,15 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.explanationCard}>
             <Text style={styles.explanationTitle}>
-              Comment est-il calculé ?
+              Comment est-il calculï¿½ ?
             </Text>
             <Text style={styles.explanationText}>
-              Le taux de conversion mesure l'efficacité de votre prospection.
+              Le taux de conversion mesure l&apos;efficacitï¿½ de votre
+              prospection.
             </Text>
             <View style={styles.formulaBox}>
               <Text style={styles.formulaText}>
-                (Portes avec contrats ÷ Portes visitées) × 100
+                (Portes avec contrats ï¿½ Portes visitï¿½es) ï¿½ 100
               </Text>
             </View>
             <Text style={styles.explanationExample}>
@@ -462,7 +469,7 @@ export default function DashboardScreen() {
                   ]}
                 />
                 <Text style={styles.performanceText}>
-                  {"<"} 10% = À améliorer
+                  {"<"} 10% = ï¿½ amï¿½liorer
                 </Text>
               </View>
             </View>
@@ -910,5 +917,3 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 });
-
-

@@ -1,6 +1,6 @@
 import { useHamburgerMenu } from "@/hooks/use-hamburger-menu";
 import { Feather } from "@expo/vector-icons";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { Animated, Pressable, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -22,29 +22,33 @@ export default function HamburgerButton({ position = "bottom-left" }: HamburgerB
     }).start();
   }, [isVisible, rotateAnim]);
 
-  const handlePressIn = () => {
+  const handlePressIn = useCallback(() => {
     Animated.spring(scaleAnim, {
       toValue: 0.92,
       useNativeDriver: true,
     }).start();
-  };
+  }, [scaleAnim]);
 
-  const handlePressOut = () => {
+  const handlePressOut = useCallback(() => {
     Animated.spring(scaleAnim, {
       toValue: 1,
       friction: 3,
       useNativeDriver: true,
     }).start();
-  };
+  }, [scaleAnim]);
 
   const rotation = rotateAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["0deg", "90deg"],
   });
 
-  const containerStyle = position === "top-left"
-    ? [styles.container, styles.topLeft, { top: insets.top + 8 }]
-    : [styles.container, styles.bottomLeft, { bottom: insets.bottom + 16 }];
+  const containerStyle = useMemo(
+    () =>
+      position === "top-left"
+        ? [styles.container, styles.topLeft, { top: insets.top + 8 }]
+        : [styles.container, styles.bottomLeft, { bottom: insets.bottom + 16 }],
+    [insets.bottom, insets.top, position],
+  );
 
   return (
     <Animated.View

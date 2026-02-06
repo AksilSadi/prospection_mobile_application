@@ -16,12 +16,16 @@ import type {
 } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
 import {
+  BottomSheetFlatList,
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
-import type { ComponentType } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type {
+  ComponentType,
+  RefObject,
+} from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -48,6 +52,14 @@ type StatusOption = {
   fg: string;
   accent: string;
   icon: keyof typeof Feather.glyphMap;
+};
+
+type FabAction = {
+  label: string;
+  subLabel: string;
+  icon: keyof typeof Feather.glyphMap;
+  tone: "primary" | "danger";
+  onPress: () => void;
 };
 
 const STATUS_OPTIONS: StatusOption[] = [
@@ -111,6 +123,16 @@ const STATUS_DISPLAY: Record<string, StatusOption> = {
   ...Object.fromEntries(STATUS_OPTIONS.map((option) => [option.value, option])),
 };
 
+const DEFAULT_STATUS_OPTION: StatusOption = {
+  value: "NON_VISITE",
+  label: "Non visite",
+  description: "Par defaut",
+  bg: "#E2E8F0",
+  fg: "#475569",
+  accent: "#CBD5F5",
+  icon: "circle",
+};
+
 const getDisplayStatusKey = (porte?: Porte | null) => {
   if (!porte?.statut) return null;
   if (porte.statut === "ABSENT") {
@@ -170,6 +192,262 @@ const buildFallbackPortes = (immeuble: Immeuble | null) => {
   return portes;
 };
 
+type ProgressCardProps = {
+  progress: {
+    total: number;
+    visited: number;
+    percentage: number;
+  };
+  progressFill: Animated.Value;
+  isTablet: boolean;
+};
+
+const ProgressCard = memo(function ProgressCard({
+  progress,
+  progressFill,
+  isTablet,
+}: ProgressCardProps) {
+  return (
+    <View
+      style={[
+        styles.progressCardNew,
+        isTablet && styles.progressCardNewTablet,
+      ]}
+    >
+      <View style={styles.progressRowNew}>
+        <View style={styles.progressLeftNew}>
+          <View style={styles.progressIconNew}>
+            <Feather name="activity" size={14} color="#2563EB" />
+          </View>
+          <View style={styles.progressTextsNew}>
+            <Text style={styles.progressTitleNew}>Progression</Text>
+            <Text style={styles.progressSubtitleNew}>
+              {progress.visited} / {progress.total} portes
+            </Text>
+          </View>
+        </View>
+        <View style={styles.progressPercentNew}>
+          <Text style={styles.progressPercentTextNew}>{progress.percentage}%</Text>
+        </View>
+      </View>
+      <View style={styles.progressBarTrackNew}>
+        <Animated.View
+          style={[
+            styles.progressBarFillNew,
+            {
+              width: progressFill.interpolate({
+                inputRange: [0, 100],
+                outputRange: ["0%", "100%"],
+              }),
+            },
+          ]}
+        />
+      </View>
+    </View>
+  );
+});
+
+type FloorTabsProps = {
+  floors: number[];
+  currentEtage?: number;
+  onJumpToFloor: (etage: number) => void;
+};
+
+const FloorTabs = memo(function FloorTabs({
+  floors,
+  currentEtage,
+  onJumpToFloor,
+}: FloorTabsProps) {
+  return (
+    <View style={styles.floorTabsWrap}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.floorTabsScroll}
+        contentContainerStyle={styles.floorTabs}
+      >
+        {floors.map((etage) => {
+          const isActive = currentEtage === etage;
+          return (
+            <Pressable
+              key={`floor-${etage}`}
+              style={[styles.floorTab, isActive && styles.floorTabActive]}
+              onPress={() => onJumpToFloor(etage)}
+            >
+              <Text
+                style={[
+                  styles.floorTabText,
+                  isActive && styles.floorTabTextActive,
+                ]}
+              >
+                Etage {etage}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+});
+
+type DoorPagerItemProps = {
+  item: Porte;
+  width: number;
+  visibleStatusOptions: StatusOption[];
+  onStatusSelect: (statut: string, target?: Porte) => Promise<void>;
+};
+
+const DoorPagerItem = memo(function DoorPagerItem({
+  item,
+  width,
+  visibleStatusOptions,
+  onStatusSelect,
+}: DoorPagerItemProps) {
+  const status = getDisplayStatus(item) ?? DEFAULT_STATUS_OPTION;
+
+  return (
+    <View style={[styles.doorPagerItem, { width }]}>
+      <View style={styles.doorCardInScroll}>
+        <View style={styles.doorCardHeader}>
+          <View style={styles.doorCardTitleRow}>
+            <View style={styles.doorNumberBadge}>
+              <Text style={styles.doorNumberText}>
+                {item.nomPersonnalise || item.numero || "--"}
+              </Text>
+            </View>
+            <View style={styles.doorFloorBadge}>
+              <Feather name="layers" size={12} color="#64748B" />
+              <Text style={styles.doorFloorText}>Etage {item.etage ?? "--"}</Text>
+            </View>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+            <View style={[styles.statusDotBadge, { backgroundColor: status.accent }]} />
+            <Text style={[styles.statusBadgeText, { color: status.fg }]}>
+              {status.label}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.statusGrid}>
+          {visibleStatusOptions.map((option) => {
+            const isActiveStatus = getDisplayStatusKey(item) === option.value;
+            const cardBg = isActiveStatus ? option.accent : option.bg;
+            const cardBorder = isActiveStatus ? option.accent : "#E2E8F0";
+            const labelColor = isActiveStatus ? "#FFFFFF" : option.fg;
+            const descColor = isActiveStatus
+              ? "rgba(255, 255, 255, 0.9)"
+              : option.fg;
+            const iconBg = isActiveStatus
+              ? "rgba(255, 255, 255, 0.2)"
+              : option.accent;
+            const iconColor = isActiveStatus ? "#FFFFFF" : option.fg;
+
+            return (
+              <View key={option.value} style={styles.statusCardWrap}>
+                <Pressable
+                  style={[
+                    styles.statusCard,
+                    { backgroundColor: cardBg, borderColor: cardBorder },
+                  ]}
+                  onPress={() => {
+                    void onStatusSelect(option.value, item);
+                  }}
+                >
+                  <View style={[styles.statusIcon, { backgroundColor: iconBg }]}>
+                    <Feather name={option.icon} size={16} color={iconColor} />
+                  </View>
+                  <Text style={[styles.statusLabel, { color: labelColor }]}>
+                    {option.label}
+                  </Text>
+                  <Text style={[styles.statusDesc, { color: descColor }]}>
+                    {option.description}
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+}, (prev, next) => {
+  return (
+    prev.item === next.item &&
+    prev.width === next.width &&
+    prev.visibleStatusOptions === next.visibleStatusOptions &&
+    prev.onStatusSelect === next.onStatusSelect
+  );
+});
+
+type DoorPagerProps = {
+  doorPagerRef: RefObject<FlatList<Porte> | null>;
+  filteredPortes: Porte[];
+  width: number;
+  onMomentumScrollEnd: (event: any) => void;
+  visibleStatusOptions: StatusOption[];
+  onStatusSelect: (statut: string, target?: Porte) => Promise<void>;
+};
+
+const DoorPager = memo(function DoorPager({
+  doorPagerRef,
+  filteredPortes,
+  width,
+  onMomentumScrollEnd,
+  visibleStatusOptions,
+  onStatusSelect,
+}: DoorPagerProps) {
+  const keyExtractor = useCallback((item: Porte) => String(item.id), []);
+
+  const getItemLayout = useCallback(
+    (_data: ArrayLike<Porte> | null | undefined, index: number) => ({
+      length: width,
+      offset: width * index,
+      index,
+    }),
+    [width],
+  );
+
+  const renderItem = useCallback(
+    ({ item }: { item: Porte }) => (
+      <DoorPagerItem
+        item={item}
+        width={width}
+        visibleStatusOptions={visibleStatusOptions}
+        onStatusSelect={onStatusSelect}
+      />
+    ),
+    [onStatusSelect, visibleStatusOptions, width],
+  );
+
+  return (
+    <FlatList
+      ref={doorPagerRef}
+      data={filteredPortes}
+      horizontal
+      pagingEnabled
+      showsHorizontalScrollIndicator={false}
+      keyExtractor={keyExtractor}
+      onMomentumScrollEnd={onMomentumScrollEnd}
+      style={styles.doorPager}
+      getItemLayout={getItemLayout}
+      windowSize={3}
+      initialNumToRender={1}
+      maxToRenderPerBatch={2}
+      updateCellsBatchingPeriod={16}
+      removeClippedSubviews
+      contentContainerStyle={styles.doorPagerContent}
+      ListEmptyComponent={
+        <View style={styles.emptyFilterCard}>
+          <Feather name="filter" size={20} color="#94A3B8" />
+          <Text style={styles.emptyFilterTitle}>Aucune porte trouvee</Text>
+          <Text style={styles.emptyFilterText}>Aucun resultat avec ce filtre.</Text>
+        </View>
+      }
+      renderItem={renderItem}
+    />
+  );
+});
+
 type ImmeubleDetailsViewProps = {
   immeuble: Immeuble;
   onBack: () => void;
@@ -217,7 +495,11 @@ export default function ImmeubleDetailsView({
   const fabHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fabHintOpacity = useRef(new Animated.Value(0)).current;
   const progressFill = useRef(new Animated.Value(0)).current;
+  const hasAnimatedProgressRef = useRef(false);
+  const lastProgressTargetRef = useRef<number | null>(null);
   const doorPagerRef = useRef<FlatList<Porte>>(null);
+  const filteredPortesRef = useRef<Porte[]>([]);
+  const currentPorteRef = useRef<Porte | undefined>(undefined);
   const {
     isRecording,
     isStarting,
@@ -337,14 +619,16 @@ export default function ImmeubleDetailsView({
 
   // Gérer l'ouverture de la bottom sheet du plan rapide
   useEffect(() => {
-    if (showFloorPlan) {
-      floorPlanSheetRef.current?.present();
-    } else {
-      floorPlanSheetRef.current?.close();
-    }
+    if (!showFloorPlan) return;
+    floorPlanSheetRef.current?.present();
   }, [showFloorPlan]);
 
-  const triggerFloorPlan = () => {
+  useEffect(() => {
+    if (!editMode || !editPorte) return;
+    editSheetRef.current?.present();
+  }, [editMode, editPorte]);
+
+  const triggerFloorPlan = useCallback(() => {
     Animated.sequence([
       Animated.spring(floorPlanScale, {
         toValue: 0.92,
@@ -364,9 +648,9 @@ export default function ImmeubleDetailsView({
       floorPlanPulse.setValue(0);
       setShowFloorPlan(true);
     });
-  };
+  }, [floorPlanPulse, floorPlanScale]);
 
-  const showToast = (title: string, subtitle: string) => {
+  const showToast = useCallback((title: string, subtitle: string) => {
     setActionToast({ title, subtitle });
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current);
@@ -400,9 +684,9 @@ export default function ImmeubleDetailsView({
         setActionToast(null);
       });
     }, 1400);
-  };
+  }, [toastOpacity, toastTranslate]);
 
-  const updateLocalPorte = (porteId: number, changes: Partial<Porte>) => {
+  const updateLocalPorte = useCallback((porteId: number, changes: Partial<Porte>) => {
     setPortesState((prev) =>
       prev.map((porte) =>
         porte.id === porteId ? { ...porte, ...changes } : porte,
@@ -410,7 +694,7 @@ export default function ImmeubleDetailsView({
     );
     setHasLocalUpdates(true);
     if (onDirtyChange) onDirtyChange(true);
-  };
+  }, [onDirtyChange]);
 
   const getTodayDate = () => new Date().toISOString().split("T")[0];
   const getNowTime = () => {
@@ -450,7 +734,7 @@ export default function ImmeubleDetailsView({
     return now;
   };
 
-  const openEditSheet = (
+  const openEditSheet = useCallback((
     porte: Porte,
     mode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE",
   ) => {
@@ -463,14 +747,26 @@ export default function ImmeubleDetailsView({
       commentaire: porte.commentaire || "",
       nomPersonnalise: porte.nomPersonnalise || "",
     });
-    editSheetRef.current?.present();
-  };
+  }, []);
 
-  const closeEditSheet = () => {
+  const closeEditSheet = useCallback(() => {
     editSheetRef.current?.dismiss();
     setEditPorte(null);
     setEditMode(null);
-  };
+  }, []);
+
+  const renderSheetBackdrop = useCallback(
+    (props: any, opacity: number) => (
+      <BottomSheetBackdrop
+        {...(props ?? {})}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+        opacity={opacity}
+      />
+    ),
+    [],
+  );
 
   const saveEditSheet = async () => {
     if (!editPorte || !editMode || savingPorte) return;
@@ -533,24 +829,22 @@ export default function ImmeubleDetailsView({
     () => getMaxEtage(portesState, immeuble.nbEtages ?? 0),
     [portesState, immeuble.nbEtages],
   );
-  const handleDoorScrollEnd = (event: any) => {
+
+  const handleDoorScrollEnd = useCallback((event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
     const nextIndex = Math.round(offsetX / Math.max(1, width));
     setCurrentIndex((prev) =>
       Math.max(0, Math.min(nextIndex, filteredPortes.length - 1)),
     );
-  };
+  }, [filteredPortes.length, width]);
 
   const currentPorte = filteredPortes[currentIndex];
-  const currentStatus = getDisplayStatus(currentPorte) ?? {
-    value: "NON_VISITE",
-    label: "Non visite",
-    description: "Par defaut",
-    bg: "#E2E8F0",
-    fg: "#475569",
-    accent: "#CBD5F5",
-    icon: "circle" as const,
-  };
+  const currentStatus = getDisplayStatus(currentPorte) ?? DEFAULT_STATUS_OPTION;
+
+  useEffect(() => {
+    filteredPortesRef.current = filteredPortes;
+    currentPorteRef.current = currentPorte;
+  }, [currentPorte, filteredPortes]);
 
   useEffect(() => {
     if (currentIndex >= filteredPortes.length) {
@@ -558,70 +852,102 @@ export default function ImmeubleDetailsView({
     }
   }, [currentIndex, filteredPortes.length]);
 
-  const progress = useMemo(() => {
+  const porteMetrics = useMemo(() => {
+    const groupedByFloor = new Map<number, Porte[]>();
+    const floorSet = new Set<number>();
+    const counts: Record<string, number> = {};
+    let visited = 0;
+
+    for (const porte of sortedPortes) {
+      floorSet.add(porte.etage);
+      if (!groupedByFloor.has(porte.etage)) {
+        groupedByFloor.set(porte.etage, []);
+      }
+      groupedByFloor.get(porte.etage)?.push(porte);
+
+      if (porte.statut && porte.statut !== "NON_VISITE") {
+        visited += 1;
+      }
+
+      const key = getDisplayStatusKey(porte);
+      if (key) {
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    }
+
     const total = sortedPortes.length;
-    const visited = sortedPortes.filter(
-      (porte) => porte.statut && porte.statut !== "NON_VISITE",
-    ).length;
-    const percentage = total ? Math.round((visited / total) * 100) : 0;
-    return { total, visited, percentage };
+    return {
+      progress: {
+        total,
+        visited,
+        percentage: total ? Math.round((visited / total) * 100) : 0,
+      },
+      portesParEtage: Array.from(groupedByFloor.entries()).sort((a, b) => b[0] - a[0]),
+      floors: Array.from(floorSet).sort((a, b) => b - a),
+      statusCounts: counts,
+    };
   }, [sortedPortes]);
+
+  const progress = porteMetrics.progress;
+  const portesParEtage = porteMetrics.portesParEtage;
+  const floors = porteMetrics.floors;
+  const statusCounts = porteMetrics.statusCounts;
 
   useEffect(() => {
-    Animated.timing(progressFill, {
-      toValue: progress.percentage,
-      duration: 820,
-      easing: Easing.inOut(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [progress.percentage, progressFill]);
+    const targetValue = progress.percentage;
 
-  const portesParEtage = useMemo(() => {
-    const grouped = new Map<number, Porte[]>();
-    sortedPortes.forEach((porte) => {
-      if (!grouped.has(porte.etage)) {
-        grouped.set(porte.etage, []);
+    if (lastProgressTargetRef.current === targetValue) {
+      return;
+    }
+    lastProgressTargetRef.current = targetValue;
+
+    if (!hasAnimatedProgressRef.current && targetValue === 0) {
+      progressFill.setValue(0);
+      return;
+    }
+
+    progressFill.stopAnimation((currentValue: number) => {
+      const isFirstMeaningfulAnimation = !hasAnimatedProgressRef.current;
+      hasAnimatedProgressRef.current = true;
+
+      const delta = Math.abs(targetValue - currentValue);
+      if (delta < 0.5) {
+        progressFill.setValue(targetValue);
+        return;
       }
-      grouped.get(porte.etage)?.push(porte);
-    });
-    return Array.from(grouped.entries()).sort((a, b) => b[0] - a[0]);
-  }, [sortedPortes]);
 
-  const floors = useMemo(() => {
-    const unique = Array.from(new Set(sortedPortes.map((porte) => porte.etage)))
-      .filter((etage) => typeof etage === "number")
-      .sort((a, b) => b - a);
-    return unique;
-  }, [sortedPortes]);
+      const duration = isFirstMeaningfulAnimation
+        ? 360
+        : Math.max(140, Math.min(320, 120 + delta * 5));
 
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    sortedPortes.forEach((porte) => {
-      const key = getDisplayStatusKey(porte);
-      if (!key) return;
-      counts[key] = (counts[key] || 0) + 1;
+      Animated.timing(progressFill, {
+        toValue: targetValue,
+        duration,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+        isInteraction: false,
+      }).start();
     });
-    return counts;
-  }, [sortedPortes]);
+  }, [progress.percentage, progressFill]);
 
   const visibleStatusOptions = STATUS_OPTIONS;
 
-  const togglePendingFilter = (value: string | null) => {
+  const togglePendingFilter = useCallback((value: string | null) => {
     setPendingStatusFilter((prev) => (prev === value ? null : value));
-  };
+  }, []);
 
-  const applyStatusFilters = () => {
+  const applyStatusFilters = useCallback(() => {
     setStatusFilters(pendingStatusFilter ? [pendingStatusFilter] : []);
     filterSheetRef.current?.dismiss();
-  };
+  }, [pendingStatusFilter]);
 
-  const clearStatusFilters = () => {
+  const clearStatusFilters = useCallback(() => {
     setStatusFilters([]);
     setPendingStatusFilter(null);
     filterSheetRef.current?.dismiss();
-  };
+  }, []);
 
-  const jumpToFloor = (etage: number) => {
+  const jumpToFloor = useCallback((etage: number) => {
     const targetIndex = filteredPortes.findIndex(
       (porte) => porte.etage === etage,
     );
@@ -632,9 +958,9 @@ export default function ImmeubleDetailsView({
     }
     setCurrentIndex(targetIndex);
     doorPagerRef.current?.scrollToIndex({ index: targetIndex, animated: true });
-  };
+  }, [filteredPortes, showToast]);
 
-  const getNextDoorNumber = (etage: number) => {
+  const getNextDoorNumber = useCallback((etage: number) => {
     const portesOnFloor = portesState.filter((porte) => porte.etage === etage);
     const numbers = portesOnFloor
       .map((porte) => Number(porte.numero))
@@ -643,16 +969,16 @@ export default function ImmeubleDetailsView({
       return String(Math.max(...numbers) + 1);
     }
     return String(portesOnFloor.length + 1);
-  };
+  }, [portesState]);
 
-  const openAddPorte = () => {
+  const openAddPorte = useCallback(() => {
     const etage = (currentPorte?.etage ?? displayNbEtages) || 1;
     const numero = getNextDoorNumber(etage);
     setAddPorteDefaults({ etage, numero });
     setIsAddPorteOpen(true);
-  };
+  }, [currentPorte?.etage, displayNbEtages, getNextDoorNumber]);
 
-  const handleAddPorte = async (payload: AddPortePayload) => {
+  const handleAddPorte = useCallback(async (payload: AddPortePayload) => {
     if (creatingPorte) return;
     const tempId = -Date.now();
     const newPorte: Porte = {
@@ -693,9 +1019,9 @@ export default function ImmeubleDetailsView({
       );
     }
     setIsAddPorteOpen(false);
-  };
+  }, [createPorte, creatingPorte, immeuble.id, onDirtyChange, showToast]);
 
-  const handleAddEtage = async () => {
+  const handleAddEtage = useCallback(async () => {
     if (addingEtage) return;
     const nextEtage = Math.max(1, displayNbEtages + 1);
     const tempIdBase = -Date.now();
@@ -726,9 +1052,18 @@ export default function ImmeubleDetailsView({
     if (onRefreshImmeuble) {
       void onRefreshImmeuble();
     }
-  };
+  }, [
+    addEtageToImmeuble,
+    addingEtage,
+    displayNbEtages,
+    immeuble.id,
+    immeuble.nbPortesParEtage,
+    onDirtyChange,
+    onRefreshImmeuble,
+    showToast,
+  ]);
 
-  const openDeletePorte = () => {
+  const openDeletePorte = useCallback(() => {
     if (!currentPorte) {
       showToast("Aucune porte", "Impossible de supprimer");
       return;
@@ -746,9 +1081,9 @@ export default function ImmeubleDetailsView({
     }
     setDeleteFloor(null);
     setDeleteTarget(lastDoor);
-  };
+  }, [currentPorte, portesState, showToast]);
 
-  const confirmDeletePorte = async () => {
+  const confirmDeletePorte = useCallback(async () => {
     if (!deleteTarget) return;
     const targetId = deleteTarget.id;
     const targetFloor = deleteTarget.etage;
@@ -779,9 +1114,17 @@ export default function ImmeubleDetailsView({
       setPortesState(previous);
       showToast("Erreur", "Suppression impossible");
     }
-  };
+  }, [
+    deleteTarget,
+    immeuble.id,
+    onDirtyChange,
+    portesState,
+    removePorteFromEtage,
+    showToast,
+    sortedPortes,
+  ]);
 
-  const openDeleteEtage = () => {
+  const openDeleteEtage = useCallback(() => {
     if (removingEtage) return;
     const lastFloor = getMaxEtage(portesState, immeuble.nbEtages ?? 0);
     if (!lastFloor) {
@@ -790,9 +1133,9 @@ export default function ImmeubleDetailsView({
     }
     setDeleteTarget(null);
     setDeleteFloor(lastFloor);
-  };
+  }, [immeuble.nbEtages, portesState, removingEtage, showToast]);
 
-  const confirmDeleteEtage = async () => {
+  const confirmDeleteEtage = useCallback(async () => {
     if (deleteFloor === null) return;
     const targetFloor = deleteFloor;
     const previous = portesState;
@@ -810,9 +1153,16 @@ export default function ImmeubleDetailsView({
       setPortesState(previous);
       showToast("Erreur", "Suppression impossible");
     }
-  };
+  }, [
+    deleteFloor,
+    immeuble.id,
+    onDirtyChange,
+    portesState,
+    removeEtageFromImmeuble,
+    showToast,
+  ]);
 
-  const applyStatus = async (
+  const applyStatus = useCallback(async (
     porte: Porte,
     statut: string,
     extra?: { nbRepassages?: number },
@@ -847,9 +1197,9 @@ export default function ImmeubleDetailsView({
     if (!result) {
       showToast("Erreur", "Mise a jour impossible");
     }
-  };
+  }, [showToast, updateLocalPorte, updatePorte]);
 
-  const resetStatus = async (porte: Porte) => {
+  const resetStatus = useCallback(async (porte: Porte) => {
     showToast(
       `Porte ${porte.nomPersonnalise || porte.numero}`,
       "Statut retire",
@@ -875,7 +1225,7 @@ export default function ImmeubleDetailsView({
     if (!result) {
       showToast("Erreur", "Mise a jour impossible");
     }
-  };
+  }, [showToast, updateLocalPorte, updatePorte]);
 
   const fabRotation = fabAnim.interpolate({
     inputRange: [0, 1],
@@ -938,7 +1288,7 @@ export default function ImmeubleDetailsView({
     }, 1400);
   };
 
-  const advanceToNextDoor = (porteId: number, portes: Porte[]) => {
+  const advanceToNextDoor = useCallback((porteId: number, portes: Porte[]) => {
     const targetIndex = portes.findIndex((item) => item.id === porteId);
     if (targetIndex >= 0 && targetIndex < portes.length - 1) {
       setTimeout(() => {
@@ -950,10 +1300,10 @@ export default function ImmeubleDetailsView({
         });
       }, 120);
     }
-  };
+  }, []);
 
-  const handleStatusSelect = async (statut: string, target?: Porte) => {
-    const porte = target ?? currentPorte;
+  const handleStatusSelect = useCallback(async (statut: string, target?: Porte) => {
+    const porte = target ?? currentPorteRef.current;
     if (!porte) return;
     const currentKey = getDisplayStatusKey(porte);
     if (
@@ -971,7 +1321,7 @@ export default function ImmeubleDetailsView({
     }
     if (statut === "ABSENT_MATIN") {
       void applyStatus(porte, "ABSENT", { nbRepassages: 1 });
-      advanceToNextDoor(porte.id, filteredPortes);
+      advanceToNextDoor(porte.id, filteredPortesRef.current);
       return;
     }
     if (statut === "ABSENT_SOIR") {
@@ -979,12 +1329,104 @@ export default function ImmeubleDetailsView({
       void applyStatus(porte, "ABSENT", {
         nbRepassages: nextRepassage,
       });
-      advanceToNextDoor(porte.id, filteredPortes);
+      advanceToNextDoor(porte.id, filteredPortesRef.current);
       return;
     }
     void applyStatus(porte, statut);
-    advanceToNextDoor(porte.id, filteredPortes);
-  };
+    advanceToNextDoor(porte.id, filteredPortesRef.current);
+  }, [
+    advanceToNextDoor,
+    applyStatus,
+    openEditSheet,
+    resetStatus,
+  ]);
+
+  const fabActions = useMemo<FabAction[]>(
+    () => [
+      {
+        label: "Ajouter porte",
+        subLabel: "Etage courant",
+        icon: "plus",
+        tone: "primary",
+        onPress: openAddPorte,
+      },
+      {
+        label: "Ajouter etage",
+        subLabel: "Nouveau niveau",
+        icon: "layers",
+        tone: "primary",
+        onPress: handleAddEtage,
+      },
+      {
+        label: "Supprimer porte",
+        subLabel: "Derniere de l'etage",
+        icon: "trash-2",
+        tone: "danger",
+        onPress: openDeletePorte,
+      },
+      {
+        label: "Supprimer etage",
+        subLabel: "Dernier etage",
+        icon: "minus-circle",
+        tone: "danger",
+        onPress: openDeleteEtage,
+      },
+    ],
+    [handleAddEtage, openAddPorte, openDeleteEtage, openDeletePorte],
+  );
+
+  const openStatusFilterSheet = useCallback(() => {
+    setPendingStatusFilter(statusFilters[0] ?? null);
+    filterSheetRef.current?.present();
+  }, [statusFilters]);
+
+  const floorPlanKeyExtractor = useCallback(
+    (entry: [number, Porte[]]) => `floor-${entry[0]}`,
+    [],
+  );
+
+  const renderFloorPlanSection = useCallback(
+    ({ item }: { item: [number, Porte[]] }) => {
+      const [etage, portes] = item;
+      return (
+        <View style={styles.floorPlanEtageSection}>
+          <Text style={styles.floorPlanEtageLabel}>Étage {etage}</Text>
+          <View style={styles.floorPlanDoorsGrid}>
+            {portes.map((porte) => {
+              const status = getDisplayStatus(porte);
+              const isActive = porte.id === currentPorte?.id;
+              const isVisited = status !== null;
+              const chipBg = isVisited ? status?.accent : "#F1F5F9";
+              const chipBorder = isActive ? status?.accent : "transparent";
+              const chipText = isVisited ? "#FFFFFF" : "#64748B";
+
+              return (
+                <View
+                  key={porte.id}
+                  style={[
+                    styles.floorPlanDoorChip,
+                    {
+                      backgroundColor: chipBg,
+                      borderColor: chipBorder,
+                      borderWidth: isActive ? 2 : 1,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[styles.floorPlanDoorChipText, { color: chipText }]}
+                  >
+                    {porte.nomPersonnalise || porte.numero}
+                  </Text>
+                  {isActive && <View style={styles.floorPlanActiveIndicator} />}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      );
+    },
+    [currentPorte?.id],
+  );
 
   return (
     <View style={styles.container}>
@@ -1073,45 +1515,11 @@ export default function ImmeubleDetailsView({
             ]}
           >
             <ScrollView contentContainerStyle={styles.content}>
-              {/* Progress bar moderne style iOS */}
-              <View
-                style={[
-                  styles.progressCardNew,
-                  isTablet && styles.progressCardNewTablet,
-                ]}
-              >
-                <View style={styles.progressRowNew}>
-                  <View style={styles.progressLeftNew}>
-                    <View style={styles.progressIconNew}>
-                      <Feather name="activity" size={14} color="#2563EB" />
-                    </View>
-                    <View style={styles.progressTextsNew}>
-                      <Text style={styles.progressTitleNew}>Progression</Text>
-                      <Text style={styles.progressSubtitleNew}>
-                        {progress.visited} / {progress.total} portes
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.progressPercentNew}>
-                    <Text style={styles.progressPercentTextNew}>
-                      {progress.percentage}%
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.progressBarTrackNew}>
-                  <Animated.View
-                    style={[
-                      styles.progressBarFillNew,
-                      {
-                        width: progressFill.interpolate({
-                          inputRange: [0, 100],
-                          outputRange: ["0%", "100%"],
-                        }),
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
+              <ProgressCard
+                progress={progress}
+                progressFill={progressFill}
+                isTablet={isTablet}
+              />
 
               <View style={styles.statusHeaderRow}>
                 <View style={styles.statusHeaderLeft}>
@@ -1128,224 +1536,38 @@ export default function ImmeubleDetailsView({
                 </View>
                 <Pressable
                   style={styles.statusFilterButton}
-                  onPress={() => {
-                    setPendingStatusFilter(statusFilters[0] ?? null);
-                    filterSheetRef.current?.present();
-                  }}
+                  onPress={openStatusFilterSheet}
                 >
                   <Feather name="filter" size={15} color="#FFFFFF" />
                   <Text style={styles.statusFilterText}>Filtrer</Text>
                 </Pressable>
               </View>
 
-              <View style={styles.floorTabsWrap}>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.floorTabsScroll}
-                  contentContainerStyle={styles.floorTabs}
-                >
-                  {floors.map((etage) => {
-                    const isActive = currentPorte?.etage === etage;
-                    return (
-                      <Pressable
-                        key={`floor-${etage}`}
-                        style={[
-                          styles.floorTab,
-                          isActive && styles.floorTabActive,
-                        ]}
-                        onPress={() => jumpToFloor(etage)}
-                      >
-                        <Text
-                          style={[
-                            styles.floorTabText,
-                            isActive && styles.floorTabTextActive,
-                          ]}
-                        >
-                          Etage {etage}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              </View>
+              <FloorTabs
+                floors={floors}
+                currentEtage={currentPorte?.etage}
+                onJumpToFloor={jumpToFloor}
+              />
 
-              {/* Carte de porte avec statuts (swipe horizontal) */}
-              <FlatList
-                ref={doorPagerRef}
-                data={filteredPortes}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(item) => String(item.id)}
+              <DoorPager
+                doorPagerRef={doorPagerRef}
+                filteredPortes={filteredPortes}
+                width={width}
                 onMomentumScrollEnd={handleDoorScrollEnd}
-                style={styles.doorPager}
-                getItemLayout={(_, index) => ({
-                  length: width,
-                  offset: width * index,
-                  index,
-                })}
-                contentContainerStyle={styles.doorPagerContent}
-                ListEmptyComponent={
-                  <View style={styles.emptyFilterCard}>
-                    <Feather name="filter" size={20} color="#94A3B8" />
-                    <Text style={styles.emptyFilterTitle}>
-                      Aucune porte trouvee
-                    </Text>
-                    <Text style={styles.emptyFilterText}>
-                      Aucun resultat avec ce filtre.
-                    </Text>
-                  </View>
-                }
-                renderItem={({ item }) => {
-                  const status = getDisplayStatus(item) ?? {
-                    value: "NON_VISITE",
-                    label: "Non visite",
-                    description: "Par defaut",
-                    bg: "#E2E8F0",
-                    fg: "#475569",
-                    accent: "#CBD5F5",
-                    icon: "circle" as const,
-                  };
-                  return (
-                    <View style={[styles.doorPagerItem, { width }]}>
-                      <View style={styles.doorCardInScroll}>
-                        <View style={styles.doorCardHeader}>
-                          <View style={styles.doorCardTitleRow}>
-                            <View style={styles.doorNumberBadge}>
-                              <Text style={styles.doorNumberText}>
-                                {item.nomPersonnalise || item.numero || "--"}
-                              </Text>
-                            </View>
-                            <View style={styles.doorFloorBadge}>
-                              <Feather
-                                name="layers"
-                                size={12}
-                                color="#64748B"
-                              />
-                              <Text style={styles.doorFloorText}>
-                                Etage {item.etage ?? "--"}
-                              </Text>
-                            </View>
-                          </View>
-                          <View
-                            style={[
-                              styles.statusBadge,
-                              { backgroundColor: status.bg },
-                            ]}
-                          >
-                            <View
-                              style={[
-                                styles.statusDotBadge,
-                                { backgroundColor: status.accent },
-                              ]}
-                            />
-                            <Text
-                              style={[
-                                styles.statusBadgeText,
-                                { color: status.fg },
-                              ]}
-                            >
-                              {status.label}
-                            </Text>
-                          </View>
-                        </View>
-
-                        <View style={styles.statusGrid}>
-                          {visibleStatusOptions.map((option) => {
-                            const isActiveStatus =
-                              getDisplayStatusKey(item) === option.value;
-                            const cardBg = isActiveStatus
-                              ? option.accent
-                              : option.bg;
-                            const cardBorder = isActiveStatus
-                              ? option.accent
-                              : "#E2E8F0";
-                            const labelColor = isActiveStatus
-                              ? "#FFFFFF"
-                              : option.fg;
-                            const descColor = isActiveStatus
-                              ? "rgba(255, 255, 255, 0.9)"
-                              : option.fg;
-                            const iconBg = isActiveStatus
-                              ? "rgba(255, 255, 255, 0.2)"
-                              : option.accent;
-                            const iconColor = isActiveStatus
-                              ? "#FFFFFF"
-                              : option.fg;
-                            return (
-                              <View
-                                key={option.value}
-                                style={styles.statusCardWrap}
-                              >
-                                <Pressable
-                                  style={[
-                                    styles.statusCard,
-                                    {
-                                      backgroundColor: cardBg,
-                                      borderColor: cardBorder,
-                                    },
-                                  ]}
-                                  onPress={() =>
-                                    handleStatusSelect(option.value, item)
-                                  }
-                                >
-                                  <View
-                                    style={[
-                                      styles.statusIcon,
-                                      { backgroundColor: iconBg },
-                                    ]}
-                                  >
-                                    <Feather
-                                      name={option.icon}
-                                      size={16}
-                                      color={iconColor}
-                                    />
-                                  </View>
-                                  <Text
-                                    style={[
-                                      styles.statusLabel,
-                                      { color: labelColor },
-                                    ]}
-                                  >
-                                    {option.label}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.statusDesc,
-                                      { color: descColor },
-                                    ]}
-                                  >
-                                    {option.description}
-                                  </Text>
-                                </Pressable>
-                              </View>
-                            );
-                          })}
-                        </View>
-                      </View>
-                    </View>
-                  );
-                }}
+                visibleStatusOptions={visibleStatusOptions}
+                onStatusSelect={handleStatusSelect}
               />
             </ScrollView>
           </Animated.View>
         </>
       )}
 
+      {editMode && editPorte ? (
       <BottomSheetModal
         ref={editSheetRef}
         index={1}
         snapPoints={editSnapPoints}
-        backdropComponent={(props) => (
-          <BottomSheetBackdrop
-            {...(props ?? {})}
-            appearsOnIndex={0}
-            disappearsOnIndex={-1}
-            pressBehavior="close"
-            opacity={0.45}
-          />
-        )}
+        backdropComponent={(props) => renderSheetBackdrop(props, 0.45)}
         enablePanDownToClose
         onDismiss={closeEditSheet}
         keyboardBehavior="interactive"
@@ -1634,136 +1856,91 @@ export default function ImmeubleDetailsView({
           </>
         </BottomSheetScrollView>
       </BottomSheetModal>
+      ) : null}
 
       {/* Bottom Sheet Plan Rapide */}
+      {showFloorPlan ? (
       <BottomSheetModal
         ref={floorPlanSheetRef}
-        index={showFloorPlan ? 1 : -1}
+        index={1}
         snapPoints={floorPlanSnapPoints}
         enablePanDownToClose
         onChange={(index) => {
           if (index === -1) setShowFloorPlan(false);
         }}
-        backdropComponent={(props) => (
-          <BottomSheetBackdrop
-            {...(props ?? {})}
-            appearsOnIndex={0}
-            disappearsOnIndex={-1}
-            pressBehavior="close"
-            opacity={0.4}
-          />
-        )}
+        backdropComponent={(props) => renderSheetBackdrop(props, 0.4)}
         backgroundStyle={styles.sheetBackground}
         handleIndicatorStyle={styles.handleIndicator}
       >
-        <BottomSheetScrollView
+        <BottomSheetFlatList
+          data={portesParEtage}
+          keyExtractor={floorPlanKeyExtractor}
+          renderItem={renderFloorPlanSection}
+          removeClippedSubviews
+          windowSize={5}
+          initialNumToRender={3}
+          maxToRenderPerBatch={4}
           contentContainerStyle={[
             styles.sheetContent,
             isTablet && styles.sheetContentTablet,
+            styles.floorPlanSectionList,
           ]}
-        >
-          <View style={styles.floorPlanHero}>
-            <View style={styles.floorPlanHeroIcon}>
-              <Feather name="grid" size={22} color="#2563EB" />
-            </View>
-            <View style={styles.floorPlanHeroText}>
-              <Text style={styles.floorPlanTitle}>Plan de l&apos;immeuble</Text>
-              <Text style={styles.floorPlanSubtitle}>
-                {sortedPortes.length} portes • {portesParEtage.length} etages
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.floorPlanCurrent}>
-            <Text style={styles.floorPlanCurrentLabel}>Porte actuelle</Text>
-            <View style={styles.floorPlanCurrentCard}>
-              <View style={styles.floorPlanCurrentBadge}>
-                <Text style={styles.floorPlanCurrentNumber}>
-                  {currentPorte?.nomPersonnalise ||
-                    currentPorte?.numero ||
-                    "--"}
-                </Text>
-              </View>
-              <View style={styles.floorPlanCurrentInfo}>
-                <Text style={styles.floorPlanCurrentFloor}>
-                  Étage {currentPorte?.etage ?? "--"}
-                </Text>
-                {currentStatus && (
-                  <Text
-                    style={[
-                      styles.floorPlanCurrentStatus,
-                      { color: currentStatus.accent },
-                    ]}
-                  >
-                    {currentStatus.label}
+          ListHeaderComponent={
+            <>
+              <View style={styles.floorPlanHero}>
+                <View style={styles.floorPlanHeroIcon}>
+                  <Feather name="grid" size={22} color="#2563EB" />
+                </View>
+                <View style={styles.floorPlanHeroText}>
+                  <Text style={styles.floorPlanTitle}>Plan de l&apos;immeuble</Text>
+                  <Text style={styles.floorPlanSubtitle}>
+                    {sortedPortes.length} portes • {portesParEtage.length} etages
                   </Text>
-                )}
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.floorPlanList}>
-            <Text style={styles.floorPlanListTitle}>Toutes les portes</Text>
-            {portesParEtage.map(([etage, portes]) => (
-              <View key={etage} style={styles.floorPlanEtageSection}>
-                <Text style={styles.floorPlanEtageLabel}>Étage {etage}</Text>
-                <View style={styles.floorPlanDoorsGrid}>
-                  {portes.map((porte) => {
-                    const status = getDisplayStatus(porte);
-                    const isActive = porte.id === currentPorte?.id;
-                    const isVisited = status !== null;
-                    const chipBg = isVisited ? status?.accent : "#F1F5F9";
-                    const chipBorder = isActive
-                      ? status?.accent
-                      : "transparent";
-                    const chipText = isVisited ? "#FFFFFF" : "#64748B";
-
-                    return (
-                      <View
-                        key={porte.id}
-                        style={[
-                          styles.floorPlanDoorChip,
-                          {
-                            backgroundColor: chipBg,
-                            borderColor: chipBorder,
-                            borderWidth: isActive ? 2 : 1,
-                          },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.floorPlanDoorChipText,
-                            { color: chipText },
-                          ]}
-                        >
-                          {porte.nomPersonnalise || porte.numero}
-                        </Text>
-                        {isActive && (
-                          <View style={styles.floorPlanActiveIndicator} />
-                        )}
-                      </View>
-                    );
-                  })}
                 </View>
               </View>
-            ))}
-          </View>
-        </BottomSheetScrollView>
+
+              <View style={styles.floorPlanCurrent}>
+                <Text style={styles.floorPlanCurrentLabel}>Porte actuelle</Text>
+                <View style={styles.floorPlanCurrentCard}>
+                  <View style={styles.floorPlanCurrentBadge}>
+                    <Text style={styles.floorPlanCurrentNumber}>
+                      {currentPorte?.nomPersonnalise ||
+                        currentPorte?.numero ||
+                        "--"}
+                    </Text>
+                  </View>
+                  <View style={styles.floorPlanCurrentInfo}>
+                    <Text style={styles.floorPlanCurrentFloor}>
+                      Étage {currentPorte?.etage ?? "--"}
+                    </Text>
+                    {currentStatus && (
+                      <Text
+                        style={[
+                          styles.floorPlanCurrentStatus,
+                          { color: currentStatus.accent },
+                        ]}
+                      >
+                        {currentStatus.label}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.floorPlanList}>
+                <Text style={styles.floorPlanListTitle}>Toutes les portes</Text>
+              </View>
+            </>
+          }
+        />
       </BottomSheetModal>
+      ) : null}
 
       <BottomSheetModal
         ref={filterSheetRef}
         snapPoints={filterSnapPoints}
         enablePanDownToClose
-        backdropComponent={(props) => (
-          <BottomSheetBackdrop
-            {...(props ?? {})}
-            appearsOnIndex={0}
-            disappearsOnIndex={-1}
-            pressBehavior="close"
-            opacity={0.5}
-          />
-        )}
+        backdropComponent={(props) => renderSheetBackdrop(props, 0.5)}
         onChange={(index) => {
           if (index === -1) {
             setPendingStatusFilter(statusFilters[0] ?? null);
@@ -1991,7 +2168,7 @@ export default function ImmeubleDetailsView({
             value={getDateValue(editForm.rdvDate || getTodayDate())}
             mode="date"
             display="spinner"
-            onChange={(_, selected: any) => {
+            onChange={(_event: unknown, selected?: Date) => {
               setShowDatePicker(false);
               if (selected) {
                 const value = selected.toISOString().split("T")[0];
@@ -2008,7 +2185,7 @@ export default function ImmeubleDetailsView({
             value={getTimeValue(editForm.rdvTime || getNowTime())}
             mode="time"
             display="spinner"
-            onChange={(_, selected) => {
+            onChange={(_event: unknown, selected?: Date) => {
               setShowTimePicker(false);
               if (selected) {
                 const hh = String(selected.getHours()).padStart(2, "0");
@@ -2038,36 +2215,7 @@ export default function ImmeubleDetailsView({
           ]}
           pointerEvents="box-none"
         >
-          {[
-            {
-              label: "Ajouter porte",
-              subLabel: "Etage courant",
-              icon: "plus",
-              tone: "primary",
-              onPress: openAddPorte,
-            },
-            {
-              label: "Ajouter etage",
-              subLabel: "Nouveau niveau",
-              icon: "layers",
-              tone: "primary",
-              onPress: handleAddEtage,
-            },
-            {
-              label: "Supprimer porte",
-              subLabel: "Derniere de l'etage",
-              icon: "trash-2",
-              tone: "danger",
-              onPress: openDeletePorte,
-            },
-            {
-              label: "Supprimer etage",
-              subLabel: "Dernier etage",
-              icon: "minus-circle",
-              tone: "danger",
-              onPress: openDeleteEtage,
-            },
-          ].map((action, index, items) => {
+          {fabActions.map((action, index, items) => {
             const arcStart = -100;
             const arcEnd = -180;
             const angle =
@@ -2090,14 +2238,8 @@ export default function ImmeubleDetailsView({
               inputRange: [0, 1],
               outputRange: [0, targetY],
             });
-            const hintTranslateX = Animated.add(
-              translateX,
-              new Animated.Value(dirX * hintDistance),
-            );
-            const hintTranslateY = Animated.add(
-              translateY,
-              new Animated.Value(dirY * hintDistance),
-            );
+            const hintTranslateX = Animated.add(translateX, dirX * hintDistance);
+            const hintTranslateY = Animated.add(translateY, dirY * hintDistance);
             const scale = fabAnim.interpolate({
               inputRange: [0, 1],
               outputRange: [0.92, 1],
@@ -2287,6 +2429,9 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: "#2563EB",
+  },
+  floorPlanSectionList: {
+    paddingBottom: 12,
   },
   content: {
     padding: 16,

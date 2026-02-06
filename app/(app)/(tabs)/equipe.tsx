@@ -3,8 +3,10 @@ import { authService } from "@/services/auth";
 import type { Manager, Statistic } from "@/types/api";
 import { calculateRank } from "@/utils/business/ranks";
 import { Feather } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Animated,
+  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -72,6 +74,7 @@ export default function EquipeScreen() {
   const [period, setPeriod] = useState<PeriodKey>("30d");
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const contentOpacity = useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     let isMounted = true;
@@ -90,8 +93,16 @@ export default function EquipeScreen() {
 
   const { data: profile, loading } = useWorkspaceProfile(userId, role);
 
-  const managerProfile = role === "manager" ? (profile as Manager) : null;
-  const team = managerProfile?.commercials || [];
+  const managerProfile = useMemo(
+    () => (role === "manager" ? (profile as Manager | null) : null),
+    [profile, role],
+  );
+
+  const team = useMemo(() => managerProfile?.commercials || [], [managerProfile]);
+
+  const handlePeriodChange = useCallback((nextPeriod: PeriodKey) => {
+    setPeriod(nextPeriod);
+  }, []);
 
   const teamSnapshots = useMemo(() => {
     return team.map((commercial) => {
@@ -122,6 +133,8 @@ export default function EquipeScreen() {
         immeublesVisites: acc.immeublesVisites + commercial.stats.immeublesVisites,
         rendezVousPris: acc.rendezVousPris + commercial.stats.rendezVousPris,
         refus: acc.refus + commercial.stats.refus,
+        absents: acc.absents + commercial.stats.absents,
+        argumentes: acc.argumentes + commercial.stats.argumentes,
         nbImmeublesProspectes: acc.nbImmeublesProspectes + commercial.stats.nbImmeublesProspectes,
         nbPortesProspectes: acc.nbPortesProspectes + commercial.stats.nbPortesProspectes,
       }),
@@ -131,8 +144,25 @@ export default function EquipeScreen() {
 
   const topPerformer = useMemo(() => {
     if (!teamSnapshots.length) return null;
-    return [...teamSnapshots].sort((a, b) => b.points - a.points)[0];
+    return teamSnapshots.reduce((best, current) =>
+      current.points > best.points ? current : best,
+    );
   }, [teamSnapshots]);
+
+  useEffect(() => {
+    if (loading) {
+      contentOpacity.setValue(0);
+      return;
+    }
+
+    Animated.timing(contentOpacity, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+      isInteraction: false,
+    }).start();
+  }, [contentOpacity, loading]);
 
   if (role !== "manager") {
     return (
@@ -156,15 +186,16 @@ export default function EquipeScreen() {
         { paddingBottom: insets.bottom + 24 },
       ]}
     >
+      <Animated.View style={{ opacity: contentOpacity }}>
       <View style={styles.periodRow}>
         {PERIOD_OPTIONS.map((option) => {
           const selected = period === option.key;
           return (
             <Pressable
-              key={option.key}
-              style={[styles.periodChip, selected && styles.periodChipActive]}
-              onPress={() => setPeriod(option.key)}
-            >
+                key={option.key}
+                style={[styles.periodChip, selected && styles.periodChipActive]}
+                onPress={() => handlePeriodChange(option.key)}
+              >
               <Text
                 style={[
                   styles.periodChipText,
@@ -226,7 +257,7 @@ export default function EquipeScreen() {
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionIconGold}>
-              <Feather name="trophy" size={18} color="#FFFFFF" />
+              <Feather name="award" size={18} color="#FFFFFF" />
             </View>
             <View>
               <Text style={styles.sectionTitle}>Top performer</Text>
@@ -334,6 +365,7 @@ export default function EquipeScreen() {
           </View>
         )}
       </View>
+      </Animated.View>
     </ScrollView>
   );
 }

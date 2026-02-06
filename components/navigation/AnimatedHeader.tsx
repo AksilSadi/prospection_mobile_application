@@ -3,7 +3,7 @@ import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
 import type { Commercial, Manager } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -25,9 +25,12 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
   const insets = useSafeAreaInsets();
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  const [titles, setTitles] = useState(BASE_TITLES);
   const { data: profile } = useWorkspaceProfile(userId, role);
-  const [initials, setInitials] = useState("?");
+
+  const titles = useMemo(
+    () => (role === "manager" ? MANAGER_TITLES : BASE_TITLES),
+    [role],
+  );
 
   const fadeAnims = useRef([
     new Animated.Value(1),
@@ -51,15 +54,15 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
       const userRole = await authService.getUserRole();
       setUserId(id);
       setRole(userRole);
-      setTitles(userRole === "manager" ? MANAGER_TITLES : BASE_TITLES);
     };
     void loadIdentity();
   }, []);
 
   useEffect(() => {
-    titles.forEach((_, index) => {
-      const isActive = index === currentIndex;
-      Animated.parallel([
+    const animations = fadeAnims.flatMap((_, index) => {
+      const isActive = index === currentIndex && index < titles.length;
+
+      return [
         Animated.timing(fadeAnims[index], {
           toValue: isActive ? 1 : 0,
           duration: 280,
@@ -70,17 +73,22 @@ export default function AnimatedHeader({ currentIndex }: AnimatedHeaderProps) {
           duration: 280,
           useNativeDriver: true,
         }),
-      ]).start();
+      ];
     });
+
+    Animated.parallel(animations).start();
   }, [currentIndex, fadeAnims, titles, translateAnims]);
 
-  useEffect(() => {
-    if (!profile) return;
+  const initials = useMemo(() => {
+    if (!profile) {
+      return "?";
+    }
+
     const nom = (profile as Commercial).nom || (profile as Manager).nom || "";
     const prenom =
       (profile as Commercial).prenom || (profile as Manager).prenom || "";
     const computed = `${prenom.charAt(0)}${nom.charAt(0)}`.toUpperCase();
-    setInitials(computed || "?");
+    return computed || "?";
   }, [profile]);
 
   return (

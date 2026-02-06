@@ -3,6 +3,7 @@ import { authService } from "@/services/auth";
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
+import { useCallback } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -11,11 +12,11 @@ export default function ProfileMenuOverlay() {
   const { isVisible, close } = useProfileMenu();
   const insets = useSafeAreaInsets();
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     await authService.logout();
     close();
     router.replace("/(auth)/login");
-  };
+  }, [close, router]);
 
   if (!isVisible) return null;
 

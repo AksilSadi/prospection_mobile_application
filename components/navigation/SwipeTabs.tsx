@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { TabView } from "react-native-tab-view";
 import HamburgerButton from "@/components/navigation/HamburgerButton";
@@ -61,32 +61,41 @@ export default function SwipeTabs({
     }
   }, [index]);
 
+  const handleSwipeLockChange = useCallback((locked: boolean) => {
+    setSwipeEnabled(!locked);
+  }, []);
+
+  const renderScene = useCallback(
+    ({ route }: { route: { key: string } }) => {
+      if (route.key === "immeubles") {
+        return (
+          <ImmeublesScreen
+            isActive={index === 1}
+            onSwipeLockChange={handleSwipeLockChange}
+            onHamburgerVisibilityChange={setShowHamburger}
+            onHeaderVisibilityChange={onHeaderVisibilityChange}
+          />
+        );
+      }
+      if (route.key === "historique") {
+        return <HistoriqueScreen />;
+      }
+      if (route.key === "equipe") {
+        return <EquipeScreen />;
+      }
+      if (route.key === "statistiques") {
+        return <StatistiquesScreen />;
+      }
+      return <DashboardScreen />;
+    },
+    [handleSwipeLockChange, index, onHeaderVisibilityChange],
+  );
+
   return (
     <View style={styles.container}>
       <TabView
         navigationState={{ index, routes: tabRoutes }}
-        renderScene={({ route }) => {
-          if (route.key === "immeubles") {
-            return (
-              <ImmeublesScreen
-                isActive={index === 1}
-                onSwipeLockChange={(locked) => setSwipeEnabled(!locked)}
-                onHamburgerVisibilityChange={setShowHamburger}
-                onHeaderVisibilityChange={onHeaderVisibilityChange}
-              />
-            );
-          }
-          if (route.key === "historique") {
-            return <HistoriqueScreen />;
-          }
-          if (route.key === "equipe") {
-            return <EquipeScreen />;
-          }
-          if (route.key === "statistiques") {
-            return <StatistiquesScreen />;
-          }
-          return <DashboardScreen />;
-        }}
+        renderScene={renderScene}
         onIndexChange={onIndexChange}
         renderTabBar={() => null}
         swipeEnabled={swipeEnabled}

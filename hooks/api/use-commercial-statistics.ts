@@ -9,5 +9,9 @@ export function useCommercialStatistics(commercialId: number | null) {
       return api.statistics.getStatistics(commercialId);
     },
     [commercialId],
+    {
+      cacheKey: `commercial-statistics:${commercialId ?? 0}`,
+      cacheTimeMs: 45_000,
+    },
   );
 }

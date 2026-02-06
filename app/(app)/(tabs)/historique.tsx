@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Feather } from "@expo/vector-icons";
 import {
   FlatList,
@@ -38,6 +38,260 @@ const STATUS_STYLE: Record<
   },
 };
 
+const STATUS_FALLBACK = {
+  label: "Inconnu",
+  bg: "#E2E8F0",
+  fg: "#475569",
+  dot: "#94A3B8",
+};
+
+const FILTER_TO_MS: Record<string, number> = {
+  all: Number.POSITIVE_INFINITY,
+  "24h": 24 * 60 * 60 * 1000,
+  "7d": 7 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+};
+
+type PortePipeline = {
+  porteId: number;
+  porteLabel: string;
+  lastDate: string;
+  events: StatusHistorique[];
+};
+
+type HistoryMeta = {
+  porteCount: number;
+  historyCount: number;
+  pipelines: PortePipeline[];
+};
+
+const EMPTY_HISTORY_META: HistoryMeta = {
+  porteCount: 0,
+  historyCount: 0,
+  pipelines: [],
+};
+
+function buildHistoryMeta(history: StatusHistorique[]): HistoryMeta {
+  if (history.length === 0) return EMPTY_HISTORY_META;
+
+  const grouped = new Map<number, StatusHistorique[]>();
+  for (const event of history) {
+    const list = grouped.get(event.porteId) ?? [];
+    list.push(event);
+    grouped.set(event.porteId, list);
+  }
+
+  const pipelines = Array.from(grouped.entries()).map(([porteId, events]) => {
+    const sorted = [...events].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    const last = sorted[sorted.length - 1];
+    const porte = last.porte;
+
+    return {
+      porteId,
+      porteLabel: porte
+        ? `Porte ${porte.numero} • Etage ${porte.etage}`
+        : `Porte ${porteId}`,
+      lastDate: last.createdAt,
+      events: sorted,
+    };
+  });
+
+  const orderedPipelines = pipelines.sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+
+  return {
+    porteCount: grouped.size,
+    historyCount: history.length,
+    pipelines: orderedPipelines,
+  };
+}
+
+type HistoriqueImmeubleCardProps = {
+  immeuble: Immeuble;
+  isExpanded: boolean;
+  expandAnim: Animated.Value;
+  cardAnim: Animated.Value;
+  historyMeta: HistoryMeta;
+  onToggle: (immeubleId: number) => void;
+};
+
+const HistoriqueImmeubleCard = memo(
+  function HistoriqueImmeubleCard({
+    immeuble,
+    isExpanded,
+    expandAnim,
+    cardAnim,
+    historyMeta,
+    onToggle,
+  }: HistoriqueImmeubleCardProps) {
+    const portePipelines = historyMeta.pipelines;
+
+    return (
+      <View>
+        <Pressable
+          style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+          android_ripple={{ color: "#E2E8F0" }}
+          onPress={() => onToggle(immeuble.id)}
+        >
+          <Animated.View
+            style={[
+              styles.cardInner,
+              {
+                opacity: cardAnim,
+                transform: [
+                  {
+                    translateY: cardAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [12, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.cardIcon}>
+              <Feather name="home" size={18} color="#FFFFFF" />
+            </View>
+            <View style={styles.cardBody}>
+              <Text style={styles.cardTitle} numberOfLines={1}>
+                {immeuble.adresse}
+              </Text>
+              <View style={styles.cardMeta}>
+                <Feather name="clock" size={12} color="#94A3B8" />
+                <Text style={styles.cardDate}>
+                  {immeuble.updatedAt
+                    ? new Date(immeuble.updatedAt).toLocaleDateString("fr-FR")
+                    : "Date inconnue"}
+                </Text>
+              </View>
+              <View style={styles.cardStats}>
+                <View style={styles.statChip}>
+                  <Feather name="grid" size={12} color="#2563EB" />
+                  <Text style={styles.statText}>{historyMeta.porteCount} portes</Text>
+                </View>
+                <View style={styles.statChip}>
+                  <Feather name="activity" size={12} color="#0EA5E9" />
+                  <Text style={styles.statText}>{historyMeta.historyCount} actions</Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.cardChevron}>
+              <Animated.View
+                style={{
+                  transform: [
+                    {
+                      rotate: expandAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ["0deg", "180deg"],
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <Feather name="chevron-down" size={18} color="#94A3B8" />
+              </Animated.View>
+            </View>
+          </Animated.View>
+        </Pressable>
+
+        {isExpanded ? (
+          <Animated.View
+            style={[
+              {
+                opacity: expandAnim,
+                transform: [
+                  {
+                    translateY: expandAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-6, 0],
+                    }),
+                  },
+                  {
+                    scale: expandAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.985, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {portePipelines.length === 0 ? (
+              <View style={styles.historyEmptyPanel}>
+                <Feather name="inbox" size={20} color="#94A3B8" />
+                <Text style={styles.historyEmptyTitle}>
+                  Aucun historique pour cet immeuble
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.historyPanel}>
+                <Text style={styles.historyPanelTitle}>Historique des portes</Text>
+                {portePipelines.map((porte) => (
+                  <View key={porte.porteId} style={styles.historyDoorCard}>
+                    <View style={styles.historyDoorHeader}>
+                      <Text style={styles.historyDoorTitle}>{porte.porteLabel}</Text>
+                      <Text style={styles.historyDoorDate}>
+                        {new Date(porte.lastDate).toLocaleString("fr-FR")}
+                      </Text>
+                    </View>
+                    <View style={styles.historyTimeline}>
+                      {porte.events.map((event, index) => {
+                        const style = STATUS_STYLE[event.statut] || {
+                          ...STATUS_FALLBACK,
+                          label: event.statut,
+                        };
+                        const isLast = index === porte.events.length - 1;
+                        return (
+                          <View key={event.id} style={styles.timelineRow}>
+                            <View style={styles.timelineLeft}>
+                              <View
+                                style={[
+                                  styles.timelineDot,
+                                  { backgroundColor: style.dot },
+                                ]}
+                              />
+                              {!isLast && <View style={styles.timelineLine} />}
+                            </View>
+                            <View style={styles.timelineContent}>
+                              <View
+                                style={[
+                                  styles.timelineChip,
+                                  { backgroundColor: style.bg },
+                                ]}
+                              >
+                                <Text style={[styles.timelineText, { color: style.fg }]}> 
+                                  {style.label}
+                                </Text>
+                              </View>
+                              <Text style={styles.timelineDate}>
+                                {new Date(event.createdAt).toLocaleString("fr-FR")}
+                              </Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </Animated.View>
+        ) : null}
+      </View>
+    );
+  },
+  (prev, next) =>
+    prev.immeuble.id === next.immeuble.id &&
+    prev.immeuble.adresse === next.immeuble.adresse &&
+    prev.immeuble.updatedAt === next.immeuble.updatedAt &&
+    prev.isExpanded === next.isExpanded &&
+    prev.expandAnim === next.expandAnim &&
+    prev.cardAnim === next.cardAnim &&
+    prev.historyMeta === next.historyMeta &&
+    prev.onToggle === next.onToggle,
+);
+
 export default function HistoriqueScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -45,6 +299,7 @@ export default function HistoriqueScreen() {
   const [historyMap, setHistoryMap] = useState<Record<number, StatusHistorique[]>>({});
   const [historyLoading, setHistoryLoading] = useState(false);
   const [expandedImmeubleId, setExpandedImmeubleId] = useState<number | null>(null);
+  const loadedHistoryIdsRef = useRef<Set<number>>(new Set());
   const expandAnimsRef = useState(() => new Map<number, Animated.Value>())[0];
   const cardAnimsRef = useState(() => new Map<number, Animated.Value>())[0];
   const skeletonPulse = useRef(new Animated.Value(0)).current;
@@ -59,21 +314,21 @@ export default function HistoriqueScreen() {
     void loadIdentity();
   }, []);
 
-  const getExpandAnim = (id: number) => {
+  const getExpandAnim = useCallback((id: number) => {
     const existing = expandAnimsRef.get(id);
     if (existing) return existing;
     const next = new Animated.Value(0);
     expandAnimsRef.set(id, next);
     return next;
-  };
+  }, [expandAnimsRef]);
 
-  const getCardAnim = (id: number) => {
+  const getCardAnim = useCallback((id: number) => {
     const existing = cardAnimsRef.get(id);
     if (existing) return existing;
     const next = new Animated.Value(0);
     cardAnimsRef.set(id, next);
     return next;
-  };
+  }, [cardAnimsRef]);
 
   const { data: profile, loading, error } = useWorkspaceProfile(userId, role);
 
@@ -89,18 +344,21 @@ export default function HistoriqueScreen() {
 
   const filteredImmeubles = useMemo(() => {
     const now = Date.now();
+    const rangeMs = FILTER_TO_MS[filter] ?? Number.POSITIVE_INFINITY;
     return sortedImmeubles.filter((imm) => {
       const lastModified = imm.updatedAt ? new Date(imm.updatedAt).getTime() : 0;
-      if (filter === "24h") return now - lastModified < 24 * 60 * 60 * 1000;
-      if (filter === "7d") return now - lastModified < 7 * 24 * 60 * 60 * 1000;
-      if (filter === "30d") return now - lastModified < 30 * 24 * 60 * 60 * 1000;
-      return true;
+      return now - lastModified < rangeMs;
     });
   }, [sortedImmeubles, filter]);
 
   const visibleImmeubles = filteredImmeubles;
 
   useEffect(() => {
+    if (!loading) {
+      skeletonPulse.setValue(0);
+      return;
+    }
+
     const pulse = Animated.loop(
       Animated.sequence([
         Animated.timing(skeletonPulse, {
@@ -119,7 +377,7 @@ export default function HistoriqueScreen() {
     return () => {
       pulse.stop();
     };
-  }, [skeletonPulse]);
+  }, [loading, skeletonPulse]);
 
   useEffect(() => {
     if (visibleImmeubles.length === 0) return;
@@ -134,74 +392,66 @@ export default function HistoriqueScreen() {
       });
     });
     Animated.stagger(60, animations).start();
-  }, [visibleImmeubles]);
+  }, [getCardAnim, visibleImmeubles]);
 
   useEffect(() => {
     let cancelled = false;
+
     const loadHistory = async () => {
       if (visibleImmeubles.length === 0) {
-        setHistoryMap({});
+        setHistoryLoading(false);
         return;
       }
+
+      const missingImmeubles = visibleImmeubles.filter(
+        (imm) => !loadedHistoryIdsRef.current.has(imm.id),
+      );
+
+      if (missingImmeubles.length === 0) {
+        setHistoryLoading(false);
+        return;
+      }
+
       setHistoryLoading(true);
       const entries: Record<number, StatusHistorique[]> = {};
+
       await Promise.all(
-        visibleImmeubles.map(async (imm) => {
+        missingImmeubles.map(async (imm) => {
           try {
             const history = await api.portes.statusHistoriqueByImmeuble(imm.id);
             entries[imm.id] = history || [];
           } catch {
             entries[imm.id] = [];
+          } finally {
+            loadedHistoryIdsRef.current.add(imm.id);
           }
         }),
       );
+
       if (!cancelled) {
-        setHistoryMap(entries);
+        setHistoryMap((prev) => ({ ...prev, ...entries }));
         setHistoryLoading(false);
       }
     };
+
     void loadHistory();
     return () => {
       cancelled = true;
     };
   }, [visibleImmeubles]);
 
-  const buildPortePipelines = (history: StatusHistorique[]) => {
-    if (history.length === 0) return [];
-    const grouped = new Map<number, StatusHistorique[]>();
-    history.forEach((event) => {
-      const list = grouped.get(event.porteId) ?? [];
-      list.push(event);
-      grouped.set(event.porteId, list);
-    });
-    const pipelines = Array.from(grouped.entries()).map(([porteId, events]) => {
-      const sorted = [...events].sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
-      const steps: string[] = [];
-      sorted.forEach((event) => {
-        if (steps[steps.length - 1] !== event.statut) {
-          steps.push(event.statut);
-        }
-      });
-      const last = sorted[sorted.length - 1];
-      const porte = last.porte;
-      return {
-        porteId,
-        porteLabel: porte
-          ? `Porte ${porte.numero} • Etage ${porte.etage}`
-          : `Porte ${porteId}`,
-        lastDate: last.createdAt,
-        steps,
-        events: sorted,
-      };
-    });
-    return pipelines.sort(
-      (a, b) => new Date(b.lastDate).getTime() - new Date(a.lastDate).getTime(),
-    );
-  };
+  const historyMetaByImmeuble = useMemo(() => {
+    const entries: Record<number, HistoryMeta> = {};
 
-  const toggleExpand = (immeubleId: number) => {
+    for (const imm of visibleImmeubles) {
+      const history = historyMap[imm.id] ?? [];
+      entries[imm.id] = buildHistoryMeta(history);
+    }
+
+    return entries;
+  }, [historyMap, visibleImmeubles]);
+
+  const toggleExpand = useCallback((immeubleId: number) => {
     const currentId = expandedImmeubleId;
     if (currentId === immeubleId) {
       const anim = getExpandAnim(immeubleId);
@@ -227,7 +477,86 @@ export default function HistoriqueScreen() {
       duration: 300,
       useNativeDriver: true,
     }).start();
-  };
+  }, [expandedImmeubleId, getExpandAnim]);
+
+  const handleFilterPress = useCallback((nextFilter: string) => {
+    setFilter(nextFilter);
+  }, []);
+
+  const renderSeparator = useCallback(() => <View style={styles.itemSeparator} />, []);
+
+  const renderImmeubleItem = useCallback(
+    ({ item: immeuble }: { item: Immeuble }) => {
+      const isExpanded = expandedImmeubleId === immeuble.id;
+      const expandAnim = getExpandAnim(immeuble.id);
+      const cardAnim = getCardAnim(immeuble.id);
+      const historyMeta = historyMetaByImmeuble[immeuble.id] ?? EMPTY_HISTORY_META;
+
+      return (
+        <HistoriqueImmeubleCard
+          immeuble={immeuble}
+          isExpanded={isExpanded}
+          expandAnim={expandAnim}
+          cardAnim={cardAnim}
+          historyMeta={historyMeta}
+          onToggle={toggleExpand}
+        />
+      );
+    },
+    [
+      expandedImmeubleId,
+      getCardAnim,
+      getExpandAnim,
+      historyMetaByImmeuble,
+      toggleExpand,
+    ],
+  );
+
+  const listHeader = useMemo(
+    () => (
+      <View style={styles.headerBlock}>
+        <View style={styles.filtersRow}>
+          {FILTERS.map((item) => {
+            const selected = item.key === filter;
+            return (
+              <Pressable
+                key={item.key}
+                onPress={() => handleFilterPress(item.key)}
+                style={[styles.filterChip, selected && styles.filterChipActive]}
+              >
+                <Feather
+                  name={item.icon as keyof typeof Feather.glyphMap}
+                  size={12}
+                  color={selected ? "#FFFFFF" : "#64748B"}
+                />
+                <Text style={[styles.filterText, selected && styles.filterTextActive]}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {loading && <Text style={styles.helper}>Chargement...</Text>}
+        {historyLoading && !loading && (
+          <Text style={styles.helper}>Chargement historique...</Text>
+        )}
+        {error && <Text style={styles.error}>{error}</Text>}
+      </View>
+    ),
+    [error, filter, handleFilterPress, historyLoading, loading],
+  );
+
+  const listEmpty = useMemo(
+    () =>
+      !loading && !error ? (
+        <View style={styles.emptyCard}>
+          <Feather name="home" size={32} color="#94A3B8" />
+          <Text style={styles.emptyText}>Aucun immeuble pour cette periode</Text>
+        </View>
+      ) : null,
+    [error, loading],
+  );
 
   if (loading) {
     const skeletonOpacity = skeletonPulse.interpolate({
@@ -267,214 +596,16 @@ export default function HistoriqueScreen() {
       <FlatList
         data={visibleImmeubles}
         keyExtractor={(item) => String(item.id)}
+        initialNumToRender={6}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+        updateCellsBatchingPeriod={24}
+        removeClippedSubviews
         contentContainerStyle={styles.content}
-        ListHeaderComponent={
-          <View style={styles.headerBlock}>
-            <View style={styles.filtersRow}>
-              {FILTERS.map((item) => {
-                const selected = item.key === filter;
-                return (
-                  <Pressable
-                    key={item.key}
-                    onPress={() => setFilter(item.key)}
-                    style={[styles.filterChip, selected && styles.filterChipActive]}
-                  >
-                    <Feather
-                      name={item.icon as keyof typeof Feather.glyphMap}
-                      size={12}
-                      color={selected ? "#FFFFFF" : "#64748B"}
-                    />
-                    <Text style={[styles.filterText, selected && styles.filterTextActive]}>
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {loading && <Text style={styles.helper}>Chargement...</Text>}
-            {historyLoading && !loading && (
-              <Text style={styles.helper}>Chargement historique...</Text>
-            )}
-            {error && <Text style={styles.error}>{error}</Text>}
-          </View>
-        }
-        ListEmptyComponent={
-          !loading && !error ? (
-            <View style={styles.emptyCard}>
-              <Feather name="home" size={32} color="#94A3B8" />
-              <Text style={styles.emptyText}>Aucun immeuble pour cette periode</Text>
-            </View>
-          ) : null
-        }
-        ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
-        renderItem={({ item: immeuble }) => {
-          const isExpanded = expandedImmeubleId === immeuble.id;
-          const expandAnim = getExpandAnim(immeuble.id);
-          const cardAnim = getCardAnim(immeuble.id);
-          const history = historyMap[immeuble.id] ?? [];
-          const hasHistory = Object.prototype.hasOwnProperty.call(historyMap, immeuble.id);
-          const porteCount = new Set(history.map((event) => event.porteId)).size;
-          const portePipelines = buildPortePipelines(history);
-          return (
-            <View>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.card,
-                  pressed && styles.cardPressed,
-                ]}
-                android_ripple={{ color: "#E2E8F0" }}
-                onPress={() => toggleExpand(immeuble.id)}
-              >
-                <Animated.View
-                  style={[
-                    styles.cardInner,
-                    {
-                      opacity: cardAnim,
-                      transform: [
-                        {
-                          translateY: cardAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [12, 0],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                >
-                  <View style={styles.cardIcon}>
-                    <Feather name="home" size={18} color="#FFFFFF" />
-                  </View>
-                  <View style={styles.cardBody}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>
-                      {immeuble.adresse}
-                    </Text>
-                    <View style={styles.cardMeta}>
-                      <Feather name="clock" size={12} color="#94A3B8" />
-                      <Text style={styles.cardDate}>
-                        {immeuble.updatedAt
-                          ? new Date(immeuble.updatedAt).toLocaleDateString("fr-FR")
-                          : "Date inconnue"}
-                      </Text>
-                    </View>
-                    <View style={styles.cardStats}>
-                      <View style={styles.statChip}>
-                        <Feather name="grid" size={12} color="#2563EB" />
-                        <Text style={styles.statText}>{porteCount} portes</Text>
-                      </View>
-                      <View style={styles.statChip}>
-                        <Feather name="activity" size={12} color="#0EA5E9" />
-                        <Text style={styles.statText}>{history.length} actions</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View style={styles.cardChevron}>
-                    <Animated.View
-                      style={{
-                        transform: [
-                          {
-                            rotate: expandAnim.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: ["0deg", "180deg"],
-                            }),
-                          },
-                        ],
-                      }}
-                    >
-                      <Feather name="chevron-down" size={18} color="#94A3B8" />
-                    </Animated.View>
-                  </View>
-                </Animated.View>
-              </Pressable>
-
-              {isExpanded ? (
-                <Animated.View
-                  style={[
-                    {
-                      opacity: expandAnim,
-                      transform: [
-                        {
-                          translateY: expandAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [-6, 0],
-                          }),
-                        },
-                        {
-                          scale: expandAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [0.985, 1],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                >
-                  {portePipelines.length === 0 ? (
-                    <View style={styles.historyEmptyPanel}>
-                      <Feather name="inbox" size={20} color="#94A3B8" />
-                      <Text style={styles.historyEmptyTitle}>
-                        Aucun historique pour cet immeuble
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.historyPanel}>
-                      <Text style={styles.historyPanelTitle}>Historique des portes</Text>
-                      {portePipelines.map((porte) => (
-                        <View key={porte.porteId} style={styles.historyDoorCard}>
-                          <View style={styles.historyDoorHeader}>
-                            <Text style={styles.historyDoorTitle}>{porte.porteLabel}</Text>
-                            <Text style={styles.historyDoorDate}>
-                              {new Date(porte.lastDate).toLocaleString("fr-FR")}
-                            </Text>
-                          </View>
-                          <View style={styles.historyTimeline}>
-                            {porte.events.map((event, index) => {
-                              const style = STATUS_STYLE[event.statut] || {
-                                label: event.statut,
-                                bg: "#E2E8F0",
-                                fg: "#475569",
-                                dot: "#94A3B8",
-                              };
-                              const isLast = index === porte.events.length - 1;
-                              return (
-                                <View key={event.id} style={styles.timelineRow}>
-                                  <View style={styles.timelineLeft}>
-                                    <View
-                                      style={[
-                                        styles.timelineDot,
-                                        { backgroundColor: style.dot },
-                                      ]}
-                                    />
-                                    {!isLast && <View style={styles.timelineLine} />}
-                                  </View>
-                                  <View style={styles.timelineContent}>
-                                    <View
-                                      style={[
-                                        styles.timelineChip,
-                                        { backgroundColor: style.bg },
-                                      ]}
-                                    >
-                                      <Text style={[styles.timelineText, { color: style.fg }]}>
-                                        {style.label}
-                                      </Text>
-                                    </View>
-                                    <Text style={styles.timelineDate}>
-                                      {new Date(event.createdAt).toLocaleString("fr-FR")}
-                                    </Text>
-                                  </View>
-                                </View>
-                              );
-                            })}
-                          </View>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </Animated.View>
-              ) : null}
-            </View>
-          );
-        }}
+        ListHeaderComponent={listHeader}
+        ListEmptyComponent={listEmpty}
+        ItemSeparatorComponent={renderSeparator}
+        renderItem={renderImmeubleItem}
         ListFooterComponent={null}
       />
     </View>
@@ -590,6 +721,9 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 4,
+  },
+  cardPressed: {
+    opacity: 0.92,
   },
   cardInner: {
     flexDirection: "row",

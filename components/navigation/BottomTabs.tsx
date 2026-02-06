@@ -17,7 +17,17 @@ type BottomTabsProps = {
 
 export default function BottomTabs({ routes, index, onTabPress }: BottomTabsProps) {
   const insets = useSafeAreaInsets();
-  const tabAnims = useRef(routes.map(() => new Animated.Value(0))).current;
+  const tabAnimsRef = useRef<Animated.Value[]>([]);
+
+  if (tabAnimsRef.current.length !== routes.length) {
+    tabAnimsRef.current = routes.map(
+      (_route, routeIndex) =>
+        tabAnimsRef.current[routeIndex] ??
+        new Animated.Value(routeIndex === index ? 1 : 0),
+    );
+  }
+
+  const tabAnims = tabAnimsRef.current;
 
   useEffect(() => {
     const animations = tabAnims.map((anim, i) =>
