@@ -1,4 +1,4 @@
-﻿import AddPorteSheet, {
+import AddPorteSheet, {
   type AddPortePayload,
 } from "@/components/immeubles/AddPorteSheet";
 import ConfirmActionOverlay from "@/components/immeubles/ConfirmActionOverlay";
@@ -7,20 +7,19 @@ import { useCreatePorte } from "@/hooks/api/use-create-porte";
 import { useRemoveEtageFromImmeuble } from "@/hooks/api/use-remove-etage-from-immeuble";
 import { useRemovePorteFromEtage } from "@/hooks/api/use-remove-porte-from-etage";
 import { useUpdatePorte } from "@/hooks/api/use-update-porte";
-import { useRecording } from "@/hooks/audio/use-recording";
 import type {
   CreatePorteInput,
   Immeuble,
   Porte,
   UpdatePorteInput,
 } from "@/types/api";
+import ActionToast from "@/components/immeubles/details/ActionToast";
+import DetailsHeader from "@/components/immeubles/details/DetailsHeader";
+import EditPorteSheet from "@/components/immeubles/details/EditPorteSheet";
+import FloorPlanSheet from "@/components/immeubles/details/FloorPlanSheet";
+import StatusFilterSheet from "@/components/immeubles/details/StatusFilterSheet";
 import { Feather } from "@expo/vector-icons";
-import {
-  BottomSheetFlatList,
-  BottomSheetBackdrop,
-  BottomSheetModal,
-  BottomSheetScrollView,
-} from "@gorhom/bottom-sheet";
+import { BottomSheetBackdrop, BottomSheetModal } from "@gorhom/bottom-sheet";
 import type {
   ComponentType,
   RefObject,
@@ -30,13 +29,11 @@ import {
   Animated,
   Easing,
   FlatList,
-  Keyboard,
   Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -455,7 +452,7 @@ type ImmeubleDetailsViewProps = {
   onRefreshImmeuble?: () => void | Promise<void>;
 };
 
-export default function ImmeubleDetailsView({
+function ImmeubleDetailsView({
   immeuble,
   onBack,
   onDirtyChange,
@@ -470,7 +467,6 @@ export default function ImmeubleDetailsView({
     title: string;
     subtitle: string;
   } | null>(null);
-  const [hasLocalUpdates, setHasLocalUpdates] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [isFabOpen, setIsFabOpen] = useState(false);
   const [showFabHints, setShowFabHints] = useState(false);
@@ -500,15 +496,6 @@ export default function ImmeubleDetailsView({
   const doorPagerRef = useRef<FlatList<Porte>>(null);
   const filteredPortesRef = useRef<Porte[]>([]);
   const currentPorteRef = useRef<Porte | undefined>(undefined);
-  const {
-    isRecording,
-    isStarting,
-    isStopping,
-    error: recordingError,
-  } = useRecording({
-    enabled: true,
-    immeubleId: immeuble.id,
-  });
   const { add: addEtageToImmeuble, loading: addingEtage } =
     useAddEtageToImmeuble();
   const { create: createPorte, loading: creatingPorte } = useCreatePorte();
@@ -544,6 +531,8 @@ export default function ImmeubleDetailsView({
   });
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const openDatePicker = useCallback(() => setShowDatePicker(true), []);
+  const openTimePicker = useCallback(() => setShowTimePicker(true), []);
   const [isAddPorteOpen, setIsAddPorteOpen] = useState(false);
   const [addPorteDefaults, setAddPorteDefaults] = useState({
     etage: 1,
@@ -556,6 +545,10 @@ export default function ImmeubleDetailsView({
   const [pendingStatusFilter, setPendingStatusFilter] = useState<string | null>(
     null,
   );
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const handleFilterSheetClose = useCallback(() => {
+    setPendingStatusFilter(statusFilters[0] ?? null);
+  }, [statusFilters]);
 
   useEffect(() => {
     const nextPortes = immeuble.portes?.length
@@ -570,7 +563,6 @@ export default function ImmeubleDetailsView({
       return Math.min(prev, nextPortes.length - 1);
     });
     if (isNewImmeuble) {
-      setHasLocalUpdates(false);
       if (onDirtyChange) onDirtyChange(false);
       setStatusFilters([]);
       setPendingStatusFilter(null);
@@ -604,12 +596,12 @@ export default function ImmeubleDetailsView({
       Animated.parallel([
         Animated.timing(contentOpacity, {
           toValue: 1,
-          duration: 200,
+          duration: 140,
           useNativeDriver: true,
         }),
         Animated.timing(contentTranslate, {
           toValue: 0,
-          duration: 200,
+          duration: 140,
           useNativeDriver: true,
         }),
       ]).start();
@@ -617,7 +609,7 @@ export default function ImmeubleDetailsView({
     return () => clearTimeout(timeoutId);
   }, [contentOpacity, contentTranslate, isReady]);
 
-  // Gérer l'ouverture de la bottom sheet du plan rapide
+  // G�rer l'ouverture de la bottom sheet du plan rapide
   useEffect(() => {
     if (!showFloorPlan) return;
     floorPlanSheetRef.current?.present();
@@ -629,25 +621,9 @@ export default function ImmeubleDetailsView({
   }, [editMode, editPorte]);
 
   const triggerFloorPlan = useCallback(() => {
-    Animated.sequence([
-      Animated.spring(floorPlanScale, {
-        toValue: 0.92,
-        useNativeDriver: true,
-      }),
-      Animated.spring(floorPlanScale, {
-        toValue: 1,
-        friction: 5,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    Animated.timing(floorPlanPulse, {
-      toValue: 1,
-      duration: 280,
-      useNativeDriver: true,
-    }).start(() => {
-      floorPlanPulse.setValue(0);
-      setShowFloorPlan(true);
-    });
+    setShowFloorPlan(true);
+    floorPlanScale.setValue(1);
+    floorPlanPulse.setValue(0);
   }, [floorPlanPulse, floorPlanScale]);
 
   const showToast = useCallback((title: string, subtitle: string) => {
@@ -672,12 +648,12 @@ export default function ImmeubleDetailsView({
       Animated.parallel([
         Animated.timing(toastOpacity, {
           toValue: 0,
-          duration: 200,
+          duration: 140,
           useNativeDriver: true,
         }),
         Animated.timing(toastTranslate, {
           toValue: -8,
-          duration: 200,
+          duration: 140,
           useNativeDriver: true,
         }),
       ]).start(() => {
@@ -692,7 +668,6 @@ export default function ImmeubleDetailsView({
         porte.id === porteId ? { ...porte, ...changes } : porte,
       ),
     );
-    setHasLocalUpdates(true);
     if (onDirtyChange) onDirtyChange(true);
   }, [onDirtyChange]);
 
@@ -840,6 +815,7 @@ export default function ImmeubleDetailsView({
 
   const currentPorte = filteredPortes[currentIndex];
   const currentStatus = getDisplayStatus(currentPorte) ?? DEFAULT_STATUS_OPTION;
+  const currentPorteId = currentPorte?.id ?? null;
 
   useEffect(() => {
     filteredPortesRef.current = filteredPortes;
@@ -852,19 +828,13 @@ export default function ImmeubleDetailsView({
     }
   }, [currentIndex, filteredPortes.length]);
 
-  const porteMetrics = useMemo(() => {
-    const groupedByFloor = new Map<number, Porte[]>();
+  const porteSummary = useMemo(() => {
     const floorSet = new Set<number>();
     const counts: Record<string, number> = {};
     let visited = 0;
 
     for (const porte of sortedPortes) {
       floorSet.add(porte.etage);
-      if (!groupedByFloor.has(porte.etage)) {
-        groupedByFloor.set(porte.etage, []);
-      }
-      groupedByFloor.get(porte.etage)?.push(porte);
-
       if (porte.statut && porte.statut !== "NON_VISITE") {
         visited += 1;
       }
@@ -882,16 +852,26 @@ export default function ImmeubleDetailsView({
         visited,
         percentage: total ? Math.round((visited / total) * 100) : 0,
       },
-      portesParEtage: Array.from(groupedByFloor.entries()).sort((a, b) => b[0] - a[0]),
       floors: Array.from(floorSet).sort((a, b) => b - a),
       statusCounts: counts,
     };
   }, [sortedPortes]);
 
-  const progress = porteMetrics.progress;
-  const portesParEtage = porteMetrics.portesParEtage;
-  const floors = porteMetrics.floors;
-  const statusCounts = porteMetrics.statusCounts;
+  const portesParEtage = useMemo(() => {
+    if (!showFloorPlan) return [] as [number, Porte[]][];
+    const groupedByFloor = new Map<number, Porte[]>();
+    for (const porte of sortedPortes) {
+      if (!groupedByFloor.has(porte.etage)) {
+        groupedByFloor.set(porte.etage, []);
+      }
+      groupedByFloor.get(porte.etage)?.push(porte);
+    }
+    return Array.from(groupedByFloor.entries()).sort((a, b) => b[0] - a[0]);
+  }, [showFloorPlan, sortedPortes]);
+
+  const progress = porteSummary.progress;
+  const floors = porteSummary.floors;
+  const statusCounts = porteSummary.statusCounts;
 
   useEffect(() => {
     const targetValue = progress.percentage;
@@ -996,11 +976,10 @@ export default function ImmeubleDetailsView({
       derniereVisite: null,
     };
     setPortesState((prev) => [...prev, newPorte]);
-    setHasLocalUpdates(true);
     if (onDirtyChange) onDirtyChange(true);
     showToast(
       "Porte ajoutee",
-      `Etage ${payload.etage} • Porte ${payload.numero}`,
+      `Etage ${payload.etage} � Porte ${payload.numero}`,
     );
     const createPayload: CreatePorteInput = {
       immeubleId: immeuble.id,
@@ -1037,7 +1016,6 @@ export default function ImmeubleDetailsView({
     );
     const tempIds = tempDoors.map((porte) => porte.id);
     setPortesState((prev) => [...prev, ...tempDoors]);
-    setHasLocalUpdates(true);
     if (onDirtyChange) onDirtyChange(true);
     showToast("Etage ajoute", `Etage ${nextEtage}`);
     const added = await addEtageToImmeuble(immeuble.id);
@@ -1093,7 +1071,6 @@ export default function ImmeubleDetailsView({
     );
     const nextPortes = previous.filter((porte) => porte.id !== targetId);
     setPortesState(nextPortes);
-    setHasLocalUpdates(true);
     if (onDirtyChange) onDirtyChange(true);
     setCurrentIndex((prev) => {
       const nextLength = Math.max(0, sortedPortes.length - 1);
@@ -1141,7 +1118,6 @@ export default function ImmeubleDetailsView({
     const previous = portesState;
     const nextPortes = previous.filter((porte) => porte.etage !== targetFloor);
     setPortesState(nextPortes);
-    setHasLocalUpdates(true);
     if (onDirtyChange) onDirtyChange(true);
     setCurrentIndex((prev) =>
       Math.max(0, Math.min(prev, Math.max(0, nextPortes.length - 1))),
@@ -1377,7 +1353,10 @@ export default function ImmeubleDetailsView({
 
   const openStatusFilterSheet = useCallback(() => {
     setPendingStatusFilter(statusFilters[0] ?? null);
-    filterSheetRef.current?.present();
+    setIsFilterSheetOpen(true);
+    requestAnimationFrame(() => {
+      filterSheetRef.current?.present();
+    });
   }, [statusFilters]);
 
   const floorPlanKeyExtractor = useCallback(
@@ -1390,11 +1369,11 @@ export default function ImmeubleDetailsView({
       const [etage, portes] = item;
       return (
         <View style={styles.floorPlanEtageSection}>
-          <Text style={styles.floorPlanEtageLabel}>Étage {etage}</Text>
+          <Text style={styles.floorPlanEtageLabel}>�tage {etage}</Text>
           <View style={styles.floorPlanDoorsGrid}>
             {portes.map((porte) => {
               const status = getDisplayStatus(porte);
-              const isActive = porte.id === currentPorte?.id;
+              const isActive = porte.id === currentPorteId;
               const isVisited = status !== null;
               const chipBg = isVisited ? status?.accent : "#F1F5F9";
               const chipBorder = isActive ? status?.accent : "transparent";
@@ -1425,76 +1404,32 @@ export default function ImmeubleDetailsView({
         </View>
       );
     },
-    [currentPorte?.id],
+    [currentPorteId],
   );
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.backButton,
-            pressed && styles.backButtonPressed,
-          ]}
-          android_ripple={{ color: "transparent", borderless: true }}
-          onPress={() => setShowExitConfirm(true)}
-        >
-          <Feather name="arrow-left" size={18} color="#2563EB" />
-        </Pressable>
-        <View style={styles.headerText}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {immeuble.adresse}
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            {displayNbEtages} etages - {immeuble.nbPortesParEtage} portes/etage
-          </Text>
-        </View>
-        <Pressable style={styles.floorPlanButton} onPress={triggerFloorPlan}>
-          <Animated.View
-            style={[
-              styles.floorPlanPulse,
-              {
-                opacity: floorPlanPulse.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 0.35],
-                }),
-                transform: [
-                  {
-                    scale: floorPlanPulse.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.6, 1.6],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          />
-          <Animated.View style={{ transform: [{ scale: floorPlanScale }] }}>
-            <Feather name="grid" size={18} color="#FFFFFF" />
-          </Animated.View>
-        </Pressable>
-      </View>
+      <DetailsHeader
+        topInset={insets.top}
+        adresse={immeuble.adresse}
+        nbEtages={displayNbEtages}
+        nbPortesParEtage={immeuble.nbPortesParEtage}
+        onBack={() => setShowExitConfirm(true)}
+        onOpenFloorPlan={triggerFloorPlan}
+        floorPlanScale={floorPlanScale}
+        floorPlanPulse={floorPlanPulse}
+        styles={styles}
+      />
 
       {actionToast ? (
-        <View style={[styles.toastOverlay, { top: insets.top + 8 }]}>
-          <Animated.View
-            style={[
-              styles.toastCard,
-              {
-                opacity: toastOpacity,
-                transform: [{ translateY: toastTranslate }],
-              },
-            ]}
-          >
-            <View style={styles.toastIcon}>
-              <Feather name="check" size={14} color="#FFFFFF" />
-            </View>
-            <View style={styles.toastText}>
-              <Text style={styles.toastTitle}>{actionToast.title}</Text>
-              <Text style={styles.toastSubtitle}>{actionToast.subtitle}</Text>
-            </View>
-          </Animated.View>
-        </View>
+        <ActionToast
+          topInset={insets.top}
+          title={actionToast.title}
+          subtitle={actionToast.subtitle}
+          opacity={toastOpacity}
+          translateY={toastTranslate}
+          styles={styles}
+        />
       ) : null}
 
       {!isReady ? (
@@ -1562,560 +1497,60 @@ export default function ImmeubleDetailsView({
         </>
       )}
 
-      {editMode && editPorte ? (
-      <BottomSheetModal
-        ref={editSheetRef}
-        index={1}
-        snapPoints={editSnapPoints}
-        backdropComponent={(props) => renderSheetBackdrop(props, 0.45)}
-        enablePanDownToClose
-        onDismiss={closeEditSheet}
-        keyboardBehavior="interactive"
-        keyboardBlurBehavior="restore"
-        android_keyboardInputMode="adjustResize"
-        backgroundStyle={styles.sheetBackground}
-        handleIndicatorStyle={styles.handleIndicator}
-      >
-        <BottomSheetScrollView
-          contentContainerStyle={[
-            styles.sheetContent,
-            isTablet && styles.sheetContentTablet,
-          ]}
-        >
-          <>
-            <View
-              style={[
-                styles.sheetHero,
-                editMode === "RENDEZ_VOUS_PRIS"
-                  ? styles.sheetHeroRdv
-                  : styles.sheetHeroContract,
-                isTablet && styles.sheetHeroTablet,
-              ]}
-            >
-              <View
-                style={[
-                  styles.sheetHeroIcon,
-                  editMode === "RENDEZ_VOUS_PRIS"
-                    ? styles.sheetHeroIconBlue
-                    : styles.sheetHeroIconGreen,
-                ]}
-              >
-                <Feather
-                  name={editMode === "RENDEZ_VOUS_PRIS" ? "calendar" : "award"}
-                  size={18}
-                  color={
-                    editMode === "RENDEZ_VOUS_PRIS" ? "#1D4ED8" : "#047857"
-                  }
-                />
-              </View>
-              <View style={styles.sheetHeroText}>
-                <Text
-                  style={[
-                    styles.sheetTitle,
-                    isTablet && styles.sheetTitleTablet,
-                  ]}
-                >
-                  {editMode === "RENDEZ_VOUS_PRIS"
-                    ? "Rendez-vous"
-                    : "Contrat signe"}
-                </Text>
-                <Text
-                  style={[
-                    styles.sheetSubtitle,
-                    isTablet && styles.sheetSubtitleTablet,
-                  ]}
-                >
-                  {editPorte?.nomPersonnalise ||
-                    `Porte ${editPorte?.numero || ""}`}
-                </Text>
-              </View>
-            </View>
 
-            <View
-              style={[styles.sheetCard, isTablet && styles.sheetCardTablet]}
-            >
-              <Text style={styles.sheetLabel}>Nom personnalise</Text>
-              <View style={styles.inputRow}>
-                <Feather name="edit-3" size={16} color="#6B7280" />
-                <TextInput
-                  placeholder={`Porte ${editPorte?.numero || ""}`}
-                  value={editForm.nomPersonnalise}
-                  onChangeText={(value) =>
-                    setEditForm((prev) => ({
-                      ...prev,
-                      nomPersonnalise: value,
-                    }))
-                  }
-                  style={styles.inputInline}
-                />
-              </View>
-            </View>
+      <EditPorteSheet
+        editMode={editMode}
+        editPorte={editPorte}
+        editForm={editForm}
+        setEditForm={setEditForm}
+        savingPorte={savingPorte}
+        hasNativePicker={hasNativePicker}
+        isTablet={isTablet}
+        editSnapPoints={editSnapPoints}
+        editSheetRef={editSheetRef}
+        renderSheetBackdrop={renderSheetBackdrop}
+        openDatePicker={openDatePicker}
+        openTimePicker={openTimePicker}
+        closeEditSheet={closeEditSheet}
+        saveEditSheet={saveEditSheet}
+        formatDateLabel={formatDateLabel}
+        formatTimeLabel={formatTimeLabel}
+        styles={styles}
+      />
 
-            {editMode === "RENDEZ_VOUS_PRIS" && (
-              <View
-                style={[
-                  styles.sheetCard,
-                  styles.sheetCardRdv,
-                  isTablet && styles.sheetCardTablet,
-                ]}
-              >
-                <View style={styles.sheetSectionHeader}>
-                  <View
-                    style={[
-                      styles.sheetSectionIcon,
-                      styles.sheetSectionIconBlue,
-                    ]}
-                  >
-                    <Feather name="calendar" size={14} color="#1D4ED8" />
-                  </View>
-                  <View style={styles.sheetSectionText}>
-                    <Text style={styles.sheetSectionTitle}>Quand</Text>
-                    <Text style={styles.sheetSectionSubtitle}>
-                      Date et heure du rendez-vous
-                    </Text>
-                  </View>
-                </View>
-                {hasNativePicker ? (
-                  <>
-                    <Pressable
-                      style={[styles.pickerRow, styles.pickerRowPrimary]}
-                      onPress={() => setShowDatePicker(true)}
-                    >
-                      <View style={styles.pickerIcon}>
-                        <Feather name="calendar" size={16} color="#1D4ED8" />
-                      </View>
-                      <View style={styles.pickerText}>
-                        <Text style={styles.pickerTitle}>Date</Text>
-                        <Text style={styles.pickerValue}>
-                          {formatDateLabel(editForm.rdvDate)}
-                        </Text>
-                      </View>
-                      <Feather name="chevron-right" size={16} color="#94A3B8" />
-                    </Pressable>
-                    <Pressable
-                      style={[styles.pickerRow, styles.pickerRowPrimary]}
-                      onPress={() => setShowTimePicker(true)}
-                    >
-                      <View style={styles.pickerIcon}>
-                        <Feather name="clock" size={16} color="#1D4ED8" />
-                      </View>
-                      <View style={styles.pickerText}>
-                        <Text style={styles.pickerTitle}>Heure</Text>
-                        <Text style={styles.pickerValue}>
-                          {formatTimeLabel(editForm.rdvTime)}
-                        </Text>
-                      </View>
-                      <Feather name="chevron-right" size={16} color="#94A3B8" />
-                    </Pressable>
-                  </>
-                ) : (
-                  <>
-                    <Text style={styles.sheetHint}>
-                      Activez le DatePicker natif pour une meilleure experience.
-                    </Text>
-                    <View style={styles.inputRow}>
-                      <Feather name="calendar" size={16} color="#6B7280" />
-                      <TextInput
-                        placeholder="YYYY-MM-DD"
-                        value={editForm.rdvDate}
-                        onChangeText={(value) =>
-                          setEditForm((prev) => ({ ...prev, rdvDate: value }))
-                        }
-                        style={styles.inputInline}
-                        keyboardType="numbers-and-punctuation"
-                      />
-                    </View>
-                    <View style={[styles.inputRow, styles.inputRowSpacing]}>
-                      <Feather name="clock" size={16} color="#6B7280" />
-                      <TextInput
-                        placeholder="HH:mm"
-                        value={editForm.rdvTime}
-                        onChangeText={(value) =>
-                          setEditForm((prev) => ({ ...prev, rdvTime: value }))
-                        }
-                        style={styles.inputInline}
-                        keyboardType="numbers-and-punctuation"
-                      />
-                    </View>
-                  </>
-                )}
-              </View>
-            )}
-
-            {editMode === "CONTRAT_SIGNE" && (
-              <View
-                style={[
-                  styles.sheetCard,
-                  styles.sheetCardContract,
-                  isTablet && styles.sheetCardTablet,
-                ]}
-              >
-                <View style={styles.sheetSectionHeader}>
-                  <View
-                    style={[
-                      styles.sheetSectionIcon,
-                      styles.sheetSectionIconGreen,
-                    ]}
-                  >
-                    <Feather name="award" size={14} color="#047857" />
-                  </View>
-                  <View style={styles.sheetSectionText}>
-                    <Text style={styles.sheetSectionTitle}>
-                      Contrats signes
-                    </Text>
-                    <Text style={styles.sheetSectionSubtitle}>
-                      Nombre total confirme
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.counterRow}>
-                  <Pressable
-                    style={styles.counterButton}
-                    onPress={() =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        nbContrats: Math.max(1, prev.nbContrats - 1),
-                      }))
-                    }
-                  >
-                    <Feather name="minus" size={16} color="#111827" />
-                  </Pressable>
-                  <View style={styles.counterValueWrap}>
-                    <Text style={styles.counterValue}>
-                      {editForm.nbContrats}
-                    </Text>
-                    <Text style={styles.counterLabel}>contrats</Text>
-                  </View>
-                  <Pressable
-                    style={[styles.counterButton, styles.counterButtonPrimary]}
-                    onPress={() =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        nbContrats: prev.nbContrats + 1,
-                      }))
-                    }
-                  >
-                    <Feather name="plus" size={16} color="#111827" />
-                  </Pressable>
-                </View>
-              </View>
-            )}
-
-            <View
-              style={[
-                styles.sheetCard,
-                styles.sheetCardComment,
-                isTablet && styles.sheetCardTablet,
-              ]}
-            >
-              <View style={styles.sheetSectionHeader}>
-                <View style={styles.sheetSectionIcon}>
-                  <Feather name="message-square" size={14} color="#2563EB" />
-                </View>
-                <View style={styles.sheetSectionText}>
-                  <Text style={styles.sheetSectionTitle}>Commentaire</Text>
-                  <Text style={styles.sheetSectionSubtitle}>
-                    Notes rapides pour cette porte
-                  </Text>
-                </View>
-              </View>
-              <TextInput
-                placeholder="Ajouter un commentaire..."
-                value={editForm.commentaire}
-                onChangeText={(value) =>
-                  setEditForm((prev) => ({ ...prev, commentaire: value }))
-                }
-                style={[styles.sheetInput, styles.sheetTextarea]}
-                multiline
-              />
-            </View>
-
-            <View
-              style={[styles.sheetFooter, isTablet && styles.sheetFooterTablet]}
-            >
-              <Pressable style={styles.sheetGhost} onPress={closeEditSheet}>
-                <Text style={styles.sheetGhostText}>Annuler</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.sheetPrimary,
-                  savingPorte && styles.sheetPrimaryDisabled,
-                  isTablet && styles.sheetPrimaryTablet,
-                ]}
-                onPress={() => {
-                  Keyboard.dismiss();
-                  void saveEditSheet();
-                }}
-                disabled={savingPorte}
-              >
-                <Text style={styles.sheetPrimaryText}>
-                  {savingPorte ? "..." : "Enregistrer"}
-                </Text>
-              </Pressable>
-            </View>
-          </>
-        </BottomSheetScrollView>
-      </BottomSheetModal>
-      ) : null}
-
-      {/* Bottom Sheet Plan Rapide */}
-      {showFloorPlan ? (
-      <BottomSheetModal
-        ref={floorPlanSheetRef}
-        index={1}
-        snapPoints={floorPlanSnapPoints}
-        enablePanDownToClose
-        onChange={(index) => {
-          if (index === -1) setShowFloorPlan(false);
-        }}
-        backdropComponent={(props) => renderSheetBackdrop(props, 0.4)}
-        backgroundStyle={styles.sheetBackground}
-        handleIndicatorStyle={styles.handleIndicator}
-      >
-        <BottomSheetFlatList
-          data={portesParEtage}
-          keyExtractor={floorPlanKeyExtractor}
-          renderItem={renderFloorPlanSection}
-          removeClippedSubviews
-          windowSize={5}
-          initialNumToRender={3}
-          maxToRenderPerBatch={4}
-          contentContainerStyle={[
-            styles.sheetContent,
-            isTablet && styles.sheetContentTablet,
-            styles.floorPlanSectionList,
-          ]}
-          ListHeaderComponent={
-            <>
-              <View style={styles.floorPlanHero}>
-                <View style={styles.floorPlanHeroIcon}>
-                  <Feather name="grid" size={22} color="#2563EB" />
-                </View>
-                <View style={styles.floorPlanHeroText}>
-                  <Text style={styles.floorPlanTitle}>Plan de l&apos;immeuble</Text>
-                  <Text style={styles.floorPlanSubtitle}>
-                    {sortedPortes.length} portes • {portesParEtage.length} etages
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.floorPlanCurrent}>
-                <Text style={styles.floorPlanCurrentLabel}>Porte actuelle</Text>
-                <View style={styles.floorPlanCurrentCard}>
-                  <View style={styles.floorPlanCurrentBadge}>
-                    <Text style={styles.floorPlanCurrentNumber}>
-                      {currentPorte?.nomPersonnalise ||
-                        currentPorte?.numero ||
-                        "--"}
-                    </Text>
-                  </View>
-                  <View style={styles.floorPlanCurrentInfo}>
-                    <Text style={styles.floorPlanCurrentFloor}>
-                      Étage {currentPorte?.etage ?? "--"}
-                    </Text>
-                    {currentStatus && (
-                      <Text
-                        style={[
-                          styles.floorPlanCurrentStatus,
-                          { color: currentStatus.accent },
-                        ]}
-                      >
-                        {currentStatus.label}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.floorPlanList}>
-                <Text style={styles.floorPlanListTitle}>Toutes les portes</Text>
-              </View>
-            </>
-          }
+      <FloorPlanSheet
+        showFloorPlan={showFloorPlan}
+        setShowFloorPlan={setShowFloorPlan}
+        floorPlanSnapPoints={floorPlanSnapPoints}
+        floorPlanSheetRef={floorPlanSheetRef}
+        renderSheetBackdrop={renderSheetBackdrop}
+        portesParEtage={portesParEtage}
+        sortedPortesCount={sortedPortes.length}
+        floorsCount={portesParEtage.length}
+        currentPorte={currentPorte}
+        currentStatus={currentStatus}
+        isTablet={isTablet}
+        floorPlanKeyExtractor={floorPlanKeyExtractor}
+        renderFloorPlanSection={renderFloorPlanSection}
+        styles={styles}
+      />
+      {isFilterSheetOpen ? (
+        <StatusFilterSheet
+          filterSheetRef={filterSheetRef}
+          filterSnapPoints={filterSnapPoints}
+          renderSheetBackdrop={renderSheetBackdrop}
+          statusCounts={statusCounts}
+          pendingStatusFilter={pendingStatusFilter}
+          statusOptions={visibleStatusOptions}
+          totalCount={sortedPortes.length}
+          isTablet={isTablet}
+          onSheetClose={() => { handleFilterSheetClose(); setIsFilterSheetOpen(false); }}
+          togglePendingFilter={togglePendingFilter}
+          clearStatusFilters={clearStatusFilters}
+          applyStatusFilters={applyStatusFilters}
+          styles={styles}
         />
-      </BottomSheetModal>
       ) : null}
-
-      <BottomSheetModal
-        ref={filterSheetRef}
-        snapPoints={filterSnapPoints}
-        enablePanDownToClose
-        backdropComponent={(props) => renderSheetBackdrop(props, 0.5)}
-        onChange={(index) => {
-          if (index === -1) {
-            setPendingStatusFilter(statusFilters[0] ?? null);
-          }
-        }}
-        backgroundStyle={styles.filterSheetBackground}
-        handleIndicatorStyle={styles.filterHandleIndicator}
-        animateOnMount
-      >
-        <BottomSheetScrollView
-          contentContainerStyle={[
-            styles.sheetContent,
-            isTablet && styles.sheetContentTablet,
-          ]}
-        >
-          {/* Header avec bordure */}
-          <View style={styles.filterSheetHeader}>
-            <Pressable
-              style={styles.filterCloseBtn}
-              onPress={() => filterSheetRef.current?.dismiss()}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            >
-              <Feather name="x" size={20} color="#212121" />
-            </Pressable>
-            <Text style={styles.filterHeaderTitle}>Filtres</Text>
-            <Pressable
-              style={styles.filterResetBtn}
-              onPress={clearStatusFilters}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={styles.filterResetLabel}>Reset</Text>
-            </Pressable>
-          </View>
-
-          {/* Section Statuts avec radio buttons */}
-          <View style={styles.filterSection}>
-            <Text style={styles.filterSectionLabel}>Filtrer par statut</Text>
-            <View style={styles.filterRadioGroup}>
-              {/* Option "Toutes les portes" */}
-              <Pressable
-                style={[
-                  styles.filterRadioItem,
-                  pendingStatusFilter === null && styles.filterRadioItemActive,
-                ]}
-                onPress={() => togglePendingFilter(null)}
-              >
-                <View style={styles.filterRadioContent}>
-                  <View
-                    style={[
-                      styles.filterRadioCircle,
-                      pendingStatusFilter === null &&
-                        styles.filterRadioCircleActive,
-                    ]}
-                  >
-                    {pendingStatusFilter === null && (
-                      <View style={styles.filterRadioDot} />
-                    )}
-                  </View>
-                  <View style={styles.filterRadioTextContainer}>
-                    <Text
-                      style={[
-                        styles.filterRadioLabel,
-                        pendingStatusFilter === null &&
-                          styles.filterRadioLabelActive,
-                      ]}
-                    >
-                      Toutes les portes
-                    </Text>
-                    <Text style={styles.filterRadioDescription}>
-                      Afficher tous les statuts
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.filterRadioBadge}>
-                  <Text style={styles.filterRadioBadgeText}>
-                    {sortedPortes.length}
-                  </Text>
-                </View>
-              </Pressable>
-
-              {/* Options de statut */}
-              {STATUS_OPTIONS.map((option) => {
-                const isSelected = pendingStatusFilter === option.value;
-                const count = statusCounts[option.value] ?? 0;
-                return (
-                  <Pressable
-                    key={option.value}
-                    style={[
-                      styles.filterRadioItem,
-                      isSelected && styles.filterRadioItemActive,
-                      count === 0 && styles.filterRadioItemDisabled,
-                    ]}
-                    onPress={() =>
-                      count > 0 && togglePendingFilter(option.value)
-                    }
-                    disabled={count === 0}
-                  >
-                    <View style={styles.filterRadioContent}>
-                      <View
-                        style={[
-                          styles.filterRadioCircle,
-                          styles.filterRadioCircleWithColor,
-                          isSelected && styles.filterRadioCircleActive,
-                          { borderColor: option.accent },
-                        ]}
-                      >
-                        {isSelected && (
-                          <View
-                            style={[
-                              styles.filterRadioDot,
-                              { backgroundColor: option.accent },
-                            ]}
-                          />
-                        )}
-                      </View>
-                      <View style={styles.filterRadioTextContainer}>
-                        <Text
-                          style={[
-                            styles.filterRadioLabel,
-                            isSelected && styles.filterRadioLabelActive,
-                          ]}
-                        >
-                          {option.label}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.filterRadioDescription,
-                            count === 0 &&
-                              styles.filterRadioDescriptionDisabled,
-                          ]}
-                        >
-                          {option.description}
-                          {count === 0 && " (Aucune porte)"}
-                        </Text>
-                      </View>
-                    </View>
-                    <View
-                      style={[
-                        styles.filterRadioBadge,
-                        styles.filterRadioBadgeWithColor,
-                        { backgroundColor: option.bg + "40" },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.filterRadioBadgeText,
-                          { color: option.fg },
-                          isSelected && { color: option.accent },
-                        ]}
-                      >
-                        {count}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Footer avec bouton Apply */}
-          <View style={styles.filterSheetFooter}>
-            <Pressable
-              style={styles.filterApplyButton}
-              onPress={applyStatusFilters}
-            >
-              <Text style={styles.filterApplyButtonText}>
-                Appliquer{" "}
-                {pendingStatusFilter
-                  ? `(${statusCounts[pendingStatusFilter] ?? 0})`
-                  : `(${sortedPortes.length})`}
-              </Text>
-            </Pressable>
-          </View>
-        </BottomSheetScrollView>
-      </BottomSheetModal>
 
       <AddPorteSheet
         open={isAddPorteOpen}
@@ -2339,7 +1774,7 @@ export default function ImmeubleDetailsView({
             </View>
             <Text style={styles.exitTitle}>Quitter la fiche ?</Text>
             <Text style={styles.exitText}>
-              Tu vas revenir à la liste des immeubles. Continuer ?
+              Tu vas revenir � la liste des immeubles. Continuer ?
             </Text>
             <View style={styles.exitActions}>
               <Pressable
@@ -4144,3 +3579,31 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
 });
+
+
+export default memo(ImmeubleDetailsView);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

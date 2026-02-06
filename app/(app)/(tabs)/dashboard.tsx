@@ -322,7 +322,7 @@ export default function DashboardScreen() {
                   <Feather name="file-text" size={20} color="#10B981" />
                   <View style={styles.chartTitleContainer}>
                     <Text style={styles.chartTitle}>
-                      Contrats sign�s cette semaine
+                      Contrats signés cette semaine
                     </Text>
                     <View style={styles.conversionContainer}>
                       <View style={styles.conversionBadge}>
