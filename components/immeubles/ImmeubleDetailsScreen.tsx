@@ -849,6 +849,34 @@ export default function ImmeubleDetailsView({
     }
   };
 
+  const resetStatus = async (porte: Porte) => {
+    showToast(
+      `Porte ${porte.nomPersonnalise || porte.numero}`,
+      "Statut retire",
+    );
+    updateLocalPorte(porte.id, {
+      statut: "NON_VISITE",
+      nbRepassages: null,
+      rdvDate: null,
+      rdvTime: null,
+      nbContrats: null,
+      commentaire: null,
+      derniereVisite: null,
+    });
+    const payload: UpdatePorteInput = {
+      id: porte.id,
+      statut: "NON_VISITE",
+      rdvDate: null,
+      rdvTime: null,
+      commentaire: null,
+      derniereVisite: null,
+    };
+    const result = await updatePorte(payload);
+    if (!result) {
+      showToast("Erreur", "Mise a jour impossible");
+    }
+  };
+
   const fabRotation = fabAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ["0deg", "180deg"],
@@ -927,6 +955,16 @@ export default function ImmeubleDetailsView({
   const handleStatusSelect = async (statut: string, target?: Porte) => {
     const porte = target ?? currentPorte;
     if (!porte) return;
+    const currentKey = getDisplayStatusKey(porte);
+    if (
+      currentKey &&
+      currentKey === statut &&
+      statut !== "RENDEZ_VOUS_PRIS" &&
+      statut !== "CONTRAT_SIGNE"
+    ) {
+      void resetStatus(porte);
+      return;
+    }
     if (statut === "RENDEZ_VOUS_PRIS" || statut === "CONTRAT_SIGNE") {
       openEditSheet(porte, statut);
       return;

@@ -1,0 +1,17 @@
+schema:
+  - https://pro-win.app/graphql
+generates:
+  ./types/graphql-schema.ts:
+    plugins:
+      - typescript
+    config:
+      enumsAsTypes: true
+      maybeValue: T | null
+      inputMaybeValue: T | null | undefined
+      scalars:
+        DateTime: string
+        JSON: Record<string, unknown>
+config:
+  skipTypename: false
+  useTypeImports: true
+ignoreNoDocuments: true

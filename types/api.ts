@@ -1,3 +1,22 @@
+import type {
+  Commercial as SchemaCommercial,
+  CommercialInfo as SchemaCommercialInfo,
+  CreateImmeubleInput as SchemaCreateImmeubleInput,
+  CreatePorteInput as SchemaCreatePorteInput,
+  Immeuble as SchemaImmeuble,
+  Manager as SchemaManager,
+  ManagerInfo as SchemaManagerInfo,
+  Porte as SchemaPorte,
+  PorteInfo as SchemaPorteInfo,
+  Statistic as SchemaStatistic,
+  StatusHistorique as SchemaStatusHistorique,
+  TeamRanking as SchemaTeamRanking,
+  UpdatePorteInput as SchemaUpdatePorteInput,
+  Zone as SchemaZone,
+} from './graphql-schema';
+
+export type { InputMaybe, Maybe, Scalars, StatutPorte, UserStatus, UserType } from './graphql-schema';
+
 export interface GraphQLResponse<T> {
   data?: T;
   errors?: Array<{
@@ -29,22 +48,22 @@ export class ApiException extends Error {
 }
 
 export type Statistic = {
-  id: number;
-  commercialId?: number | null;
-  managerId?: number | null;
-  directeurId?: number | null;
-  immeubleId?: number | null;
-  zoneId?: number | null;
-  contratsSignes: number;
-  immeublesVisites: number;
-  rendezVousPris: number;
-  refus: number;
-  absents?: number;
-  argumentes?: number;
-  nbImmeublesProspectes?: number;
-  nbPortesProspectes?: number;
-  createdAt?: string;
-  updatedAt?: string;
+  id: SchemaStatistic['id'];
+  commercialId?: SchemaStatistic['commercialId'];
+  managerId?: SchemaStatistic['managerId'];
+  directeurId?: SchemaStatistic['directeurId'];
+  immeubleId?: SchemaStatistic['immeubleId'];
+  zoneId?: SchemaStatistic['zoneId'];
+  contratsSignes: SchemaStatistic['contratsSignes'];
+  immeublesVisites: SchemaStatistic['immeublesVisites'];
+  rendezVousPris: SchemaStatistic['rendezVousPris'];
+  refus: SchemaStatistic['refus'];
+  absents?: SchemaStatistic['absents'];
+  argumentes?: SchemaStatistic['argumentes'];
+  nbImmeublesProspectes?: SchemaStatistic['nbImmeublesProspectes'];
+  nbPortesProspectes?: SchemaStatistic['nbPortesProspectes'];
+  createdAt?: SchemaStatistic['createdAt'];
+  updatedAt?: SchemaStatistic['updatedAt'];
 };
 
 export type TimelinePoint = {
@@ -58,117 +77,117 @@ export type TimelinePoint = {
 };
 
 export type Zone = {
-  id: number;
-  nom: string;
+  id: SchemaZone['id'];
+  nom: SchemaZone['nom'];
 };
 
 export type Porte = {
-  id: number;
-  numero: string;
-  nomPersonnalise?: string | null;
-  etage: number;
-  immeubleId: number;
-  statut: string;
-  nbRepassages?: number | null;
-  nbContrats?: number | null;
-  rdvDate?: string | null;
-  rdvTime?: string | null;
-  commentaire?: string | null;
-  derniereVisite?: string | null;
+  id: SchemaPorte['id'];
+  numero: SchemaPorte['numero'];
+  nomPersonnalise?: SchemaPorte['nomPersonnalise'];
+  etage: SchemaPorte['etage'];
+  immeubleId: SchemaPorte['immeubleId'];
+  statut: SchemaPorte['statut'] | string;
+  nbRepassages?: SchemaPorte['nbRepassages'] | null;
+  nbContrats?: SchemaPorte['nbContrats'] | null;
+  rdvDate?: SchemaPorte['rdvDate'];
+  rdvTime?: SchemaPorte['rdvTime'];
+  commentaire?: SchemaPorte['commentaire'];
+  derniereVisite?: SchemaPorte['derniereVisite'];
 };
 
 export type CreatePorteInput = {
-  numero: string;
-  nomPersonnalise?: string | null;
-  etage: number;
-  immeubleId: number;
-  statut?: string;
-  nbRepassages?: number | null;
-  nbContrats?: number | null;
-  rdvDate?: string | null;
-  rdvTime?: string | null;
-  commentaire?: string | null;
-  derniereVisite?: string | null;
+  numero: SchemaCreatePorteInput['numero'];
+  nomPersonnalise?: SchemaCreatePorteInput['nomPersonnalise'];
+  etage: SchemaCreatePorteInput['etage'];
+  immeubleId: SchemaCreatePorteInput['immeubleId'];
+  statut?: SchemaCreatePorteInput['statut'] | string;
+  nbRepassages?: SchemaCreatePorteInput['nbRepassages'] | null;
+  nbContrats?: SchemaCreatePorteInput['nbContrats'] | null;
+  rdvDate?: SchemaCreatePorteInput['rdvDate'];
+  rdvTime?: SchemaCreatePorteInput['rdvTime'];
+  commentaire?: SchemaCreatePorteInput['commentaire'];
+  derniereVisite?: SchemaCreatePorteInput['derniereVisite'];
 };
 
 export type Immeuble = {
-  id: number;
-  adresse: string;
-  nbEtages: number;
-  nbPortesParEtage: number;
-  updatedAt?: string;
-  ascenseurPresent?: boolean | null;
-  digitalCode?: string | null;
-  commercialId?: number | null;
-  managerId?: number | null;
-  zoneId?: number | null;
+  id: SchemaImmeuble['id'];
+  adresse: SchemaImmeuble['adresse'];
+  nbEtages: SchemaImmeuble['nbEtages'];
+  nbPortesParEtage: SchemaImmeuble['nbPortesParEtage'];
+  updatedAt?: SchemaImmeuble['updatedAt'];
+  ascenseurPresent?: SchemaImmeuble['ascenseurPresent'] | null;
+  digitalCode?: SchemaImmeuble['digitalCode'];
+  commercialId?: SchemaImmeuble['commercialId'];
+  managerId?: SchemaImmeuble['managerId'];
+  zoneId?: SchemaImmeuble['zoneId'];
   portes?: Porte[];
 };
 
 export type CommercialInfo = {
-  id: number;
-  nom: string;
-  prenom: string;
+  id: SchemaCommercialInfo['id'];
+  nom: SchemaCommercialInfo['nom'];
+  prenom: SchemaCommercialInfo['prenom'];
 };
 
 export type ManagerInfo = {
-  id: number;
-  nom: string;
-  prenom: string;
+  id: SchemaManagerInfo['id'];
+  nom: SchemaManagerInfo['nom'];
+  prenom: SchemaManagerInfo['prenom'];
 };
 
 export type PorteInfo = {
-  id: number;
-  numero: string;
-  etage: number;
+  id: SchemaPorteInfo['id'];
+  numero: SchemaPorteInfo['numero'];
+  etage: SchemaPorteInfo['etage'];
 };
 
 export type StatusHistorique = {
-  id: number;
-  porteId: number;
-  commercialId?: number | null;
-  managerId?: number | null;
-  statut: string;
-  commentaire?: string | null;
-  rdvDate?: string | null;
-  rdvTime?: string | null;
-  createdAt: string;
+  id: SchemaStatusHistorique['id'];
+  porteId: SchemaStatusHistorique['porteId'];
+  commercialId?: SchemaStatusHistorique['commercialId'];
+  managerId?: SchemaStatusHistorique['managerId'];
+  statut: SchemaStatusHistorique['statut'] | string;
+  commentaire?: SchemaStatusHistorique['commentaire'];
+  rdvDate?: SchemaStatusHistorique['rdvDate'];
+  rdvTime?: SchemaStatusHistorique['rdvTime'];
+  createdAt: SchemaStatusHistorique['createdAt'];
   porte?: PorteInfo | null;
   commercial?: CommercialInfo | null;
   manager?: ManagerInfo | null;
 };
 
 export type CreateImmeubleInput = {
-  adresse: string;
-  nbEtages: number;
-  nbPortesParEtage: number;
-  commercialId?: number;
-  managerId?: number;
-  zoneId?: number;
-  ascenseurPresent?: boolean | null;
-  digitalCode?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
+  adresse: SchemaCreateImmeubleInput['adresse'];
+  nbEtages: SchemaCreateImmeubleInput['nbEtages'];
+  nbPortesParEtage: SchemaCreateImmeubleInput['nbPortesParEtage'];
+  commercialId?: SchemaCreateImmeubleInput['commercialId'];
+  managerId?: SchemaCreateImmeubleInput['managerId'];
+  zoneId?: SchemaCreateImmeubleInput['zoneId'];
+  ascenseurPresent?: SchemaCreateImmeubleInput['ascenseurPresent'] | null;
+  digitalCode?: SchemaCreateImmeubleInput['digitalCode'];
+  latitude?: SchemaCreateImmeubleInput['latitude'];
+  longitude?: SchemaCreateImmeubleInput['longitude'];
 };
 
 export type Commercial = {
-  id: number;
-  nom: string;
-  prenom: string;
-  email?: string | null;
-  numTel?: string | null;
-  managerId?: number | null;
+  id: SchemaCommercial['id'];
+  nom: SchemaCommercial['nom'];
+  prenom: SchemaCommercial['prenom'];
+  email?: SchemaCommercial['email'] | null;
+  numTel?: SchemaCommercial['numTel'];
+  managerId?: SchemaCommercial['managerId'];
   immeubles?: Immeuble[];
   statistics?: Statistic[];
   zones?: Zone[];
 };
 
 export type Manager = {
-  id: number;
-  nom: string;
-  prenom: string;
-  email?: string | null;
-  numTelephone?: string | null;
+  id: SchemaManager['id'];
+  nom: SchemaManager['nom'];
+  prenom: SchemaManager['prenom'];
+  email?: SchemaManager['email'];
+  numTelephone?: SchemaManager['numTelephone'];
   immeubles?: Immeuble[];
   statistics?: Statistic[];
   personalStatistics?: Statistic[];
@@ -178,26 +197,26 @@ export type Manager = {
 };
 
 export type CommercialTeamRanking = {
-  position: number;
-  total: number;
-  points: number;
-  trend?: string | null;
-  managerNom?: string | null;
-  managerPrenom?: string | null;
-  managerEmail?: string | null;
-  managerNumTel?: string | null;
+  position: SchemaTeamRanking['position'];
+  total: SchemaTeamRanking['total'];
+  points: SchemaTeamRanking['points'];
+  trend?: SchemaTeamRanking['trend'];
+  managerNom?: SchemaTeamRanking['managerNom'];
+  managerPrenom?: SchemaTeamRanking['managerPrenom'];
+  managerEmail?: SchemaTeamRanking['managerEmail'];
+  managerNumTel?: SchemaTeamRanking['managerNumTel'];
 };
 
 export type UpdatePorteInput = {
-  id: number;
-  numero?: string;
-  nomPersonnalise?: string | null;
-  etage?: number;
-  statut?: string;
-  nbRepassages?: number | null;
-  nbContrats?: number | null;
-  rdvDate?: string | null;
-  rdvTime?: string | null;
-  commentaire?: string | null;
-  derniereVisite?: string | null;
+  id: SchemaUpdatePorteInput['id'];
+  numero?: SchemaUpdatePorteInput['numero'];
+  nomPersonnalise?: SchemaUpdatePorteInput['nomPersonnalise'];
+  etage?: SchemaUpdatePorteInput['etage'];
+  statut?: SchemaUpdatePorteInput['statut'] | string;
+  nbRepassages?: SchemaUpdatePorteInput['nbRepassages'] | null;
+  nbContrats?: SchemaUpdatePorteInput['nbContrats'] | null;
+  rdvDate?: SchemaUpdatePorteInput['rdvDate'];
+  rdvTime?: SchemaUpdatePorteInput['rdvTime'];
+  commentaire?: SchemaUpdatePorteInput['commentaire'];
+  derniereVisite?: SchemaUpdatePorteInput['derniereVisite'];
 };

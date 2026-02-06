@@ -220,10 +220,10 @@ export default function StatistiquesScreen() {
   }, [maxPortes]);
 
   const yAxisStep = useMemo(() => {
-    return Math.max(1, Math.round(chartDomain.y[1] / 2));
+    return Math.max(1, Math.round(chartDomain.y[1] / 2)); 
   }, [chartDomain]);
 
-  const yAxisLabels = useMemo(() => {
+  const yAxisLabels = useMemo(() => {     
     return [chartDomain.y[1], yAxisStep, 0].map((val) => String(val));
   }, [chartDomain, yAxisStep]);
 
