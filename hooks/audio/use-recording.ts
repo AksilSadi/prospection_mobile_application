@@ -72,7 +72,10 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
       if (!mountedRef.current || operationId !== operationIdRef.current) {
         return;
       }
-      setError(err?.message || "Erreur d'enregistrement");
+      if (__DEV__) {
+        console.error("[Recording] Erreur demarrage", err);
+      }
+      setError(null);
       setIsRecording(false);
     } finally {
       if (mountedRef.current && operationId === operationIdRef.current) {
@@ -104,7 +107,10 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
       if (!mountedRef.current || operationId !== operationIdRef.current) {
         return;
       }
-      setError(err?.message || "Erreur d'arrêt");
+      if (__DEV__) {
+        console.error("[Recording] Erreur arret", err);
+      }
+      setError(null);
     } finally {
       if (mountedRef.current && operationId === operationIdRef.current) {
         setIsStopping(false);

@@ -62,10 +62,10 @@ export default function ImmeublesScreen({
   const [role, setRole] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const searchInputRef = useRef<TextInput | null>(null);
   const filterChipAnimsRef = useRef(new Map<string, Animated.Value>()).current;
-  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [filtersVisible, setFiltersVisible] = useState(true);
   const [progressFilter, setProgressFilter] = useState("incomplete");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedImmeubleId, setSelectedImmeubleId] = useState<number | null>(
@@ -84,7 +84,7 @@ export default function ImmeublesScreen({
   const getFilterChipAnim = (key: string) => {
     const existing = filterChipAnimsRef.get(key);
     if (existing) return existing;
-    const next = new Animated.Value(0);
+    const next = new Animated.Value(filtersVisible ? 1 : 0);
     filterChipAnimsRef.set(key, next);
     return next;
   };
@@ -127,7 +127,11 @@ export default function ImmeublesScreen({
     error,
     refetch,
   } = useWorkspaceProfile(userId, role);
-  const { create, cancel: cancelCreate, loading: creating } = useCreateImmeuble();
+  const {
+    create,
+    cancel: cancelCreate,
+    loading: creating,
+  } = useCreateImmeuble();
   const isProfileReady = userId !== null && role !== null;
   const isInitialLoading = !isProfileReady || (loading && !profile);
 
@@ -274,12 +278,18 @@ export default function ImmeublesScreen({
   const progressByImmeubleId = useMemo(() => {
     const entries: Record<
       number,
-      { total: number; prospectees: number; progressPercent: number; progressColor: string }
+      {
+        total: number;
+        prospectees: number;
+        progressPercent: number;
+        progressColor: string;
+      }
     > = {};
 
     for (const immeuble of immeublesEnCours) {
       const portes = immeuble.portes || [];
-      const total = portes.length || immeuble.nbEtages * immeuble.nbPortesParEtage;
+      const total =
+        portes.length || immeuble.nbEtages * immeuble.nbPortesParEtage;
       const prospectees = portes.length
         ? portes.filter((porte) => porte.statut !== "NON_VISITE").length
         : 0;
@@ -453,7 +463,9 @@ export default function ImmeublesScreen({
                 </View>
               </View>
 
-              {loading && !profile && <Text style={styles.helper}>Chargement...</Text>}
+              {loading && !profile && (
+                <Text style={styles.helper}>Chargement...</Text>
+              )}
               {error && <Text style={styles.error}>{error}</Text>}
             </View>
           }
@@ -582,15 +594,15 @@ export default function ImmeublesScreen({
             ) : (
               <View style={styles.row}>
                 {row.map((immeuble, index) => {
-                   const progress = progressByImmeubleId[immeuble.id] ?? {
-                     total: 0,
-                     prospectees: 0,
-                     progressPercent: 0,
-                     progressColor: "#22C55E",
-                   };
-                   const cardLabel = `Appartement ${String.fromCharCode(65 + (index % 26))}`;
-                   const anim = getCardAnimation(immeuble.id);
-                   const animValue = anim;
+                  const progress = progressByImmeubleId[immeuble.id] ?? {
+                    total: 0,
+                    prospectees: 0,
+                    progressPercent: 0,
+                    progressColor: "#22C55E",
+                  };
+                  const cardLabel = `Appartement ${String.fromCharCode(65 + (index % 26))}`;
+                  const anim = getCardAnimation(immeuble.id);
+                  const animValue = anim;
                   return (
                     <Animated.View
                       key={immeuble.id}
@@ -621,10 +633,10 @@ export default function ImmeublesScreen({
                         },
                       ]}
                     >
-                       <Pressable
-                         style={styles.card}
-                         onPress={() => handleOpenImmeuble(immeuble.id)}
-                       >
+                      <Pressable
+                        style={styles.card}
+                        onPress={() => handleOpenImmeuble(immeuble.id)}
+                      >
                         <View style={styles.cardHeader}>
                           <View style={styles.cardIcon}>
                             <Feather name="home" size={18} color="#2563EB" />
@@ -647,7 +659,9 @@ export default function ImmeublesScreen({
                               {immeuble.nbEtages} etages
                             </Text>
                             <Text style={styles.cardMeta}>•</Text>
-                             <Text style={styles.cardMeta}>{progress.total} portes</Text>
+                            <Text style={styles.cardMeta}>
+                              {progress.total} portes
+                            </Text>
                           </View>
                           <View style={styles.progressRow}>
                             <View style={styles.progressTrack}>
@@ -655,22 +669,22 @@ export default function ImmeublesScreen({
                                 style={[
                                   styles.progressFill,
                                   {
-                                      width: `${progress.progressPercent}%`,
-                                      backgroundColor: progress.progressColor,
-                                    },
-                                  ]}
-                               />
+                                    width: `${progress.progressPercent}%`,
+                                    backgroundColor: progress.progressColor,
+                                  },
+                                ]}
+                              />
                             </View>
                             <Text
                               style={[
-                                 styles.progressText,
-                                 { color: progress.progressColor },
-                               ]}
-                             >
-                               {progress.progressPercent}%
-                             </Text>
-                           </View>
-                         </View>
+                                styles.progressText,
+                                { color: progress.progressColor },
+                              ]}
+                            >
+                              {progress.progressPercent}%
+                            </Text>
+                          </View>
+                        </View>
                       </Pressable>
                     </Animated.View>
                   );

@@ -16,7 +16,7 @@ import {
 import type { Porte } from "@/types/api";
 
 type EditPorteSheetProps = {
-  editMode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | null;
+  editMode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | "ARGUMENTE" | null;
   editPorte: Porte | null;
   editForm: {
     rdvDate: string;
@@ -70,6 +70,39 @@ function EditPorteSheet({
 }: EditPorteSheetProps) {
   if (!editMode || !editPorte) return null;
 
+  const isRdv = editMode === "RENDEZ_VOUS_PRIS";
+  const isArgumente = editMode === "ARGUMENTE";
+
+  const heroStyle = isRdv
+    ? styles.sheetHeroRdv
+    : isArgumente
+      ? styles.sheetHeroArgument
+      : styles.sheetHeroContract;
+
+  const heroIconStyle = isRdv
+    ? styles.sheetHeroIconBlue
+    : isArgumente
+      ? styles.sheetHeroIconAmber
+      : styles.sheetHeroIconGreen;
+
+  const heroIconName: keyof typeof Feather.glyphMap = isRdv
+    ? "calendar"
+    : isArgumente
+      ? "message-square"
+      : "award";
+
+  const heroIconColor = isRdv ? "#1D4ED8" : isArgumente ? "#B45309" : "#047857";
+
+  const heroTitle = isRdv ? "Rendez-vous" : isArgumente ? "Argumente" : "Contrat signe";
+
+  const commentSectionStyle = isArgumente
+    ? [styles.sheetCard, styles.sheetCardArgument, isTablet && styles.sheetCardTablet]
+    : [styles.sheetCard, styles.sheetCardComment, isTablet && styles.sheetCardTablet];
+
+  const commentIconStyle = isArgumente
+    ? [styles.sheetSectionIcon, styles.sheetSectionIconAmber]
+    : styles.sheetSectionIcon;
+
   return (
     <BottomSheetModal
       ref={editSheetRef}
@@ -91,37 +124,24 @@ function EditPorteSheet({
         ]}
       >
         <>
-          <View
-            style={[
-              styles.sheetHero,
-              editMode === "RENDEZ_VOUS_PRIS"
-                ? styles.sheetHeroRdv
-                : styles.sheetHeroContract,
-              isTablet && styles.sheetHeroTablet,
-            ]}
-          >
             <View
               style={[
-                styles.sheetHeroIcon,
-                editMode === "RENDEZ_VOUS_PRIS"
-                  ? styles.sheetHeroIconBlue
-                  : styles.sheetHeroIconGreen,
+                styles.sheetHero,
+                heroStyle,
+                isTablet && styles.sheetHeroTablet,
               ]}
             >
-              <Feather
-                name={editMode === "RENDEZ_VOUS_PRIS" ? "calendar" : "award"}
-                size={18}
-                color={editMode === "RENDEZ_VOUS_PRIS" ? "#1D4ED8" : "#047857"}
-              />
-            </View>
-            <View style={styles.sheetHeroText}>
-              <Text
+              <View style={[styles.sheetHeroIcon, heroIconStyle]}>
+                <Feather name={heroIconName} size={18} color={heroIconColor} />
+              </View>
+              <View style={styles.sheetHeroText}>
+                <Text
                 style={[
                   styles.sheetTitle,
                   isTablet && styles.sheetTitleTablet,
                 ]}
               >
-                {editMode === "RENDEZ_VOUS_PRIS" ? "Rendez-vous" : "Contrat signe"}
+                {heroTitle}
               </Text>
               <Text
                 style={[
@@ -295,26 +315,30 @@ function EditPorteSheet({
             </View>
           )}
 
-          <View
-            style={[
-              styles.sheetCard,
-              styles.sheetCardComment,
-              isTablet && styles.sheetCardTablet,
-            ]}
-          >
+          <View style={commentSectionStyle}>
             <View style={styles.sheetSectionHeader}>
-              <View style={styles.sheetSectionIcon}>
-                <Feather name="message-square" size={14} color="#2563EB" />
+              <View style={commentIconStyle}>
+                <Feather
+                  name="message-square"
+                  size={14}
+                  color={isArgumente ? "#B45309" : "#2563EB"}
+                />
               </View>
               <View style={styles.sheetSectionText}>
                 <Text style={styles.sheetSectionTitle}>Commentaire</Text>
                 <Text style={styles.sheetSectionSubtitle}>
-                  Notes rapides pour cette porte
+                  {isArgumente
+                    ? "Decris l'argument principal avant validation"
+                    : "Notes rapides pour cette porte"}
                 </Text>
               </View>
             </View>
             <TextInput
-              placeholder="Ajouter un commentaire..."
+              placeholder={
+                isArgumente
+                  ? "Ex: Interesse mais souhaite etre rappele le soir"
+                  : "Ajouter un commentaire..."
+              }
               value={editForm.commentaire}
               onChangeText={(value) =>
                 setEditForm((prev) => ({ ...prev, commentaire: value }))

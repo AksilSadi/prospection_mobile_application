@@ -20,7 +20,10 @@ export function useActiveRooms(refreshInterval = 5000) {
       setActiveSessions(sessions || []);
       setError(null);
     } catch (err: any) {
-      setError(err?.message || "Erreur chargement rooms");
+      if (__DEV__) {
+        console.error("[Audio] Erreur chargement rooms", err);
+      }
+      setError(null);
     } finally {
       setLoading(false);
     }

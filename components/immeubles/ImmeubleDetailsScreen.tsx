@@ -502,8 +502,8 @@ function ImmeubleDetailsView({
   const fabHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fabHintOpacity = useRef(new Animated.Value(0)).current;
   const progressFill = useRef(new Animated.Value(0)).current;
-  const hasAnimatedProgressRef = useRef(false);
-  const lastProgressTargetRef = useRef<number | null>(null);
+  const progressAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const lastProgressTargetRef = useRef(0);
   const doorPagerRef = useRef<FlatList<Porte>>(null);
   const filteredPortesRef = useRef<Porte[]>([]);
   const currentPorteRef = useRef<Porte | undefined>(undefined);
@@ -534,7 +534,7 @@ function ImmeubleDetailsView({
     [isTablet],
   );
   const [editMode, setEditMode] = useState<
-    "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | null
+    "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | "ARGUMENTE" | null
   >(null);
   const [editPorte, setEditPorte] = useState<Porte | null>(null);
   const [editForm, setEditForm] = useState({
@@ -736,7 +736,7 @@ function ImmeubleDetailsView({
   };
 
   const openEditSheet = useCallback(
-    (porte: Porte, mode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE") => {
+    (porte: Porte, mode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | "ARGUMENTE") => {
       setEditPorte(porte);
       setEditMode(mode);
       setEditForm({
@@ -771,6 +771,11 @@ function ImmeubleDetailsView({
 
   const saveEditSheet = async () => {
     if (!editPorte || !editMode || savingPorte) return;
+    if (editMode === "ARGUMENTE" && !editForm.commentaire.trim()) {
+      showToast("Commentaire requis", "Ajoute un commentaire pour valider Argumente");
+      return;
+    }
+
     const payload: UpdatePorteInput = {
       id: editPorte.id,
       statut: editMode,
@@ -908,36 +913,38 @@ function ImmeubleDetailsView({
     if (lastProgressTargetRef.current === targetValue) {
       return;
     }
+
     lastProgressTargetRef.current = targetValue;
 
-    if (!hasAnimatedProgressRef.current && targetValue === 0) {
-      progressFill.setValue(0);
-      return;
-    }
-
+    progressAnimationRef.current?.stop();
     progressFill.stopAnimation((currentValue: number) => {
-      const isFirstMeaningfulAnimation = !hasAnimatedProgressRef.current;
-      hasAnimatedProgressRef.current = true;
-
       const delta = Math.abs(targetValue - currentValue);
-      if (delta < 0.5) {
+      if (delta < 0.2) {
         progressFill.setValue(targetValue);
         return;
       }
 
-      const duration = isFirstMeaningfulAnimation
-        ? 360
-        : Math.max(140, Math.min(320, 120 + delta * 5));
-
-      Animated.timing(progressFill, {
+      const duration = Math.max(260, Math.min(520, 220 + delta * 8));
+      progressAnimationRef.current = Animated.timing(progressFill, {
         toValue: targetValue,
         duration,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: false,
         isInteraction: false,
-      }).start();
+      });
+      progressAnimationRef.current.start(({ finished }) => {
+        if (finished) {
+          progressAnimationRef.current = null;
+        }
+      });
     });
   }, [progress.percentage, progressFill]);
+
+  useEffect(() => {
+    return () => {
+      progressAnimationRef.current?.stop();
+    };
+  }, []);
 
   const visibleStatusOptions = STATUS_OPTIONS;
 
@@ -1339,6 +1346,10 @@ function ImmeubleDetailsView({
       }
       if (statut === "RENDEZ_VOUS_PRIS" || statut === "CONTRAT_SIGNE") {
         openEditSheet(porte, statut);
+        return;
+      }
+      if (statut === "ARGUMENTE") {
+        openEditSheet(porte, "ARGUMENTE");
         return;
       }
       if (statut === "ABSENT_MATIN") {
@@ -2718,6 +2729,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     borderColor: "#CDEBDD",
   },
+  sheetHeroArgument: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FCD9B8",
+  },
   sheetHeroIcon: {
     width: 40,
     height: 40,
@@ -2731,6 +2746,9 @@ const styles = StyleSheet.create({
   },
   sheetHeroIconGreen: {
     backgroundColor: "#E6F4ED",
+  },
+  sheetHeroIconAmber: {
+    backgroundColor: "#FFF4E8",
   },
   sheetHeroText: {
     flex: 1,
@@ -2777,6 +2795,10 @@ const styles = StyleSheet.create({
   sheetCardComment: {
     backgroundColor: "#FFFFFF",
     borderColor: "#E2E8F0",
+  },
+  sheetCardArgument: {
+    backgroundColor: "#FFFFFF",
+    borderColor: "#FCD9B8",
   },
   inputRow: {
     flexDirection: "row",
@@ -2931,6 +2953,9 @@ const styles = StyleSheet.create({
   },
   sheetSectionIconGreen: {
     backgroundColor: "#E6F4ED",
+  },
+  sheetSectionIconAmber: {
+    backgroundColor: "#FFF4E8",
   },
   sheetSectionText: {
     flex: 1,

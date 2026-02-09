@@ -22,7 +22,10 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          setError("Permission micro refusee");
+          if (__DEV__) {
+            console.error("[Audio] Permission micro refusee");
+          }
+          setError(null);
           return;
         }
       }
@@ -31,7 +34,10 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
       setConnectionDetails(details);
       setIsConnected(true);
     } catch (err: any) {
-      setError(err?.message || "Erreur de connexion audio");
+      if (__DEV__) {
+        console.error("[Audio] Erreur connexion audio", err);
+      }
+      setError(null);
       setIsConnected(false);
     } finally {
       setIsConnecting(false);

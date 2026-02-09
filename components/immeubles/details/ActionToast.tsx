@@ -1,6 +1,7 @@
 import { Animated, Text, View } from "react-native";
-import type { StyleProp, ViewStyle } from "react-native";
+import type { StyleProp, TextStyle, ViewStyle } from "react-native";
 import { memo } from "react";
+import { Feather } from "@expo/vector-icons";
 
 type ActionToastProps = {
   topInset: number;
@@ -11,8 +12,10 @@ type ActionToastProps = {
   styles: {
     toastOverlay: StyleProp<ViewStyle>;
     toastCard: StyleProp<ViewStyle>;
-    toastTitle: any;
-    toastSubtitle: any;
+    toastIcon: StyleProp<ViewStyle>;
+    toastText: StyleProp<ViewStyle>;
+    toastTitle: StyleProp<TextStyle>;
+    toastSubtitle: StyleProp<TextStyle>;
   };
 };
 
@@ -24,6 +27,12 @@ function ActionToast({
   translateY,
   styles,
 }: ActionToastProps) {
+  const isError = title.toLowerCase().includes("erreur");
+  const iconName: keyof typeof Feather.glyphMap = isError
+    ? "alert-circle"
+    : "check";
+  const iconBg = isError ? "#EF4444" : "#34D399";
+
   return (
     <View style={[styles.toastOverlay, { top: topInset + 8 }]}>
       <Animated.View
@@ -32,8 +41,13 @@ function ActionToast({
           { opacity, transform: [{ translateY }] },
         ]}
       >
-        <Text style={styles.toastTitle}>{title}</Text>
-        <Text style={styles.toastSubtitle}>{subtitle}</Text>
+        <View style={[styles.toastIcon, { backgroundColor: iconBg }]}>
+          <Feather name={iconName} size={14} color="#FFFFFF" />
+        </View>
+        <View style={styles.toastText}>
+          <Text style={styles.toastTitle}>{title}</Text>
+          <Text style={styles.toastSubtitle}>{subtitle}</Text>
+        </View>
       </Animated.View>
     </View>
   );
