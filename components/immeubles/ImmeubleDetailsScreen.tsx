@@ -7,6 +7,7 @@ import { useCreatePorte } from "@/hooks/api/use-create-porte";
 import { useRemoveEtageFromImmeuble } from "@/hooks/api/use-remove-etage-from-immeuble";
 import { useRemovePorteFromEtage } from "@/hooks/api/use-remove-porte-from-etage";
 import { useUpdatePorte } from "@/hooks/api/use-update-porte";
+import { useRecording } from "@/hooks/audio/use-recording";
 import type {
   CreatePorteInput,
   Immeuble,
@@ -496,6 +497,10 @@ function ImmeubleDetailsView({
   const doorPagerRef = useRef<FlatList<Porte>>(null);
   const filteredPortesRef = useRef<Porte[]>([]);
   const currentPorteRef = useRef<Porte | undefined>(undefined);
+  const { error: recordingError } = useRecording({
+    enabled: true,
+    immeubleId: immeuble.id,
+  });
   const { add: addEtageToImmeuble, loading: addingEtage } =
     useAddEtageToImmeuble();
   const { create: createPorte, loading: creatingPorte } = useCreatePorte();
@@ -619,6 +624,11 @@ function ImmeubleDetailsView({
     if (!editMode || !editPorte) return;
     editSheetRef.current?.present();
   }, [editMode, editPorte]);
+
+  useEffect(() => {
+    if (!recordingError) return;
+    console.log("[Recording] start failed", recordingError);
+  }, [recordingError]);
 
   const triggerFloorPlan = useCallback(() => {
     setShowFloorPlan(true);
