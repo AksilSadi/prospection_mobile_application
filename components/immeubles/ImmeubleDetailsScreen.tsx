@@ -2,6 +2,11 @@ import AddPorteSheet, {
   type AddPortePayload,
 } from "@/components/immeubles/AddPorteSheet";
 import ConfirmActionOverlay from "@/components/immeubles/ConfirmActionOverlay";
+import ActionToast from "@/components/immeubles/details/ActionToast";
+import DetailsHeader from "@/components/immeubles/details/DetailsHeader";
+import EditPorteSheet from "@/components/immeubles/details/EditPorteSheet";
+import FloorPlanSheet from "@/components/immeubles/details/FloorPlanSheet";
+import StatusFilterSheet from "@/components/immeubles/details/StatusFilterSheet";
 import { useAddEtageToImmeuble } from "@/hooks/api/use-add-etage-to-immeuble";
 import { useCreatePorte } from "@/hooks/api/use-create-porte";
 import { useRemoveEtageFromImmeuble } from "@/hooks/api/use-remove-etage-from-immeuble";
@@ -14,17 +19,9 @@ import type {
   Porte,
   UpdatePorteInput,
 } from "@/types/api";
-import ActionToast from "@/components/immeubles/details/ActionToast";
-import DetailsHeader from "@/components/immeubles/details/DetailsHeader";
-import EditPorteSheet from "@/components/immeubles/details/EditPorteSheet";
-import FloorPlanSheet from "@/components/immeubles/details/FloorPlanSheet";
-import StatusFilterSheet from "@/components/immeubles/details/StatusFilterSheet";
 import { Feather } from "@expo/vector-icons";
 import { BottomSheetBackdrop, BottomSheetModal } from "@gorhom/bottom-sheet";
-import type {
-  ComponentType,
-  RefObject,
-} from "react";
+import type { ComponentType, RefObject } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
@@ -207,10 +204,7 @@ const ProgressCard = memo(function ProgressCard({
 }: ProgressCardProps) {
   return (
     <View
-      style={[
-        styles.progressCardNew,
-        isTablet && styles.progressCardNewTablet,
-      ]}
+      style={[styles.progressCardNew, isTablet && styles.progressCardNewTablet]}
     >
       <View style={styles.progressRowNew}>
         <View style={styles.progressLeftNew}>
@@ -225,7 +219,9 @@ const ProgressCard = memo(function ProgressCard({
           </View>
         </View>
         <View style={styles.progressPercentNew}>
-          <Text style={styles.progressPercentTextNew}>{progress.percentage}%</Text>
+          <Text style={styles.progressPercentTextNew}>
+            {progress.percentage}%
+          </Text>
         </View>
       </View>
       <View style={styles.progressBarTrackNew}>
@@ -295,87 +291,99 @@ type DoorPagerItemProps = {
   onStatusSelect: (statut: string, target?: Porte) => Promise<void>;
 };
 
-const DoorPagerItem = memo(function DoorPagerItem({
-  item,
-  width,
-  visibleStatusOptions,
-  onStatusSelect,
-}: DoorPagerItemProps) {
-  const status = getDisplayStatus(item) ?? DEFAULT_STATUS_OPTION;
+const DoorPagerItem = memo(
+  function DoorPagerItem({
+    item,
+    width,
+    visibleStatusOptions,
+    onStatusSelect,
+  }: DoorPagerItemProps) {
+    const status = getDisplayStatus(item) ?? DEFAULT_STATUS_OPTION;
 
-  return (
-    <View style={[styles.doorPagerItem, { width }]}>
-      <View style={styles.doorCardInScroll}>
-        <View style={styles.doorCardHeader}>
-          <View style={styles.doorCardTitleRow}>
-            <View style={styles.doorNumberBadge}>
-              <Text style={styles.doorNumberText}>
-                {item.nomPersonnalise || item.numero || "--"}
+    return (
+      <View style={[styles.doorPagerItem, { width }]}>
+        <View style={styles.doorCardInScroll}>
+          <View style={styles.doorCardHeader}>
+            <View style={styles.doorCardTitleRow}>
+              <View style={styles.doorNumberBadge}>
+                <Text style={styles.doorNumberText}>
+                  {item.nomPersonnalise || item.numero || "--"}
+                </Text>
+              </View>
+              <View style={styles.doorFloorBadge}>
+                <Feather name="layers" size={12} color="#64748B" />
+                <Text style={styles.doorFloorText}>
+                  Etage {item.etage ?? "--"}
+                </Text>
+              </View>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+              <View
+                style={[
+                  styles.statusDotBadge,
+                  { backgroundColor: status.accent },
+                ]}
+              />
+              <Text style={[styles.statusBadgeText, { color: status.fg }]}>
+                {status.label}
               </Text>
             </View>
-            <View style={styles.doorFloorBadge}>
-              <Feather name="layers" size={12} color="#64748B" />
-              <Text style={styles.doorFloorText}>Etage {item.etage ?? "--"}</Text>
-            </View>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-            <View style={[styles.statusDotBadge, { backgroundColor: status.accent }]} />
-            <Text style={[styles.statusBadgeText, { color: status.fg }]}>
-              {status.label}
-            </Text>
+
+          <View style={styles.statusGrid}>
+            {visibleStatusOptions.map((option) => {
+              const isActiveStatus = getDisplayStatusKey(item) === option.value;
+              const cardBg = isActiveStatus ? option.accent : option.bg;
+              const cardBorder = isActiveStatus ? option.accent : "#E2E8F0";
+              const labelColor = isActiveStatus ? "#FFFFFF" : option.fg;
+              const descColor = isActiveStatus
+                ? "rgba(255, 255, 255, 0.9)"
+                : option.fg;
+              const iconBg = isActiveStatus
+                ? "rgba(255, 255, 255, 0.2)"
+                : option.accent;
+              const iconColor = isActiveStatus ? "#FFFFFF" : option.fg;
+
+              return (
+                <View key={option.value} style={styles.statusCardWrap}>
+                  <Pressable
+                    style={[
+                      styles.statusCard,
+                      { backgroundColor: cardBg, borderColor: cardBorder },
+                    ]}
+                    onPress={() => {
+                      void onStatusSelect(option.value, item);
+                    }}
+                  >
+                    <View
+                      style={[styles.statusIcon, { backgroundColor: iconBg }]}
+                    >
+                      <Feather name={option.icon} size={16} color={iconColor} />
+                    </View>
+                    <Text style={[styles.statusLabel, { color: labelColor }]}>
+                      {option.label}
+                    </Text>
+                    <Text style={[styles.statusDesc, { color: descColor }]}>
+                      {option.description}
+                    </Text>
+                  </Pressable>
+                </View>
+              );
+            })}
           </View>
-        </View>
-
-        <View style={styles.statusGrid}>
-          {visibleStatusOptions.map((option) => {
-            const isActiveStatus = getDisplayStatusKey(item) === option.value;
-            const cardBg = isActiveStatus ? option.accent : option.bg;
-            const cardBorder = isActiveStatus ? option.accent : "#E2E8F0";
-            const labelColor = isActiveStatus ? "#FFFFFF" : option.fg;
-            const descColor = isActiveStatus
-              ? "rgba(255, 255, 255, 0.9)"
-              : option.fg;
-            const iconBg = isActiveStatus
-              ? "rgba(255, 255, 255, 0.2)"
-              : option.accent;
-            const iconColor = isActiveStatus ? "#FFFFFF" : option.fg;
-
-            return (
-              <View key={option.value} style={styles.statusCardWrap}>
-                <Pressable
-                  style={[
-                    styles.statusCard,
-                    { backgroundColor: cardBg, borderColor: cardBorder },
-                  ]}
-                  onPress={() => {
-                    void onStatusSelect(option.value, item);
-                  }}
-                >
-                  <View style={[styles.statusIcon, { backgroundColor: iconBg }]}>
-                    <Feather name={option.icon} size={16} color={iconColor} />
-                  </View>
-                  <Text style={[styles.statusLabel, { color: labelColor }]}>
-                    {option.label}
-                  </Text>
-                  <Text style={[styles.statusDesc, { color: descColor }]}>
-                    {option.description}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
         </View>
       </View>
-    </View>
-  );
-}, (prev, next) => {
-  return (
-    prev.item === next.item &&
-    prev.width === next.width &&
-    prev.visibleStatusOptions === next.visibleStatusOptions &&
-    prev.onStatusSelect === next.onStatusSelect
-  );
-});
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.item === next.item &&
+      prev.width === next.width &&
+      prev.visibleStatusOptions === next.visibleStatusOptions &&
+      prev.onStatusSelect === next.onStatusSelect
+    );
+  },
+);
 
 type DoorPagerProps = {
   doorPagerRef: RefObject<FlatList<Porte> | null>;
@@ -438,7 +446,9 @@ const DoorPager = memo(function DoorPager({
         <View style={styles.emptyFilterCard}>
           <Feather name="filter" size={20} color="#94A3B8" />
           <Text style={styles.emptyFilterTitle}>Aucune porte trouvee</Text>
-          <Text style={styles.emptyFilterText}>Aucun resultat avec ce filtre.</Text>
+          <Text style={styles.emptyFilterText}>
+            Aucun resultat avec ce filtre.
+          </Text>
         </View>
       }
       renderItem={renderItem}
@@ -636,50 +646,56 @@ function ImmeubleDetailsView({
     floorPlanPulse.setValue(0);
   }, [floorPlanPulse, floorPlanScale]);
 
-  const showToast = useCallback((title: string, subtitle: string) => {
-    setActionToast({ title, subtitle });
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-    }
-    Animated.parallel([
-      Animated.timing(toastOpacity, {
-        toValue: 1,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-      Animated.spring(toastTranslate, {
-        toValue: 0,
-        useNativeDriver: true,
-        friction: 7,
-        tension: 80,
-      }),
-    ]).start();
-    toastTimeoutRef.current = setTimeout(() => {
+  const showToast = useCallback(
+    (title: string, subtitle: string) => {
+      setActionToast({ title, subtitle });
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
       Animated.parallel([
         Animated.timing(toastOpacity, {
+          toValue: 1,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.spring(toastTranslate, {
           toValue: 0,
-          duration: 140,
           useNativeDriver: true,
+          friction: 7,
+          tension: 80,
         }),
-        Animated.timing(toastTranslate, {
-          toValue: -8,
-          duration: 140,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setActionToast(null);
-      });
-    }, 1400);
-  }, [toastOpacity, toastTranslate]);
+      ]).start();
+      toastTimeoutRef.current = setTimeout(() => {
+        Animated.parallel([
+          Animated.timing(toastOpacity, {
+            toValue: 0,
+            duration: 140,
+            useNativeDriver: true,
+          }),
+          Animated.timing(toastTranslate, {
+            toValue: -8,
+            duration: 140,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setActionToast(null);
+        });
+      }, 1400);
+    },
+    [toastOpacity, toastTranslate],
+  );
 
-  const updateLocalPorte = useCallback((porteId: number, changes: Partial<Porte>) => {
-    setPortesState((prev) =>
-      prev.map((porte) =>
-        porte.id === porteId ? { ...porte, ...changes } : porte,
-      ),
-    );
-    if (onDirtyChange) onDirtyChange(true);
-  }, [onDirtyChange]);
+  const updateLocalPorte = useCallback(
+    (porteId: number, changes: Partial<Porte>) => {
+      setPortesState((prev) =>
+        prev.map((porte) =>
+          porte.id === porteId ? { ...porte, ...changes } : porte,
+        ),
+      );
+      if (onDirtyChange) onDirtyChange(true);
+    },
+    [onDirtyChange],
+  );
 
   const getTodayDate = () => new Date().toISOString().split("T")[0];
   const getNowTime = () => {
@@ -719,20 +735,20 @@ function ImmeubleDetailsView({
     return now;
   };
 
-  const openEditSheet = useCallback((
-    porte: Porte,
-    mode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE",
-  ) => {
-    setEditPorte(porte);
-    setEditMode(mode);
-    setEditForm({
-      rdvDate: porte.rdvDate || getTodayDate(),
-      rdvTime: porte.rdvTime || getNowTime(),
-      nbContrats: porte.nbContrats || 1,
-      commentaire: porte.commentaire || "",
-      nomPersonnalise: porte.nomPersonnalise || "",
-    });
-  }, []);
+  const openEditSheet = useCallback(
+    (porte: Porte, mode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE") => {
+      setEditPorte(porte);
+      setEditMode(mode);
+      setEditForm({
+        rdvDate: porte.rdvDate || getTodayDate(),
+        rdvTime: porte.rdvTime || getNowTime(),
+        nbContrats: porte.nbContrats || 1,
+        commentaire: porte.commentaire || "",
+        nomPersonnalise: porte.nomPersonnalise || "",
+      });
+    },
+    [],
+  );
 
   const closeEditSheet = useCallback(() => {
     editSheetRef.current?.dismiss();
@@ -815,13 +831,16 @@ function ImmeubleDetailsView({
     [portesState, immeuble.nbEtages],
   );
 
-  const handleDoorScrollEnd = useCallback((event: any) => {
-    const offsetX = event.nativeEvent.contentOffset.x;
-    const nextIndex = Math.round(offsetX / Math.max(1, width));
-    setCurrentIndex((prev) =>
-      Math.max(0, Math.min(nextIndex, filteredPortes.length - 1)),
-    );
-  }, [filteredPortes.length, width]);
+  const handleDoorScrollEnd = useCallback(
+    (event: any) => {
+      const offsetX = event.nativeEvent.contentOffset.x;
+      const nextIndex = Math.round(offsetX / Math.max(1, width));
+      setCurrentIndex((prev) =>
+        Math.max(0, Math.min(nextIndex, filteredPortes.length - 1)),
+      );
+    },
+    [filteredPortes.length, width],
+  );
 
   const currentPorte = filteredPortes[currentIndex];
   const currentStatus = getDisplayStatus(currentPorte) ?? DEFAULT_STATUS_OPTION;
@@ -937,29 +956,40 @@ function ImmeubleDetailsView({
     filterSheetRef.current?.dismiss();
   }, []);
 
-  const jumpToFloor = useCallback((etage: number) => {
-    const targetIndex = filteredPortes.findIndex(
-      (porte) => porte.etage === etage,
-    );
+  const jumpToFloor = useCallback(
+    (etage: number) => {
+      const targetIndex = filteredPortes.findIndex(
+        (porte) => porte.etage === etage,
+      );
 
-    if (targetIndex === -1) {
-      showToast("Aucune porte", "Ce filtre ne contient pas cet etage");
-      return;
-    }
-    setCurrentIndex(targetIndex);
-    doorPagerRef.current?.scrollToIndex({ index: targetIndex, animated: true });
-  }, [filteredPortes, showToast]);
+      if (targetIndex === -1) {
+        showToast("Aucune porte", "Ce filtre ne contient pas cet etage");
+        return;
+      }
+      setCurrentIndex(targetIndex);
+      doorPagerRef.current?.scrollToIndex({
+        index: targetIndex,
+        animated: true,
+      });
+    },
+    [filteredPortes, showToast],
+  );
 
-  const getNextDoorNumber = useCallback((etage: number) => {
-    const portesOnFloor = portesState.filter((porte) => porte.etage === etage);
-    const numbers = portesOnFloor
-      .map((porte) => Number(porte.numero))
-      .filter((value) => !Number.isNaN(value));
-    if (numbers.length > 0) {
-      return String(Math.max(...numbers) + 1);
-    }
-    return String(portesOnFloor.length + 1);
-  }, [portesState]);
+  const getNextDoorNumber = useCallback(
+    (etage: number) => {
+      const portesOnFloor = portesState.filter(
+        (porte) => porte.etage === etage,
+      );
+      const numbers = portesOnFloor
+        .map((porte) => Number(porte.numero))
+        .filter((value) => !Number.isNaN(value));
+      if (numbers.length > 0) {
+        return String(Math.max(...numbers) + 1);
+      }
+      return String(portesOnFloor.length + 1);
+    },
+    [portesState],
+  );
 
   const openAddPorte = useCallback(() => {
     const etage = (currentPorte?.etage ?? displayNbEtages) || 1;
@@ -968,47 +998,50 @@ function ImmeubleDetailsView({
     setIsAddPorteOpen(true);
   }, [currentPorte?.etage, displayNbEtages, getNextDoorNumber]);
 
-  const handleAddPorte = useCallback(async (payload: AddPortePayload) => {
-    if (creatingPorte) return;
-    const tempId = -Date.now();
-    const newPorte: Porte = {
-      id: tempId,
-      numero: payload.numero,
-      nomPersonnalise: payload.nomPersonnalise || null,
-      etage: payload.etage,
-      immeubleId: immeuble.id,
-      statut: "NON_VISITE",
-      nbRepassages: 0,
-      nbContrats: 0,
-      rdvDate: null,
-      rdvTime: null,
-      commentaire: null,
-      derniereVisite: null,
-    };
-    setPortesState((prev) => [...prev, newPorte]);
-    if (onDirtyChange) onDirtyChange(true);
-    showToast(
-      "Porte ajoutee",
-      `Etage ${payload.etage} � Porte ${payload.numero}`,
-    );
-    const createPayload: CreatePorteInput = {
-      immeubleId: immeuble.id,
-      numero: payload.numero,
-      nomPersonnalise: payload.nomPersonnalise || null,
-      etage: payload.etage,
-      statut: "NON_VISITE",
-    };
-    const created = await createPorte(createPayload);
-    if (!created) {
-      setPortesState((prev) => prev.filter((porte) => porte.id !== tempId));
-      showToast("Erreur", "Ajout de porte impossible");
-    } else {
-      setPortesState((prev) =>
-        prev.map((porte) => (porte.id === tempId ? created : porte)),
+  const handleAddPorte = useCallback(
+    async (payload: AddPortePayload) => {
+      if (creatingPorte) return;
+      const tempId = -Date.now();
+      const newPorte: Porte = {
+        id: tempId,
+        numero: payload.numero,
+        nomPersonnalise: payload.nomPersonnalise || null,
+        etage: payload.etage,
+        immeubleId: immeuble.id,
+        statut: "NON_VISITE",
+        nbRepassages: 0,
+        nbContrats: 0,
+        rdvDate: null,
+        rdvTime: null,
+        commentaire: null,
+        derniereVisite: null,
+      };
+      setPortesState((prev) => [...prev, newPorte]);
+      if (onDirtyChange) onDirtyChange(true);
+      showToast(
+        "Porte ajoutee",
+        `Etage ${payload.etage} Porte ${payload.numero}`,
       );
-    }
-    setIsAddPorteOpen(false);
-  }, [createPorte, creatingPorte, immeuble.id, onDirtyChange, showToast]);
+      const createPayload: CreatePorteInput = {
+        immeubleId: immeuble.id,
+        numero: payload.numero,
+        nomPersonnalise: payload.nomPersonnalise || null,
+        etage: payload.etage,
+        statut: "NON_VISITE",
+      };
+      const created = await createPorte(createPayload);
+      if (!created) {
+        setPortesState((prev) => prev.filter((porte) => porte.id !== tempId));
+        showToast("Erreur", "Ajout de porte impossible");
+      } else {
+        setPortesState((prev) =>
+          prev.map((porte) => (porte.id === tempId ? created : porte)),
+        );
+      }
+      setIsAddPorteOpen(false);
+    },
+    [createPorte, creatingPorte, immeuble.id, onDirtyChange, showToast],
+  );
 
   const handleAddEtage = useCallback(async () => {
     if (addingEtage) return;
@@ -1148,70 +1181,72 @@ function ImmeubleDetailsView({
     showToast,
   ]);
 
-  const applyStatus = useCallback(async (
-    porte: Porte,
-    statut: string,
-    extra?: { nbRepassages?: number },
-  ) => {
-    const displayKey =
-      statut === "ABSENT" && typeof extra?.nbRepassages === "number"
-        ? extra.nbRepassages >= 2
-          ? "ABSENT_SOIR"
-          : "ABSENT_MATIN"
-        : statut;
-    const selectedStatus = STATUS_DISPLAY[displayKey]?.label ?? "Mis a jour";
-    showToast(
-      `Porte ${porte.nomPersonnalise || porte.numero}`,
-      `Statut: ${selectedStatus}`,
-    );
-    const visitedAt = new Date().toISOString();
-    updateLocalPorte(porte.id, {
-      statut,
-      nbRepassages: extra?.nbRepassages,
-      derniereVisite: visitedAt,
-    });
-    const payload: UpdatePorteInput = {
-      id: porte.id,
-      statut,
-      derniereVisite: visitedAt,
-      commentaire: porte.commentaire || null,
-    };
-    if (typeof extra?.nbRepassages === "number") {
-      payload.nbRepassages = extra.nbRepassages;
-    }
-    const result = await updatePorte(payload);
-    if (!result) {
-      showToast("Erreur", "Mise a jour impossible");
-    }
-  }, [showToast, updateLocalPorte, updatePorte]);
+  const applyStatus = useCallback(
+    async (porte: Porte, statut: string, extra?: { nbRepassages?: number }) => {
+      const displayKey =
+        statut === "ABSENT" && typeof extra?.nbRepassages === "number"
+          ? extra.nbRepassages >= 2
+            ? "ABSENT_SOIR"
+            : "ABSENT_MATIN"
+          : statut;
+      const selectedStatus = STATUS_DISPLAY[displayKey]?.label ?? "Mis a jour";
+      showToast(
+        `Porte ${porte.nomPersonnalise || porte.numero}`,
+        `Statut: ${selectedStatus}`,
+      );
+      const visitedAt = new Date().toISOString();
+      updateLocalPorte(porte.id, {
+        statut,
+        nbRepassages: extra?.nbRepassages,
+        derniereVisite: visitedAt,
+      });
+      const payload: UpdatePorteInput = {
+        id: porte.id,
+        statut,
+        derniereVisite: visitedAt,
+        commentaire: porte.commentaire || null,
+      };
+      if (typeof extra?.nbRepassages === "number") {
+        payload.nbRepassages = extra.nbRepassages;
+      }
+      const result = await updatePorte(payload);
+      if (!result) {
+        showToast("Erreur", "Mise a jour impossible");
+      }
+    },
+    [showToast, updateLocalPorte, updatePorte],
+  );
 
-  const resetStatus = useCallback(async (porte: Porte) => {
-    showToast(
-      `Porte ${porte.nomPersonnalise || porte.numero}`,
-      "Statut retire",
-    );
-    updateLocalPorte(porte.id, {
-      statut: "NON_VISITE",
-      nbRepassages: null,
-      rdvDate: null,
-      rdvTime: null,
-      nbContrats: null,
-      commentaire: null,
-      derniereVisite: null,
-    });
-    const payload: UpdatePorteInput = {
-      id: porte.id,
-      statut: "NON_VISITE",
-      rdvDate: null,
-      rdvTime: null,
-      commentaire: null,
-      derniereVisite: null,
-    };
-    const result = await updatePorte(payload);
-    if (!result) {
-      showToast("Erreur", "Mise a jour impossible");
-    }
-  }, [showToast, updateLocalPorte, updatePorte]);
+  const resetStatus = useCallback(
+    async (porte: Porte) => {
+      showToast(
+        `Porte ${porte.nomPersonnalise || porte.numero}`,
+        "Statut retire",
+      );
+      updateLocalPorte(porte.id, {
+        statut: "NON_VISITE",
+        nbRepassages: null,
+        rdvDate: null,
+        rdvTime: null,
+        nbContrats: null,
+        commentaire: null,
+        derniereVisite: null,
+      });
+      const payload: UpdatePorteInput = {
+        id: porte.id,
+        statut: "NON_VISITE",
+        rdvDate: null,
+        rdvTime: null,
+        commentaire: null,
+        derniereVisite: null,
+      };
+      const result = await updatePorte(payload);
+      if (!result) {
+        showToast("Erreur", "Mise a jour impossible");
+      }
+    },
+    [showToast, updateLocalPorte, updatePorte],
+  );
 
   const fabRotation = fabAnim.interpolate({
     inputRange: [0, 1],
@@ -1288,44 +1323,42 @@ function ImmeubleDetailsView({
     }
   }, []);
 
-  const handleStatusSelect = useCallback(async (statut: string, target?: Porte) => {
-    const porte = target ?? currentPorteRef.current;
-    if (!porte) return;
-    const currentKey = getDisplayStatusKey(porte);
-    if (
-      currentKey &&
-      currentKey === statut &&
-      statut !== "RENDEZ_VOUS_PRIS" &&
-      statut !== "CONTRAT_SIGNE"
-    ) {
-      void resetStatus(porte);
-      return;
-    }
-    if (statut === "RENDEZ_VOUS_PRIS" || statut === "CONTRAT_SIGNE") {
-      openEditSheet(porte, statut);
-      return;
-    }
-    if (statut === "ABSENT_MATIN") {
-      void applyStatus(porte, "ABSENT", { nbRepassages: 1 });
+  const handleStatusSelect = useCallback(
+    async (statut: string, target?: Porte) => {
+      const porte = target ?? currentPorteRef.current;
+      if (!porte) return;
+      const currentKey = getDisplayStatusKey(porte);
+      if (
+        currentKey &&
+        currentKey === statut &&
+        statut !== "RENDEZ_VOUS_PRIS" &&
+        statut !== "CONTRAT_SIGNE"
+      ) {
+        void resetStatus(porte);
+        return;
+      }
+      if (statut === "RENDEZ_VOUS_PRIS" || statut === "CONTRAT_SIGNE") {
+        openEditSheet(porte, statut);
+        return;
+      }
+      if (statut === "ABSENT_MATIN") {
+        void applyStatus(porte, "ABSENT", { nbRepassages: 1 });
+        advanceToNextDoor(porte.id, filteredPortesRef.current);
+        return;
+      }
+      if (statut === "ABSENT_SOIR") {
+        const nextRepassage = Math.max(2, porte.nbRepassages ?? 0);
+        void applyStatus(porte, "ABSENT", {
+          nbRepassages: nextRepassage,
+        });
+        advanceToNextDoor(porte.id, filteredPortesRef.current);
+        return;
+      }
+      void applyStatus(porte, statut);
       advanceToNextDoor(porte.id, filteredPortesRef.current);
-      return;
-    }
-    if (statut === "ABSENT_SOIR") {
-      const nextRepassage = Math.max(2, porte.nbRepassages ?? 0);
-      void applyStatus(porte, "ABSENT", {
-        nbRepassages: nextRepassage,
-      });
-      advanceToNextDoor(porte.id, filteredPortesRef.current);
-      return;
-    }
-    void applyStatus(porte, statut);
-    advanceToNextDoor(porte.id, filteredPortesRef.current);
-  }, [
-    advanceToNextDoor,
-    applyStatus,
-    openEditSheet,
-    resetStatus,
-  ]);
+    },
+    [advanceToNextDoor, applyStatus, openEditSheet, resetStatus],
+  );
 
   const fabActions = useMemo<FabAction[]>(
     () => [
@@ -1379,7 +1412,7 @@ function ImmeubleDetailsView({
       const [etage, portes] = item;
       return (
         <View style={styles.floorPlanEtageSection}>
-          <Text style={styles.floorPlanEtageLabel}>�tage {etage}</Text>
+          <Text style={styles.floorPlanEtageLabel}>Étage {etage}</Text>
           <View style={styles.floorPlanDoorsGrid}>
             {portes.map((porte) => {
               const status = getDisplayStatus(porte);
@@ -1507,7 +1540,6 @@ function ImmeubleDetailsView({
         </>
       )}
 
-
       <EditPorteSheet
         editMode={editMode}
         editPorte={editPorte}
@@ -1554,7 +1586,10 @@ function ImmeubleDetailsView({
           statusOptions={visibleStatusOptions}
           totalCount={sortedPortes.length}
           isTablet={isTablet}
-          onSheetClose={() => { handleFilterSheetClose(); setIsFilterSheetOpen(false); }}
+          onSheetClose={() => {
+            handleFilterSheetClose();
+            setIsFilterSheetOpen(false);
+          }}
           togglePendingFilter={togglePendingFilter}
           clearStatusFilters={clearStatusFilters}
           applyStatusFilters={applyStatusFilters}
@@ -1683,8 +1718,14 @@ function ImmeubleDetailsView({
               inputRange: [0, 1],
               outputRange: [0, targetY],
             });
-            const hintTranslateX = Animated.add(translateX, dirX * hintDistance);
-            const hintTranslateY = Animated.add(translateY, dirY * hintDistance);
+            const hintTranslateX = Animated.add(
+              translateX,
+              dirX * hintDistance,
+            );
+            const hintTranslateY = Animated.add(
+              translateY,
+              dirY * hintDistance,
+            );
             const scale = fabAnim.interpolate({
               inputRange: [0, 1],
               outputRange: [0.92, 1],
@@ -1784,7 +1825,7 @@ function ImmeubleDetailsView({
             </View>
             <Text style={styles.exitTitle}>Quitter la fiche ?</Text>
             <Text style={styles.exitText}>
-              Tu vas revenir � la liste des immeubles. Continuer ?
+              Tu vas revenir a la liste des immeubles. Continuer ?
             </Text>
             <View style={styles.exitActions}>
               <Pressable
@@ -3590,30 +3631,4 @@ const styles = StyleSheet.create({
   },
 });
 
-
 export default memo(ImmeubleDetailsView);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

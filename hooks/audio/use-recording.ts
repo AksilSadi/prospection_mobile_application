@@ -14,10 +14,37 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
   const [isStopping, setIsStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const currentEgressIdRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const operationIdRef = useRef(0);
+  const isRecordingRef = useRef(false);
+  const isStartingRef = useRef(false);
+  const isStoppingRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  useEffect(() => {
+    isStartingRef.current = isStarting;
+  }, [isStarting]);
+
+  useEffect(() => {
+    isStoppingRef.current = isStopping;
+  }, [isStopping]);
 
   const startRecording = useCallback(async () => {
-    if (!enabled || !isConnected || isRecording || isStarting) return;
+    if (!enabled || !isConnected || isRecordingRef.current || isStartingRef.current) {
+      return;
+    }
     if (!connectionDetails?.roomName) return;
+    const operationId = operationIdRef.current + 1;
+    operationIdRef.current = operationId;
 
     try {
       setIsStarting(true);
@@ -30,41 +57,70 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
         audioOnly: true,
       });
 
+      if (!mountedRef.current || operationId !== operationIdRef.current) {
+        try {
+          await RecordingService.stopRecording(result.egressId);
+        } catch (cleanupError) {
+          void cleanupError;
+        }
+        return;
+      }
+
       currentEgressIdRef.current = result.egressId;
       setIsRecording(true);
     } catch (err: any) {
+      if (!mountedRef.current || operationId !== operationIdRef.current) {
+        return;
+      }
       setError(err?.message || "Erreur d'enregistrement");
       setIsRecording(false);
     } finally {
-      setIsStarting(false);
+      if (mountedRef.current && operationId === operationIdRef.current) {
+        setIsStarting(false);
+      }
     }
-  }, [connectionDetails, enabled, immeubleId, isConnected, isRecording, isStarting]);
+  }, [connectionDetails, enabled, immeubleId, isConnected]);
 
   const stopRecording = useCallback(async () => {
-    if (!currentEgressIdRef.current || isStopping) return;
+    const operationId = operationIdRef.current + 1;
+    operationIdRef.current = operationId;
+    if (isStoppingRef.current) return;
+
+    const egressId = currentEgressIdRef.current;
+    currentEgressIdRef.current = null;
+
+    if (mountedRef.current) {
+      setIsRecording(false);
+      setIsStarting(false);
+    }
+
+    if (!egressId) return;
 
     try {
       setIsStopping(true);
       setError(null);
-      await RecordingService.stopRecording(currentEgressIdRef.current);
-      currentEgressIdRef.current = null;
-      setIsRecording(false);
+      await RecordingService.stopRecording(egressId);
     } catch (err: any) {
+      if (!mountedRef.current || operationId !== operationIdRef.current) {
+        return;
+      }
       setError(err?.message || "Erreur d'arrêt");
     } finally {
-      setIsStopping(false);
+      if (mountedRef.current && operationId === operationIdRef.current) {
+        setIsStopping(false);
+      }
     }
-  }, [isStopping]);
+  }, []);
 
   useEffect(() => {
     if (!enabled) {
-      if (isRecording) {
+      if (isRecordingRef.current || currentEgressIdRef.current || isStartingRef.current) {
         void stopRecording();
       }
       return;
     }
     void startRecording();
-  }, [enabled, isRecording, startRecording, stopRecording]);
+  }, [enabled, startRecording, stopRecording]);
 
   useEffect(() => {
     return () => {

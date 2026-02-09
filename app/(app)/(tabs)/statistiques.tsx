@@ -1,6 +1,8 @@
-﻿import { useCommercialStatistics } from "@/hooks/api/use-commercial-statistics";
+import { useCommercialStatistics } from "@/hooks/api/use-commercial-statistics";
 import { useCommercialTimeline } from "@/hooks/api/use-commercial-timeline";
+import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
+import { dataSyncService } from "@/services/sync/data-sync.service";
 import type { Statistic, TimelinePoint } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
@@ -44,6 +46,8 @@ export default function StatistiquesScreen() {
   const [chartKey, setChartKey] = useState(0);
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const skeletonPulse = useRef(new Animated.Value(0)).current;
+  const wasFocusedRef = useRef(false);
+  const shouldRefetchOnFocusRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -60,14 +64,9 @@ export default function StatistiquesScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    if (isFocused) {
-      setChartKey((prev) => prev + 1);
-    }
-  }, [isFocused]);
-
   const commercialId = role === "commercial" ? userId : null;
-  const statsState = useCommercialStatistics(commercialId);
+  const { data: statsData, loading: statsLoading, refetch: refetchStats } =
+    useCommercialStatistics(commercialId);
   const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const { startDate, endDate } = useMemo(() => {
     const days = 7;
@@ -76,27 +75,95 @@ export default function StatistiquesScreen() {
     start.setDate(start.getDate() - (days - 1));
     return { startDate: start.toISOString(), endDate: end.toISOString() };
   }, [todayKey]);
+  const {
+    data: timelineData,
+    loading: timelineLoading,
+    refetch: refetchTimeline,
+  } = useCommercialTimeline(commercialId, startDate, endDate);
+  const workspaceState = useWorkspaceProfile(userId, role);
 
-  const timelineState = useCommercialTimeline(commercialId, startDate, endDate);
+  useEffect(() => {
+    const unsubscribe = dataSyncService.subscribe((event) => {
+      if (
+        event.type !== "IMMEUBLE_CREATED" &&
+        event.type !== "IMMEUBLE_UPDATED" &&
+        event.type !== "IMMEUBLE_DELETED" &&
+        event.type !== "PORTE_CREATED" &&
+        event.type !== "PORTE_UPDATED" &&
+        event.type !== "PORTE_DELETED"
+      ) {
+        return;
+      }
+
+      if (!commercialId) {
+        return;
+      }
+
+      if (isFocused) {
+        void refetchStats();
+        void refetchTimeline();
+        return;
+      }
+
+      shouldRefetchOnFocusRef.current = true;
+    });
+
+    return unsubscribe;
+  }, [commercialId, isFocused, refetchStats, refetchTimeline]);
+
+  useEffect(() => {
+    if (commercialId) {
+      return;
+    }
+    shouldRefetchOnFocusRef.current = false;
+  }, [commercialId]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      wasFocusedRef.current = false;
+      return;
+    }
+    if (wasFocusedRef.current) {
+      return;
+    }
+
+    wasFocusedRef.current = true;
+    setChartKey((prev) => prev + 1);
+
+    if (!commercialId || !shouldRefetchOnFocusRef.current) {
+      return;
+    }
+
+    shouldRefetchOnFocusRef.current = false;
+    void refetchStats();
+    void refetchTimeline();
+  }, [commercialId, isFocused, refetchStats, refetchTimeline]);
 
   const latestStats = useMemo<Statistic | null>(() => {
-    const stats = statsState.data || [];
+    const stats = statsData || [];
     if (!stats.length) return null;
     return [...stats].sort((a, b) => {
       const aTime = a.updatedAt ? Date.parse(a.updatedAt) : 0;
       const bTime = b.updatedAt ? Date.parse(b.updatedAt) : 0;
       return bTime - aTime;
     })[0];
-  }, [statsState.data]);
+  }, [statsData]);
 
   const portesProspectees = latestStats?.nbPortesProspectes || 0;
-  const immeublesProspectes = latestStats?.nbImmeublesProspectes || 0;
+  const immeublesWorkspace = useMemo(
+    () => workspaceState.data?.immeubles?.length ?? 0,
+    [workspaceState.data],
+  );
+  const immeublesProspectes = Math.max(
+    latestStats?.nbImmeublesProspectes || 0,
+    immeublesWorkspace,
+  );
   const absents = latestStats?.absents || 0;
   const refus = latestStats?.refus || 0;
   const rdv = latestStats?.rendezVousPris || 0;
   const contrats = latestStats?.contratsSignes || 0;
 
-  const isLoading = statsState.loading || timelineState.loading;
+  const isLoading = statsLoading || timelineLoading;
 
   useEffect(() => {
     if (!isLoading) {
@@ -131,7 +198,7 @@ export default function StatistiquesScreen() {
     start.setDate(start.getDate() - (days - 1));
 
     const byDay = new Map<string, TimelinePoint>();
-    (timelineState.data || []).forEach((point) => {
+    (timelineData || []).forEach((point) => {
       const key = point.date.slice(0, 10);
       byDay.set(key, point);
     });
@@ -148,7 +215,7 @@ export default function StatistiquesScreen() {
         contrats: point?.contratsSignes || 0,
       };
     });
-  }, [timelineState.data, todayKey]);
+  }, [timelineData, todayKey]);
 
   const chartWidth = Math.min(width - 40, 520);
   const pieSize = 240;

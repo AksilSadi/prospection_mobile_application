@@ -88,7 +88,9 @@ function FloorPlanSheet({
                 <Feather name="grid" size={22} color="#2563EB" />
               </View>
               <View style={styles.floorPlanHeroText}>
-                <Text style={styles.floorPlanTitle}>Plan de l&apos;immeuble</Text>
+                <Text style={styles.floorPlanTitle}>
+                  Plan de l&apos;immeuble
+                </Text>
                 <Text style={styles.floorPlanSubtitle}>
                   {sortedPortesCount} portes • {floorsCount} etages
                 </Text>

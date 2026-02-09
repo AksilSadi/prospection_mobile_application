@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Feather } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import {
   FlatList,
   Pressable,
@@ -12,6 +13,7 @@ import { authService } from "@/services/auth";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import type { Immeuble, StatusHistorique } from "@/types/api";
 import { api } from "@/services/api";
+import { dataSyncService } from "@/services/sync/data-sync.service";
 
 const FILTERS = [
   { key: "all", label: "Tous", icon: "layers" },
@@ -293,6 +295,7 @@ const HistoriqueImmeubleCard = memo(
 );
 
 export default function HistoriqueScreen() {
+  const isFocused = useIsFocused();
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
@@ -300,6 +303,7 @@ export default function HistoriqueScreen() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [expandedImmeubleId, setExpandedImmeubleId] = useState<number | null>(null);
   const loadedHistoryIdsRef = useRef<Set<number>>(new Set());
+  const pendingRefreshIdsRef = useRef<Set<number>>(new Set());
   const expandAnimsRef = useState(() => new Map<number, Animated.Value>())[0];
   const cardAnimsRef = useState(() => new Map<number, Animated.Value>())[0];
   const skeletonPulse = useRef(new Animated.Value(0)).current;
@@ -352,6 +356,16 @@ export default function HistoriqueScreen() {
   }, [sortedImmeubles, filter]);
 
   const visibleImmeubles = filteredImmeubles;
+
+  const refreshHistoryForImmeuble = useCallback(async (immeubleId: number) => {
+    try {
+      const history = await api.portes.statusHistoriqueByImmeuble(immeubleId);
+      loadedHistoryIdsRef.current.add(immeubleId);
+      setHistoryMap((prev) => ({ ...prev, [immeubleId]: history || [] }));
+    } catch {
+      loadedHistoryIdsRef.current.delete(immeubleId);
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading) {
@@ -420,10 +434,9 @@ export default function HistoriqueScreen() {
           try {
             const history = await api.portes.statusHistoriqueByImmeuble(imm.id);
             entries[imm.id] = history || [];
+            loadedHistoryIdsRef.current.add(imm.id);
           } catch {
             entries[imm.id] = [];
-          } finally {
-            loadedHistoryIdsRef.current.add(imm.id);
           }
         }),
       );
@@ -439,6 +452,46 @@ export default function HistoriqueScreen() {
       cancelled = true;
     };
   }, [visibleImmeubles]);
+
+  useEffect(() => {
+    const unsubscribe = dataSyncService.subscribe((event) => {
+      if (
+        event.type !== "PORTE_CREATED" &&
+        event.type !== "PORTE_UPDATED" &&
+        event.type !== "PORTE_DELETED"
+      ) {
+        return;
+      }
+
+      if (!event.immeubleId) {
+        return;
+      }
+
+      loadedHistoryIdsRef.current.delete(event.immeubleId);
+      if (!isFocused) {
+        pendingRefreshIdsRef.current.add(event.immeubleId);
+        return;
+      }
+
+      void refreshHistoryForImmeuble(event.immeubleId);
+    });
+
+    return unsubscribe;
+  }, [isFocused, refreshHistoryForImmeuble]);
+
+  useEffect(() => {
+    if (!isFocused) {
+      return;
+    }
+
+    const pendingIds = Array.from(pendingRefreshIdsRef.current);
+    if (pendingIds.length === 0) {
+      return;
+    }
+
+    pendingRefreshIdsRef.current.clear();
+    void Promise.all(pendingIds.map((immeubleId) => refreshHistoryForImmeuble(immeubleId)));
+  }, [isFocused, refreshHistoryForImmeuble]);
 
   const historyMetaByImmeuble = useMemo(() => {
     const entries: Record<number, HistoryMeta> = {};

@@ -38,7 +38,7 @@ type AddImmeubleSheetProps = {
   ownerRole?: string | null;
 };
 
-const STEPS = [
+const STEPS: { id: string; title: string; icon: keyof typeof Feather.glyphMap }[] = [
   { id: "address", title: "Adresse", icon: "map-pin" },
   { id: "details", title: "Details", icon: "home" },
   { id: "access", title: "Acces", icon: "key" },

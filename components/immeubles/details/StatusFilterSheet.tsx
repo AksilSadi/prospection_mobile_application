@@ -45,7 +45,10 @@ function StatusFilterSheet({
   applyStatusFilters,
   styles,
 }: StatusFilterSheetProps) {
-  const applyCount = pendingStatusFilter === null ? totalCount : (statusCounts[pendingStatusFilter] ?? 0);
+  const applyCount =
+    pendingStatusFilter === null
+      ? totalCount
+      : (statusCounts[pendingStatusFilter] ?? 0);
   return (
     <BottomSheetModal
       ref={filterSheetRef}
@@ -121,9 +124,7 @@ function StatusFilterSheet({
                 </View>
               </View>
               <View style={styles.filterRadioBadge}>
-                <Text style={styles.filterRadioBadgeText}>
-                  {totalCount}
-                </Text>
+                <Text style={styles.filterRadioBadgeText}>{totalCount}</Text>
               </View>
             </Pressable>
 
@@ -203,8 +204,13 @@ function StatusFilterSheet({
         </View>
 
         <View style={styles.filterSheetFooter}>
-          <Pressable style={styles.filterApplyButton} onPress={applyStatusFilters}>
-            <Text style={styles.filterApplyButtonText}>Appliquer (${applyCount})</Text>
+          <Pressable
+            style={styles.filterApplyButton}
+            onPress={applyStatusFilters}
+          >
+            <Text style={styles.filterApplyButtonText}>
+              Appliquer ({applyCount})
+            </Text>
           </Pressable>
         </View>
       </BottomSheetScrollView>
@@ -213,6 +219,3 @@ function StatusFilterSheet({
 }
 
 export default memo(StatusFilterSheet);
-
-
-

@@ -68,7 +68,6 @@ export default function ImmeublesScreen({
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [progressFilter, setProgressFilter] = useState("incomplete");
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [refreshTick, setRefreshTick] = useState(0);
   const [selectedImmeubleId, setSelectedImmeubleId] = useState<number | null>(
     null,
   );
@@ -128,7 +127,7 @@ export default function ImmeublesScreen({
     error,
     refetch,
   } = useWorkspaceProfile(userId, role);
-  const { create, loading: creating } = useCreateImmeuble();
+  const { create, cancel: cancelCreate, loading: creating } = useCreateImmeuble();
   const isProfileReady = userId !== null && role !== null;
   const isInitialLoading = !isProfileReady || (loading && !profile);
 
@@ -148,12 +147,6 @@ export default function ImmeublesScreen({
       isMounted = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (refreshTick === 0) return;
-    setQuery("");
-    void refetch();
-  }, [refreshTick, refetch]);
 
   const immeubles = useMemo(
     () => (profile?.immeubles || []) as Immeuble[],
@@ -460,7 +453,7 @@ export default function ImmeublesScreen({
                 </View>
               </View>
 
-              {loading && <Text style={styles.helper}>Chargement...</Text>}
+              {loading && !profile && <Text style={styles.helper}>Chargement...</Text>}
               {error && <Text style={styles.error}>{error}</Text>}
             </View>
           }
@@ -697,7 +690,10 @@ export default function ImmeublesScreen({
 
         <AddImmeubleSheet
           open={isAddOpen}
-          onClose={() => setIsAddOpen(false)}
+          onClose={() => {
+            cancelCreate();
+            setIsAddOpen(false);
+          }}
           loading={creating}
           ownerId={userId}
           ownerRole={role}
@@ -705,8 +701,8 @@ export default function ImmeublesScreen({
             const result = await create(payload);
             if (result) {
               console.log("[Immeuble] added", result.id);
-              setIsAddOpen(false);
-              setRefreshTick((prev) => prev + 1);
+              await refetch();
+              setQuery("");
             } else {
               console.log("[Immeuble] add failed");
             }
