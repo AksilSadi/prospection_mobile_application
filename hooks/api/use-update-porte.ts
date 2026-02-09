@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "@/services/api";
 import type { Porte, UpdatePorteInput } from "@/types/api";
+import { syncWorkspaceMutation } from "./data-sync";
 
 export function useUpdatePorte() {
   const [loading, setLoading] = useState(false);
@@ -11,6 +12,10 @@ export function useUpdatePorte() {
       setLoading(true);
       setError(null);
       const result = await api.portes.update(input);
+      syncWorkspaceMutation("PORTE_UPDATED", {
+        immeubleId: result.immeubleId,
+        porteId: result.id,
+      });
       return result;
     } catch (err: any) {
       setError(err?.message || "Erreur mise a jour porte");

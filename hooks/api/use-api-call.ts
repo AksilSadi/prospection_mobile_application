@@ -18,6 +18,8 @@ type ApiCacheEntry = {
   expiresAt: number;
 };
 
+type CacheSubscriber = () => void;
+
 export type UseApiCallOptions = {
   cacheKey?: string;
   cacheTimeMs?: number;
@@ -25,6 +27,52 @@ export type UseApiCallOptions = {
 
 const DEFAULT_CACHE_TTL_MS = 30_000;
 const apiCache = new Map<string, ApiCacheEntry>();
+const cacheSubscribers = new Map<string, Set<CacheSubscriber>>();
+
+function subscribeCacheKey(cacheKey: string, subscriber: CacheSubscriber): () => void {
+  const listeners = cacheSubscribers.get(cacheKey) ?? new Set<CacheSubscriber>();
+  listeners.add(subscriber);
+  cacheSubscribers.set(cacheKey, listeners);
+
+  return () => {
+    const current = cacheSubscribers.get(cacheKey);
+    if (!current) return;
+    current.delete(subscriber);
+    if (current.size === 0) {
+      cacheSubscribers.delete(cacheKey);
+    }
+  };
+}
+
+function notifyCacheInvalidated(cacheKey: string): void {
+  const listeners = cacheSubscribers.get(cacheKey);
+  if (!listeners || listeners.size === 0) return;
+  listeners.forEach((listener) => {
+    listener();
+  });
+}
+
+export function invalidateApiCache(cacheKey: string): void {
+  apiCache.delete(cacheKey);
+  notifyCacheInvalidated(cacheKey);
+}
+
+export function invalidateApiCacheByPrefix(prefix: string): void {
+  const keys = new Set<string>();
+  apiCache.forEach((_value, key) => {
+    if (key.startsWith(prefix)) {
+      keys.add(key);
+    }
+  });
+  cacheSubscribers.forEach((_value, key) => {
+    if (key.startsWith(prefix)) {
+      keys.add(key);
+    }
+  });
+  keys.forEach((key) => {
+    invalidateApiCache(key);
+  });
+}
 
 function readCache<T>(cacheKey?: string): T | null {
   if (!cacheKey) return null;
@@ -138,6 +186,13 @@ export function useApiCall<T>(
   useEffect(() => {
     void run();
   }, [run]);
+
+  useEffect(() => {
+    if (!cacheKey) return;
+    return subscribeCacheKey(cacheKey, () => {
+      void run(true);
+    });
+  }, [cacheKey, run]);
 
   return {
     data: state.data,

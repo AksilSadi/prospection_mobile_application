@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "@/services/api";
 import type { Immeuble } from "@/types/api";
+import { syncWorkspaceMutation } from "./data-sync";
 
 export function useRemovePorteFromEtage() {
   const [loading, setLoading] = useState(false);
@@ -17,6 +18,7 @@ export function useRemovePorteFromEtage() {
         immeubleId,
         etage,
       );
+      syncWorkspaceMutation("IMMEUBLE_UPDATED", { immeubleId });
       return result;
     } catch (err: any) {
       setError(err?.message || "Erreur suppression porte");
