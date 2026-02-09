@@ -10,10 +10,12 @@ import {
 } from "@/hooks/use-profile-sheet";
 import { authService } from "@/services/auth";
 import { LiveKitRoom } from "@livekit/react-native";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 function AppContent() {
+  const router = useRouter();
   const [index, setIndex] = useState(0);
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -29,6 +31,27 @@ function AppContent() {
     };
     void loadIdentity();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const keepSessionAlive = async () => {
+      const valid = await authService.ensureValidSession(120);
+      if (!valid && !cancelled) {
+        router.replace("/(auth)/login");
+      }
+    };
+
+    void keepSessionAlive();
+    const intervalId = setInterval(() => {
+      void keepSessionAlive();
+    }, 60000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [router]);
 
   const { connectionDetails } = useAutoAudio(userId, role, true);
   const isAudioConnected = !!connectionDetails;

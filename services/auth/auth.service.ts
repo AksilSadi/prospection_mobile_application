@@ -77,7 +77,7 @@ export class AuthService {
     if (!refreshToken) return null;
 
     try {
-      const data = await graphqlClient.request<{ refreshToken: AuthResponse }>(
+      const data = await graphqlClient.requestWithoutAuthRefresh<{ refreshToken: AuthResponse }>(
         REFRESH_TOKEN_MUTATION,
         { refreshToken }
       );
@@ -168,12 +168,44 @@ export class AuthService {
     return SecureStore.getItemAsync(STORAGE_KEYS.refreshToken);
   }
 
-  async initializeAuth(): Promise<void> {
-    const token = await this.getAccessToken();
-    if (token && (await this.isAuthenticated())) {
-      graphqlClient.setAuthToken(token);
-    } else {
+  async initializeAuth(): Promise<boolean> {
+    const hasSession = await this.ensureValidSession(30);
+    if (!hasSession) {
       await this.clearAuthData();
+      graphqlClient.clearAuthToken();
+    }
+    return hasSession;
+  }
+
+  async ensureValidSession(minValiditySeconds = 120): Promise<boolean> {
+    const token = await this.getAccessToken();
+    const refreshToken = await this.getRefreshToken();
+    const now = Math.floor(Date.now() / 1000);
+
+    if (!token) {
+      if (!refreshToken) return false;
+      return !!(await this.refreshToken());
+    }
+
+    try {
+      const payload = decodeToken(token);
+      if (payload.exp > now + minValiditySeconds) {
+        graphqlClient.setAuthToken(token);
+        return true;
+      }
+
+      if (!refreshToken) {
+        await this.logout();
+        return false;
+      }
+
+      return !!(await this.refreshToken());
+    } catch {
+      if (!refreshToken) {
+        await this.logout();
+        return false;
+      }
+      return !!(await this.refreshToken());
     }
   }
 

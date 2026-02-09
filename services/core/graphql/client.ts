@@ -74,6 +74,14 @@ export class GraphQLClient {
     return this.requestInternal(query, variables, headers, true);
   }
 
+  async requestWithoutAuthRefresh<TData = any, TVariables = Record<string, any>>(
+    query: string,
+    variables?: TVariables,
+    headers?: Record<string, string>
+  ): Promise<TData> {
+    return this.requestInternal(query, variables, headers, false);
+  }
+
   private async requestInternal<TData = any, TVariables = Record<string, any>>(
     query: string,
     variables?: TVariables,
