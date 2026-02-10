@@ -34,6 +34,8 @@ type EditPorteSheetProps = {
       nomPersonnalise: string;
     }>
   >;
+  argumenteCommentError: boolean;
+  onCommentChange: (value: string) => void;
   savingPorte: boolean;
   hasNativePicker: boolean;
   isTablet: boolean;
@@ -54,6 +56,8 @@ function EditPorteSheet({
   editPorte,
   editForm,
   setEditForm,
+  argumenteCommentError,
+  onCommentChange,
   savingPorte,
   hasNativePicker,
   isTablet,
@@ -326,13 +330,25 @@ function EditPorteSheet({
               </View>
               <View style={styles.sheetSectionText}>
                 <Text style={styles.sheetSectionTitle}>Commentaire</Text>
-                <Text style={styles.sheetSectionSubtitle}>
+                <Text
+                  style={[
+                    styles.sheetSectionSubtitle,
+                    isArgumente &&
+                      argumenteCommentError &&
+                      styles.sheetSectionSubtitleError,
+                  ]}
+                >
                   {isArgumente
-                    ? "Decris l'argument principal avant validation"
+                    ? argumenteCommentError
+                      ? "Commentaire obligatoire"
+                      : "Decris l'argument principal avant validation"
                     : "Notes rapides pour cette porte"}
                 </Text>
               </View>
             </View>
+            {isArgumente && argumenteCommentError ? (
+              <Text style={styles.sheetRequiredText}>Ce champ est obligatoire.</Text>
+            ) : null}
             <TextInput
               placeholder={
                 isArgumente
@@ -340,10 +356,12 @@ function EditPorteSheet({
                   : "Ajouter un commentaire..."
               }
               value={editForm.commentaire}
-              onChangeText={(value) =>
-                setEditForm((prev) => ({ ...prev, commentaire: value }))
-              }
-              style={[styles.sheetInput, styles.sheetTextarea]}
+              onChangeText={onCommentChange}
+              style={[
+                styles.sheetInput,
+                styles.sheetTextarea,
+                isArgumente && argumenteCommentError && styles.sheetInputError,
+              ]}
               multiline
             />
           </View>

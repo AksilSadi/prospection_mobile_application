@@ -13,6 +13,8 @@ import { useRemoveEtageFromImmeuble } from "@/hooks/api/use-remove-etage-from-im
 import { useRemovePorteFromEtage } from "@/hooks/api/use-remove-porte-from-etage";
 import { useUpdatePorte } from "@/hooks/api/use-update-porte";
 import { useRecording } from "@/hooks/audio/use-recording";
+import { useConnectivity } from "@/hooks/network/use-connectivity";
+import { queuePorteUpdate } from "@/services/offline/offline-queue.service";
 import type {
   CreatePorteInput,
   Immeuble,
@@ -515,6 +517,7 @@ function ImmeubleDetailsView({
     useAddEtageToImmeuble();
   const { create: createPorte, loading: creatingPorte } = useCreatePorte();
   const { update: updatePorte, loading: savingPorte } = useUpdatePorte();
+  const { isOnline } = useConnectivity();
   const { remove: removeEtageFromImmeuble, loading: removingEtage } =
     useRemoveEtageFromImmeuble();
   const { remove: removePorteFromEtage } = useRemovePorteFromEtage();
@@ -544,6 +547,7 @@ function ImmeubleDetailsView({
     commentaire: "",
     nomPersonnalise: "",
   });
+  const [argumenteCommentError, setArgumenteCommentError] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const openDatePicker = useCallback(() => setShowDatePicker(true), []);
@@ -739,6 +743,7 @@ function ImmeubleDetailsView({
     (porte: Porte, mode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | "ARGUMENTE") => {
       setEditPorte(porte);
       setEditMode(mode);
+      setArgumenteCommentError(false);
       setEditForm({
         rdvDate: porte.rdvDate || getTodayDate(),
         rdvTime: porte.rdvTime || getNowTime(),
@@ -754,7 +759,18 @@ function ImmeubleDetailsView({
     editSheetRef.current?.dismiss();
     setEditPorte(null);
     setEditMode(null);
+    setArgumenteCommentError(false);
   }, []);
+
+  const handleCommentChange = useCallback(
+    (value: string) => {
+      setEditForm((prev) => ({ ...prev, commentaire: value }));
+      if (argumenteCommentError && value.trim().length > 0) {
+        setArgumenteCommentError(false);
+      }
+    },
+    [argumenteCommentError],
+  );
 
   const renderSheetBackdrop = useCallback(
     (props: any, opacity: number) => (
@@ -772,7 +788,7 @@ function ImmeubleDetailsView({
   const saveEditSheet = async () => {
     if (!editPorte || !editMode || savingPorte) return;
     if (editMode === "ARGUMENTE" && !editForm.commentaire.trim()) {
-      showToast("Commentaire requis", "Ajoute un commentaire pour valider Argumente");
+      setArgumenteCommentError(true);
       return;
     }
 
@@ -800,6 +816,19 @@ function ImmeubleDetailsView({
       nbContrats: payload.nbContrats ?? editPorte.nbContrats,
       derniereVisite: payload.derniereVisite,
     });
+
+    if (!isOnline) {
+      queuePorteUpdate(payload);
+      showToast(
+        `Porte ${editPorte.nomPersonnalise || editPorte.numero}`,
+        "Enregistre hors ligne. Reactivez le Wi-Fi ou les donnees mobiles.",
+      );
+      closeEditSheet();
+      if (currentIndex < filteredPortes.length - 1) {
+        setCurrentIndex((prev) => Math.min(prev + 1, filteredPortes.length - 1));
+      }
+      return;
+    }
 
     const result = await updatePorte(payload);
     if (!result) {
@@ -1199,7 +1228,7 @@ function ImmeubleDetailsView({
       const selectedStatus = STATUS_DISPLAY[displayKey]?.label ?? "Mis a jour";
       showToast(
         `Porte ${porte.nomPersonnalise || porte.numero}`,
-        `Statut: ${selectedStatus}`,
+        `Statut: ${selectedStatus}${isOnline ? "" : " (hors ligne)"}`,
       );
       const visitedAt = new Date().toISOString();
       updateLocalPorte(porte.id, {
@@ -1216,19 +1245,23 @@ function ImmeubleDetailsView({
       if (typeof extra?.nbRepassages === "number") {
         payload.nbRepassages = extra.nbRepassages;
       }
+      if (!isOnline) {
+        queuePorteUpdate(payload);
+        return;
+      }
       const result = await updatePorte(payload);
       if (!result) {
         showToast("Erreur", "Mise a jour impossible");
       }
     },
-    [showToast, updateLocalPorte, updatePorte],
+    [isOnline, showToast, updateLocalPorte, updatePorte],
   );
 
   const resetStatus = useCallback(
     async (porte: Porte) => {
       showToast(
         `Porte ${porte.nomPersonnalise || porte.numero}`,
-        "Statut retire",
+        isOnline ? "Statut retire" : "Statut retire (hors ligne)",
       );
       updateLocalPorte(porte.id, {
         statut: "NON_VISITE",
@@ -1247,12 +1280,16 @@ function ImmeubleDetailsView({
         commentaire: null,
         derniereVisite: null,
       };
+      if (!isOnline) {
+        queuePorteUpdate(payload);
+        return;
+      }
       const result = await updatePorte(payload);
       if (!result) {
         showToast("Erreur", "Mise a jour impossible");
       }
     },
-    [showToast, updateLocalPorte, updatePorte],
+    [isOnline, showToast, updateLocalPorte, updatePorte],
   );
 
   const fabRotation = fabAnim.interpolate({
@@ -1556,6 +1593,8 @@ function ImmeubleDetailsView({
         editPorte={editPorte}
         editForm={editForm}
         setEditForm={setEditForm}
+        argumenteCommentError={argumenteCommentError}
+        onCommentChange={handleCommentChange}
         savingPorte={savingPorte}
         hasNativePicker={hasNativePicker}
         isTablet={isTablet}
@@ -2969,6 +3008,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     color: "#64748B",
+  },
+  sheetSectionSubtitleError: {
+    color: "#DC2626",
+    fontWeight: "600",
+  },
+  sheetInputError: {
+    borderColor: "#DC2626",
+    backgroundColor: "#FEF2F2",
+  },
+  sheetRequiredText: {
+    marginTop: -2,
+    fontSize: 11,
+    color: "#DC2626",
+    fontWeight: "700",
   },
   sheetFooter: {
     flexDirection: "row",

@@ -125,8 +125,16 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
       }
       return;
     }
+
+    if (!isConnected || !connectionDetails?.roomName) {
+      if (isRecordingRef.current || currentEgressIdRef.current || isStartingRef.current) {
+        void stopRecording();
+      }
+      return;
+    }
+
     void startRecording();
-  }, [enabled, startRecording, stopRecording]);
+  }, [connectionDetails?.roomName, enabled, isConnected, startRecording, stopRecording]);
 
   useEffect(() => {
     return () => {

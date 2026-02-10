@@ -28,7 +28,7 @@ export class GraphQLClientError extends Error {
   getUserMessage(): string {
     switch (this.type) {
       case ErrorType.NETWORK:
-        return "Probleme de connexion au serveur. Verifiez votre connexion internet.";
+        return "Vous etes hors ligne. Reactivez le Wi-Fi ou les donnees mobiles.";
       case ErrorType.AUTHENTICATION:
         return "Authentification requise. Veuillez vous reconnecter.";
       case ErrorType.AUTHORIZATION:
