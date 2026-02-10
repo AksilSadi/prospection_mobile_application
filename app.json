@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "prospection",
+    "name": "ProWin!",
     "slug": "prospection",
     "version": "1.0.0",
     "orientation": "default",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "assetBundlePatterns": ["assets/images/*"],
     "ios": {
@@ -61,7 +61,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#000000",
           "dark": {
             "image": "./assets/images/splash-icon.png",
             "backgroundColor": "#000000"
