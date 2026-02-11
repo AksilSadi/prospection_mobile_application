@@ -382,7 +382,7 @@ export default function DashboardScreen() {
               >
                 <Feather name="check-circle" size={16} color="#10B981" />
               </View>
-              <Text style={styles.formulaItemLabel}>Contrat sign�</Text>
+              <Text style={styles.formulaItemLabel}>Contrat signé</Text>
               <Text style={styles.formulaItemValue}>100 pts</Text>
             </View>
             <View style={styles.formulaItem}>
@@ -400,12 +400,12 @@ export default function DashboardScreen() {
               >
                 <Feather name="home" size={16} color="#3B82F6" />
               </View>
-              <Text style={styles.formulaItemLabel}>Immeuble visit�</Text>
+              <Text style={styles.formulaItemLabel}>Immeuble visité</Text>
               <Text style={styles.formulaItemValue}>5 pts</Text>
             </View>
           </View>
           <Text style={styles.formulaNote}>
-            Votre rang est calcul� en fonction de ces actions. Plus vous �tes
+            Votre rang est calculé en fonction de ces actions. Plus vous êtes
             actif, plus vous gagnez de points !
           </Text>
         </BottomSheetView>
@@ -425,15 +425,15 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.explanationCard}>
             <Text style={styles.explanationTitle}>
-              Comment est-il calcul� ?
+              Comment est-il calculé ?
             </Text>
             <Text style={styles.explanationText}>
-              Le taux de conversion mesure l&apos;efficacit� de votre
+              Le taux de conversion mesure l&apos;efficacité de votre
               prospection.
             </Text>
             <View style={styles.formulaBox}>
               <Text style={styles.formulaText}>
-                (Portes avec contrats � Portes visit�es) � 100
+                (Portes avec contrats / Portes visitées) / 100
               </Text>
             </View>
             <Text style={styles.explanationExample}>

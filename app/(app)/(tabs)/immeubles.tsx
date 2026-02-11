@@ -62,10 +62,10 @@ export default function ImmeublesScreen({
   const [role, setRole] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(false);
   const searchInputRef = useRef<TextInput | null>(null);
   const filterChipAnimsRef = useRef(new Map<string, Animated.Value>()).current;
-  const [filtersVisible, setFiltersVisible] = useState(true);
+  const [filtersVisible, setFiltersVisible] = useState(false);
   const [progressFilter, setProgressFilter] = useState("incomplete");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedImmeubleId, setSelectedImmeubleId] = useState<number | null>(
@@ -84,7 +84,7 @@ export default function ImmeublesScreen({
   const getFilterChipAnim = (key: string) => {
     const existing = filterChipAnimsRef.get(key);
     if (existing) return existing;
-    const next = new Animated.Value(filtersVisible ? 1 : 0);
+    const next = new Animated.Value(0);
     filterChipAnimsRef.set(key, next);
     return next;
   };

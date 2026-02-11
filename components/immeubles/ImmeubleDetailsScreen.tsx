@@ -818,7 +818,7 @@ function ImmeubleDetailsView({
     });
 
     if (!isOnline) {
-      queuePorteUpdate(payload);
+      queuePorteUpdate(payload, { immeubleId: editPorte.immeubleId });
       showToast(
         `Porte ${editPorte.nomPersonnalise || editPorte.numero}`,
         "Enregistre hors ligne. Reactivez le Wi-Fi ou les donnees mobiles.",
@@ -1246,7 +1246,7 @@ function ImmeubleDetailsView({
         payload.nbRepassages = extra.nbRepassages;
       }
       if (!isOnline) {
-        queuePorteUpdate(payload);
+        queuePorteUpdate(payload, { immeubleId: porte.immeubleId });
         return;
       }
       const result = await updatePorte(payload);
@@ -1281,7 +1281,7 @@ function ImmeubleDetailsView({
         derniereVisite: null,
       };
       if (!isOnline) {
-        queuePorteUpdate(payload);
+        queuePorteUpdate(payload, { immeubleId: porte.immeubleId });
         return;
       }
       const result = await updatePorte(payload);

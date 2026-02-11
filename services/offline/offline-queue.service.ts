@@ -11,6 +11,7 @@ type QueueListener = (count: number) => void;
 
 type QueuedPorteUpdate = {
   key: string;
+  immeubleId?: number;
   porteId: number;
   payload: UpdatePorteInput;
 };
@@ -31,8 +32,10 @@ function notifyQueueListeners(): void {
   });
 }
 
-function makeKey(porteId: number): string {
-  return `porte:${porteId}`;
+function makeKey(porteId: number, immeubleId?: number): string {
+  return typeof immeubleId === "number"
+    ? `immeuble:${immeubleId}:porte:${porteId}`
+    : `porte:${porteId}`;
 }
 
 export function subscribeOfflineQueue(listener: QueueListener): () => void {
@@ -43,10 +46,14 @@ export function subscribeOfflineQueue(listener: QueueListener): () => void {
   };
 }
 
-export function queuePorteUpdate(payload: UpdatePorteInput): number {
-  const key = makeKey(payload.id);
+export function queuePorteUpdate(
+  payload: UpdatePorteInput,
+  options?: { immeubleId?: number },
+): number {
+  const key = makeKey(payload.id, options?.immeubleId);
   queue.set(key, {
     key,
+    immeubleId: options?.immeubleId,
     porteId: payload.id,
     payload,
   });
@@ -65,7 +72,10 @@ export async function flushOfflineQueue(): Promise<void> {
     for (const entry of entries) {
       await api.portes.update(entry.payload);
       queue.delete(entry.key);
-      syncWorkspaceMutation("PORTE_UPDATED", { porteId: entry.porteId });
+      syncWorkspaceMutation("PORTE_UPDATED", {
+        immeubleId: entry.immeubleId,
+        porteId: entry.porteId,
+      });
       notifyQueueListeners();
     }
   } finally {
