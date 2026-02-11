@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { TabView } from "react-native-tab-view";
+import AgendaScreen from "@/app/(app)/(tabs)/agenda";
 import DashboardScreen from "@/app/(app)/(tabs)/dashboard";
 import ImmeublesScreen from "@/app/(app)/(tabs)/immeubles";
 import StatistiquesScreen from "@/app/(app)/(tabs)/statistiques";
@@ -12,6 +13,7 @@ const buildRoutes = (isManager: boolean) => {
   const baseRoutes = [
     { key: "dashboard", title: "Dashboard", icon: "bar-chart-2" },
     { key: "immeubles", title: "Immeubles", icon: "home" },
+    { key: "agenda", title: "Agenda", icon: "book-open" },
     { key: "statistiques", title: "Statistiques", icon: "trending-up" },
   ];
   if (isManager) {
@@ -87,6 +89,9 @@ export default function SwipeTabs({
       }
       if (route.key === "equipe") {
         return <EquipeScreen />;
+      }
+      if (route.key === "agenda") {
+        return <AgendaScreen onNavigateToImmeuble={handleNavigateToImmeuble} />;
       }
       if (route.key === "statistiques") {
         return <StatistiquesScreen onNavigateToImmeuble={handleNavigateToImmeuble} />;
