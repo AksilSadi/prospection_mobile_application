@@ -730,14 +730,24 @@ function ImmeubleDetailsView({
     }
     return new Date();
   };
-  const getTimeValue = (value: string) => {
-    if (!value) return new Date();
-    const [hh, mm] = value.split(":");
-    const now = new Date();
-    now.setHours(Number(hh) || 0);
-    now.setMinutes(Number(mm) || 0);
-    now.setSeconds(0);
-    return now;
+  const getTimeValue = (value: string, rdvDate?: string) => {
+    const base =
+      rdvDate && /^\d{4}-\d{2}-\d{2}$/.test(rdvDate)
+        ? (() => {
+            const [y, m, d] = rdvDate.split("-").map((part) => Number(part));
+            return new Date(y, Math.max(0, (m || 1) - 1), d || 1, 12, 0, 0, 0);
+          })()
+        : new Date();
+
+    if (!value) return base;
+
+    const [hhRaw, mmRaw] = value.split(":");
+    const hh = Number(hhRaw);
+    const mm = Number(mmRaw);
+    const nextHours = Number.isFinite(hh) ? Math.max(0, Math.min(23, hh)) : 0;
+    const nextMinutes = Number.isFinite(mm) ? Math.max(0, Math.min(59, mm)) : 0;
+    base.setHours(nextHours, nextMinutes, 0, 0);
+    return base;
   };
 
   const openEditSheet = useCallback(
@@ -896,7 +906,9 @@ function ImmeubleDetailsView({
     if (pendingDoorId === null) {
       return;
     }
-    const targetIndex = filteredPortes.findIndex((porte) => porte.id === pendingDoorId);
+    const targetIndex = filteredPortes.findIndex(
+      (porte) => porte.id === pendingDoorId,
+    );
     if (targetIndex === -1) {
       return;
     }
@@ -1455,7 +1467,9 @@ function ImmeubleDetailsView({
     (porte: Porte) => {
       floorPlanSheetRef.current?.dismiss();
       setShowFloorPlan(false);
-      const targetIndex = filteredPortes.findIndex((item) => item.id === porte.id);
+      const targetIndex = filteredPortes.findIndex(
+        (item) => item.id === porte.id,
+      );
       if (targetIndex >= 0) {
         setCurrentIndex(targetIndex);
         requestAnimationFrame(() => {
@@ -1470,7 +1484,10 @@ function ImmeubleDetailsView({
       pendingFloorPlanDoorIdRef.current = porte.id;
       setPendingStatusFilter(null);
       setStatusFilters([]);
-      showToast("Filtre retire", "La porte selectionnee est maintenant affichee");
+      showToast(
+        "Filtre retire",
+        "La porte selectionnee est maintenant affichee",
+      );
     },
     [filteredPortes, showToast],
   );
@@ -1733,7 +1750,10 @@ function ImmeubleDetailsView({
       {hasNativePicker && showTimePicker && DateTimePicker ? (
         <View style={styles.pickerWrapper}>
           <DateTimePicker
-            value={getTimeValue(editForm.rdvTime || getNowTime())}
+            value={getTimeValue(
+              editForm.rdvTime || getNowTime(),
+              editForm.rdvDate,
+            )}
             mode="time"
             display="spinner"
             onChange={(_event: unknown, selected?: Date) => {
