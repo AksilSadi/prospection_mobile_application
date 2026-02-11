@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { TabView } from "react-native-tab-view";
-import HamburgerButton from "@/components/navigation/HamburgerButton";
-import HamburgerMenuOverlay from "@/components/navigation/HamburgerMenuOverlay";
 import DashboardScreen from "@/app/(app)/(tabs)/dashboard";
 import ImmeublesScreen from "@/app/(app)/(tabs)/immeubles";
 import StatistiquesScreen from "@/app/(app)/(tabs)/statistiques";
 import EquipeScreen from "@/app/(app)/(tabs)/equipe";
 import HistoriqueScreen from "@/app/(app)/(tabs)/historique";
-import { useHamburgerMenu } from "@/hooks/use-hamburger-menu";
 import { authService } from "@/services/auth";
 
 const buildRoutes = (isManager: boolean) => {
@@ -28,18 +25,18 @@ type SwipeTabsProps = {
   index: number;
   onIndexChange: (index: number) => void;
   onHeaderVisibilityChange?: (visible: boolean) => void;
+  onRailVisibilityChange?: (visible: boolean) => void;
 };
 
 export default function SwipeTabs({
   index,
   onIndexChange,
   onHeaderVisibilityChange,
+  onRailVisibilityChange,
 }: SwipeTabsProps) {
   const [isManager, setIsManager] = useState(false);
   const tabRoutes = useMemo(() => buildRoutes(isManager), [isManager]);
   const [swipeEnabled, setSwipeEnabled] = useState(true);
-  const [showHamburger, setShowHamburger] = useState(true);
-  const { close, isVisible } = useHamburgerMenu();
 
   useEffect(() => {
     const loadRole = async () => {
@@ -48,18 +45,6 @@ export default function SwipeTabs({
     };
     void loadRole();
   }, []);
-
-  useEffect(() => {
-    if (!showHamburger && isVisible) {
-      close();
-    }
-  }, [close, isVisible, showHamburger]);
-
-  useEffect(() => {
-    if (index !== 1) {
-      setShowHamburger(true);
-    }
-  }, [index]);
 
   const handleSwipeLockChange = useCallback((locked: boolean) => {
     setSwipeEnabled(!locked);
@@ -72,7 +57,7 @@ export default function SwipeTabs({
           <ImmeublesScreen
             isActive={index === 1}
             onSwipeLockChange={handleSwipeLockChange}
-            onHamburgerVisibilityChange={setShowHamburger}
+            onHamburgerVisibilityChange={onRailVisibilityChange}
             onHeaderVisibilityChange={onHeaderVisibilityChange}
           />
         );
@@ -101,12 +86,6 @@ export default function SwipeTabs({
         swipeEnabled={swipeEnabled}
         lazy
       />
-      {showHamburger ? (
-        <>
-          <HamburgerButton position="bottom-left" />
-          <HamburgerMenuOverlay currentIndex={index} onNavigate={onIndexChange} />
-        </>
-      ) : null}
     </View>
   );
 }

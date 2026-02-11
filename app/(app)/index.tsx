@@ -1,9 +1,9 @@
-﻿import AnimatedHeader from "@/components/navigation/AnimatedHeader";
+import AnimatedHeader from "@/components/navigation/AnimatedHeader";
+import NavigationRail from "@/components/navigation/NavigationRail";
 import SwipeTabs from "@/components/navigation/SwipeTabs";
 import ProfileSheet from "@/components/ProfileSheet";
 import { AudioSessionProvider } from "@/hooks/audio/use-audio-session";
 import { useAutoAudio } from "@/hooks/audio/use-auto-audio";
-import { HamburgerMenuProvider } from "@/hooks/use-hamburger-menu";
 import {
   ProfileSheetProvider,
   useProfileSheet,
@@ -20,6 +20,7 @@ function AppContent() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [showHeader, setShowHeader] = useState(true);
+  const [showRail, setShowRail] = useState(true);
   const { sheetRef } = useProfileSheet();
 
   useEffect(() => {
@@ -62,26 +63,34 @@ function AppContent() {
 
   return (
     <AudioSessionProvider value={audioSessionValue}>
-      {showHeader ? <AnimatedHeader currentIndex={index} /> : null}
-      {connectionDetails ? (
-        <View style={styles.livekitHost}>
-          <LiveKitRoom
-            serverUrl={connectionDetails.serverUrl}
-            token={connectionDetails.participantToken}
-            connect
-            audio
-            video={false}
-            onConnected={() => console.log("[LiveKit] connected")}
-            onDisconnected={() => console.log("[LiveKit] disconnected")}
-            onError={(err) => console.log("[LiveKit] error", err)}
+      <View style={styles.appLayout}>
+        {showRail ? (
+          <NavigationRail currentIndex={index} onNavigate={setIndex} />
+        ) : null}
+        <View style={styles.mainContent}>
+          {showHeader ? <AnimatedHeader currentIndex={index} /> : null}
+          {connectionDetails ? (
+            <View style={styles.livekitHost}>
+              <LiveKitRoom
+                serverUrl={connectionDetails.serverUrl}
+                token={connectionDetails.participantToken}
+                connect
+                audio
+                video={false}
+                onConnected={() => console.log("[LiveKit] connected")}
+                onDisconnected={() => console.log("[LiveKit] disconnected")}
+                onError={(err) => console.log("[LiveKit] error", err)}
+              />
+            </View>
+          ) : null}
+          <SwipeTabs
+            index={index}
+            onIndexChange={setIndex}
+            onHeaderVisibilityChange={setShowHeader}
+            onRailVisibilityChange={setShowRail}
           />
         </View>
-      ) : null}
-      <SwipeTabs
-        index={index}
-        onIndexChange={setIndex}
-        onHeaderVisibilityChange={setShowHeader}
-      />
+      </View>
       <ProfileSheet ref={sheetRef} userId={userId} role={role} />
     </AudioSessionProvider>
   );
@@ -90,11 +99,9 @@ function AppContent() {
 export default function AppIndex() {
   return (
     <ProfileSheetProvider>
-      <HamburgerMenuProvider>
-        <View style={styles.container}>
-          <AppContent />
-        </View>
-      </HamburgerMenuProvider>
+      <View style={styles.container}>
+        <AppContent />
+      </View>
     </ProfileSheetProvider>
   );
 }
@@ -103,6 +110,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FFFFFF",
+  },
+  appLayout: {
+    flex: 1,
+    flexDirection: "row",
+  },
+  mainContent: {
+    flex: 1,
   },
   livekitHost: {
     width: 0,
