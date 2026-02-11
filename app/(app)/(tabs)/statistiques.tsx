@@ -1,9 +1,8 @@
-import { useCommercialStatistics } from "@/hooks/api/use-commercial-statistics";
 import { useCommercialTimeline } from "@/hooks/api/use-commercial-timeline";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
 import { dataSyncService } from "@/services/sync/data-sync.service";
-import type { Statistic, TimelinePoint } from "@/types/api";
+import type { TimelinePoint } from "@/types/api";
 import { Feather } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -22,6 +21,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Pie, PolarChart } from "victory-native";
 
 const DAY_LABELS_SHORT = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+
+const PERIOD_OPTIONS: { days: number; label: string }[] = [
+  { days: 7, label: "7 j" },
+  { days: 30, label: "30 j" },
+  { days: 90, label: "90 j" },
+];
 
 type RdvItem = {
   porteId: number;
@@ -63,7 +68,7 @@ export default function StatistiquesScreen({
   const isFocused = useIsFocused();
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  const periodLabel = "7 derniers jours";
+  const [periodDays, setPeriodDays] = useState(7);
   const [chartKey, setChartKey] = useState(0);
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const skeletonPulse = useRef(new Animated.Value(0)).current;
@@ -86,16 +91,20 @@ export default function StatistiquesScreen({
   }, []);
 
   const commercialId = role === "commercial" ? userId : null;
-  const { data: statsData, loading: statsLoading, refetch: refetchStats } =
-    useCommercialStatistics(commercialId);
   const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const maxDays = 90;
   const { startDate, endDate } = useMemo(() => {
-    const days = 7;
     const end = new Date(`${todayKey}T23:59:59.999Z`);
     const start = new Date(end);
-    start.setDate(start.getDate() - (days - 1));
+    start.setDate(start.getDate() - (maxDays - 1));
     return { startDate: start.toISOString(), endDate: end.toISOString() };
   }, [todayKey]);
+  const startKey = useMemo(() => {
+    const end = new Date(`${todayKey}T12:00:00`);
+    const start = new Date(end);
+    start.setDate(start.getDate() - (periodDays - 1));
+    return start.toISOString().slice(0, 10);
+  }, [todayKey, periodDays]);
   const {
     data: timelineData,
     loading: timelineLoading,
@@ -201,7 +210,7 @@ export default function StatistiquesScreen({
       }
 
       if (isFocused) {
-        void refetchStats();
+        void workspaceState.refetch();
         void refetchTimeline();
         return;
       }
@@ -210,7 +219,7 @@ export default function StatistiquesScreen({
     });
 
     return unsubscribe;
-  }, [commercialId, isFocused, refetchStats, refetchTimeline]);
+  }, [commercialId, isFocused, workspaceState, refetchTimeline]);
 
   useEffect(() => {
     if (commercialId) {
@@ -236,35 +245,45 @@ export default function StatistiquesScreen({
     }
 
     shouldRefetchOnFocusRef.current = false;
-    void refetchStats();
+    void workspaceState.refetch();
     void refetchTimeline();
-  }, [commercialId, isFocused, refetchStats, refetchTimeline]);
+  }, [commercialId, isFocused, workspaceState, refetchTimeline]);
 
-  const latestStats = useMemo<Statistic | null>(() => {
-    const stats = statsData || [];
-    if (!stats.length) return null;
-    return [...stats].sort((a, b) => {
-      const aTime = a.updatedAt ? Date.parse(a.updatedAt) : 0;
-      const bTime = b.updatedAt ? Date.parse(b.updatedAt) : 0;
-      return bTime - aTime;
-    })[0];
-  }, [statsData]);
+  const filteredKpi = useMemo(() => {
+    const immeubles = workspaceState.data?.immeubles ?? [];
+    let portes = 0;
+    let rdvCount = 0;
+    let contratsCount = 0;
+    let refusCount = 0;
+    let absentsCount = 0;
+    const immeublesSet = new Set<number>();
 
-  const portesProspectees = latestStats?.nbPortesProspectes || 0;
-  const immeublesWorkspace = useMemo(
-    () => workspaceState.data?.immeubles?.length ?? 0,
-    [workspaceState.data],
-  );
-  const immeublesProspectes = Math.max(
-    latestStats?.nbImmeublesProspectes || 0,
-    immeublesWorkspace,
-  );
-  const absents = latestStats?.absents || 0;
-  const refus = latestStats?.refus || 0;
-  const rdv = latestStats?.rendezVousPris || 0;
-  const contrats = latestStats?.contratsSignes || 0;
+    for (const imm of immeubles) {
+      for (const porte of imm.portes ?? []) {
+        const st = typeof porte.statut === "string" ? porte.statut : "";
+        if (st === "NON_VISITE") continue;
+        const dv = porte.derniereVisite?.slice(0, 10);
+        if (!dv || dv < startKey || dv > todayKey) continue;
+        portes += 1;
+        immeublesSet.add(imm.id);
+        if (st === "RENDEZ_VOUS_PRIS") rdvCount += 1;
+        if (st === "CONTRAT_SIGNE") contratsCount += 1;
+        if (st === "REFUS") refusCount += 1;
+        if (st === "ABSENT") absentsCount += 1;
+      }
+    }
 
-  const isLoading = statsLoading || timelineLoading;
+    return {
+      portes,
+      immeubles: immeublesSet.size,
+      rdv: rdvCount,
+      contrats: contratsCount,
+      refus: refusCount,
+      absents: absentsCount,
+    };
+  }, [workspaceState.data, startKey, todayKey]);
+
+  const isLoading = workspaceState.loading || timelineLoading;
 
   useEffect(() => {
     if (!isLoading) {
@@ -313,10 +332,9 @@ export default function StatistiquesScreen({
   }, [workspaceState.data]);
 
   const timelineBuckets = useMemo(() => {
-    const days = 7;
     const end = new Date(`${todayKey}T00:00:00.000Z`);
     const start = new Date(end);
-    start.setDate(start.getDate() - (days - 1));
+    start.setDate(start.getDate() - (periodDays - 1));
 
     const byDay = new Map<string, TimelinePoint>();
     (timelineData || []).forEach((point) => {
@@ -324,7 +342,7 @@ export default function StatistiquesScreen({
       byDay.set(key, point);
     });
 
-    return Array.from({ length: days }).map((_, index) => {
+    const daily = Array.from({ length: periodDays }).map((_, index) => {
       const d = new Date(start);
       d.setDate(start.getDate() + index);
       const key = d.toISOString().slice(0, 10);
@@ -336,7 +354,28 @@ export default function StatistiquesScreen({
         contrats: realContratsByDay.get(key) ?? (point?.contratsSignes || 0),
       };
     });
-  }, [timelineData, todayKey, realRdvByDay, realContratsByDay]);
+
+    if (periodDays <= 30) return daily;
+
+    const weekSize = 7;
+    const weeks: typeof daily = [];
+    for (let i = 0; i < daily.length; i += weekSize) {
+      const chunk = daily.slice(i, i + weekSize);
+      const sum = { portes: 0, rdvPris: 0, contrats: 0 };
+      for (const d of chunk) {
+        sum.portes += d.portes;
+        sum.rdvPris += d.rdvPris;
+        sum.contrats += d.contrats;
+      }
+      weeks.push({
+        date: chunk[Math.floor(chunk.length / 2)].date,
+        portes: sum.portes,
+        rdvPris: sum.rdvPris,
+        contrats: sum.contrats,
+      });
+    }
+    return weeks;
+  }, [timelineData, todayKey, periodDays, realRdvByDay, realContratsByDay]);
 
   const chartWidth = Math.min(width - 40, 520);
   const pieSize = 240;
@@ -351,17 +390,17 @@ export default function StatistiquesScreen({
 
   const pieData = useMemo(() => {
     const base = [
-      { label: "Contrats", value: contrats, color: "#2563EB" },
-      { label: "RDV", value: rdv, color: "#10B981" },
-      { label: "Refus", value: refus, color: "#F59E0B" },
-      { label: "Absents", value: absents, color: "#EF4444" },
+      { label: "Contrats", value: filteredKpi.contrats, color: "#2563EB" },
+      { label: "RDV", value: filteredKpi.rdv, color: "#10B981" },
+      { label: "Refus", value: filteredKpi.refus, color: "#F59E0B" },
+      { label: "Absents", value: filteredKpi.absents, color: "#EF4444" },
     ];
     const total = base.reduce((sum, item) => sum + item.value, 0);
     if (total === 0) {
       return [{ label: "Aucune", value: 1, color: "#E2E8F0" }];
     }
     return base;
-  }, [absents, contrats, rdv, refus]);
+  }, [filteredKpi]);
 
   const hasPieData = useMemo(
     () => pieData.some((item) => item.label !== "Aucune"),
@@ -378,12 +417,31 @@ export default function StatistiquesScreen({
 
   const axisLabels = useMemo(() => {
     if (!timelineBuckets.length) return [];
-    const days = ["D", "L", "M", "M", "J", "V", "S"];
+    const total = timelineBuckets.length;
+    const dayLetters = ["D", "L", "M", "M", "J", "V", "S"];
+
+    if (periodDays <= 7) {
+      return timelineBuckets.map((item) => {
+        const day = new Date(`${item.date}T00:00:00`).getDay();
+        return dayLetters[day];
+      });
+    }
+
+    if (periodDays <= 30) {
+      return timelineBuckets.map((item, i) => {
+        if (i === 0 || i === total - 1 || i % 5 === 0) {
+          const d = new Date(`${item.date}T00:00:00`);
+          return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+        }
+        return "";
+      });
+    }
+
     return timelineBuckets.map((item) => {
-      const day = new Date(`${item.date}T00:00:00`).getDay();
-      return days[day];
+      const d = new Date(`${item.date}T00:00:00`);
+      return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
     });
-  }, [timelineBuckets]);
+  }, [timelineBuckets, periodDays]);
 
   const chartDomain = useMemo(() => {
     const maxVal = Math.max(
@@ -514,145 +572,166 @@ export default function StatistiquesScreen({
       ]}
     >
       <Animated.View style={{ opacity: contentOpacity }}>
-      <View style={styles.kpiGrid}>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiHeader}>
-            <Text style={styles.kpiLabel}>Immeubles</Text>
-            <View style={styles.kpiIcon}>
-              <Feather name="home" size={18} color="#2563EB" />
-            </View>
-          </View>
-          <Text style={styles.kpiValue}>
-            {isLoading ? "--" : immeublesProspectes}
-          </Text>
-          <Text style={styles.kpiHint}>Total prospectés</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiHeader}>
-            <Text style={styles.kpiLabel}>Portes</Text>
-            <View style={styles.kpiIcon}>
-              <Feather name="grid" size={18} color="#2563EB" />
-            </View>
-          </View>
-          <Text style={styles.kpiValue}>
-            {isLoading ? "--" : portesProspectees}
-          </Text>
-          <Text style={styles.kpiHint}>Total prospectées</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiHeader}>
-            <Text style={styles.kpiLabel}>RDV pris</Text>
-            <View style={styles.kpiIcon}>
-              <Feather name="calendar" size={18} color="#2563EB" />
-            </View>
-          </View>
-          <Text style={styles.kpiValue}>{isLoading ? "--" : rdv}</Text>
-          <Text style={styles.kpiHint}>Rendez-vous</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiHeader}>
-            <Text style={styles.kpiLabel}>Contrats</Text>
-            <View style={styles.kpiIcon}>
-              <Feather name="award" size={18} color="#2563EB" />
-            </View>
-          </View>
-          <Text style={styles.kpiValue}>{isLoading ? "--" : contrats}</Text>
-          <Text style={styles.kpiHint}>Signés</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiHeader}>
-            <Text style={styles.kpiLabel}>Refus</Text>
-            <View style={styles.kpiIcon}>
-              <Feather name="x-circle" size={18} color="#2563EB" />
-            </View>
-          </View>
-          <Text style={styles.kpiValue}>{isLoading ? "--" : refus}</Text>
-          <Text style={styles.kpiHint}>Interactions</Text>
-        </View>
-        <View style={styles.kpiCard}>
-          <View style={styles.kpiHeader}>
-            <Text style={styles.kpiLabel}>Absents</Text>
-            <View style={styles.kpiIcon}>
-              <Feather name="user-x" size={18} color="#2563EB" />
-            </View>
-          </View>
-          <Text style={styles.kpiValue}>{isLoading ? "--" : absents}</Text>
-          <Text style={styles.kpiHint}>Non rencontrés</Text>
-        </View>
-      </View>
-
-      <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
-        <View style={styles.sectionHeaderRow}>
+      <View style={styles.overviewCard}>
+        <View style={styles.overviewHeader}>
           <View>
-            <Text style={styles.sectionTitle}>Activité / jour</Text>
-            <Text style={styles.sectionSubtitle}>{periodLabel} · {rangeLabel}</Text>
+            <Text style={styles.overviewTitle}>Vue d'ensemble</Text>
+            <Text style={styles.overviewSubtitle}>{rangeLabel}</Text>
+          </View>
+          <View style={styles.segmentedControl}>
+            {PERIOD_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt.days}
+                style={[styles.segmentBtn, periodDays === opt.days && styles.segmentBtnActive]}
+                onPress={() => { setPeriodDays(opt.days); setChartKey((k) => k + 1); }}
+              >
+                <Text style={[styles.segmentText, periodDays === opt.days && styles.segmentTextActive]}>
+                  {opt.label}
+                </Text>
+              </Pressable>
+            ))}
           </View>
         </View>
-        <View style={styles.chartLegendRow}>
-          <View style={styles.chartLegendItem}>
-            <View style={[styles.chartLegendDot, { backgroundColor: "#2563EB" }]} />
-            <Text style={styles.chartLegendText}>Portes</Text>
+
+        <View style={styles.kpiGrid}>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiHeader}>
+              <Text style={styles.kpiLabel}>Immeubles</Text>
+              <View style={styles.kpiIcon}>
+                <Feather name="home" size={18} color="#2563EB" />
+              </View>
+            </View>
+            <Text style={styles.kpiValue}>
+              {isLoading ? "--" : filteredKpi.immeubles}
+            </Text>
+            <Text style={styles.kpiHint}>Prospectés</Text>
           </View>
-          <View style={styles.chartLegendItem}>
-            <View style={[styles.chartLegendDot, { backgroundColor: "#10B981" }]} />
-            <Text style={styles.chartLegendText}>RDV</Text>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiHeader}>
+              <Text style={styles.kpiLabel}>Portes</Text>
+              <View style={styles.kpiIcon}>
+                <Feather name="grid" size={18} color="#2563EB" />
+              </View>
+            </View>
+            <Text style={styles.kpiValue}>
+              {isLoading ? "--" : filteredKpi.portes}
+            </Text>
+            <Text style={styles.kpiHint}>Prospectées</Text>
           </View>
-          <View style={styles.chartLegendItem}>
-            <View style={[styles.chartLegendDot, { backgroundColor: "#F59E0B" }]} />
-            <Text style={styles.chartLegendText}>Contrats</Text>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiHeader}>
+              <Text style={styles.kpiLabel}>RDV pris</Text>
+              <View style={styles.kpiIcon}>
+                <Feather name="calendar" size={18} color="#2563EB" />
+              </View>
+            </View>
+            <Text style={styles.kpiValue}>{isLoading ? "--" : filteredKpi.rdv}</Text>
+            <Text style={styles.kpiHint}>Rendez-vous</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiHeader}>
+              <Text style={styles.kpiLabel}>Contrats</Text>
+              <View style={styles.kpiIcon}>
+                <Feather name="award" size={18} color="#2563EB" />
+              </View>
+            </View>
+            <Text style={styles.kpiValue}>{isLoading ? "--" : filteredKpi.contrats}</Text>
+            <Text style={styles.kpiHint}>Signés</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiHeader}>
+              <Text style={styles.kpiLabel}>Refus</Text>
+              <View style={styles.kpiIcon}>
+                <Feather name="x-circle" size={18} color="#2563EB" />
+              </View>
+            </View>
+            <Text style={styles.kpiValue}>{isLoading ? "--" : filteredKpi.refus}</Text>
+            <Text style={styles.kpiHint}>Interactions</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <View style={styles.kpiHeader}>
+              <Text style={styles.kpiLabel}>Absents</Text>
+              <View style={styles.kpiIcon}>
+                <Feather name="user-x" size={18} color="#2563EB" />
+              </View>
+            </View>
+            <Text style={styles.kpiValue}>{isLoading ? "--" : filteredKpi.absents}</Text>
+            <Text style={styles.kpiHint}>Non rencontrés</Text>
           </View>
         </View>
-        <View style={styles.giftedChartWrap}>
-          <LineChart
-            key={`activity-chart-${chartKey}`}
-            data={portesChartData}
-            data2={rdvChartData}
-            data3={contratsChartData}
-            curved
-            thickness={2.5}
-            color="#2563EB"
-            color2="#10B981"
-            color3="#F59E0B"
-            areaChart
-            startFillColor="rgba(37, 99, 235, 0.12)"
-            endFillColor="rgba(37, 99, 235, 0)"
-            startOpacity={0.15}
-            endOpacity={0}
-            startFillColor2="rgba(16, 185, 129, 0.12)"
-            endFillColor2="rgba(16, 185, 129, 0)"
-            startOpacity2={0.15}
-            endOpacity2={0}
-            startFillColor3="rgba(245, 158, 11, 0.12)"
-            endFillColor3="rgba(245, 158, 11, 0)"
-            startOpacity3={0.15}
-            endOpacity3={0}
-            maxValue={chartDomain.max}
-            noOfSections={2}
-            stepValue={chartDomain.step}
-            yAxisLabelWidth={32}
-            yAxisTextStyle={styles.yAxisLabel}
-            yAxisColor="transparent"
-            yAxisThickness={0}
-            xAxisColor="#E2E8F0"
-            xAxisThickness={1}
-            hideRules
-            rulesColor="transparent"
-            yAxisLabelTexts={chartDomain.labels}
-            xAxisLabelTextStyle={styles.axisLabel}
-            showYAxisIndices={false}
-            isAnimated
-            animateOnDataChange
-            animationDuration={350}
-            spacing={chartSpacing}
-            initialSpacing={12}
-            endSpacing={12}
-            dataPointsColor1="#2563EB"
-            dataPointsColor2="#10B981"
-            dataPointsColor3="#F59E0B"
-            dataPointsRadius1={3}
-            dataPointsRadius2={3}
-            dataPointsRadius3={3}
-          />
+
+        <View style={styles.overviewDivider} />
+
+        <View style={styles.chartSection}>
+          <View style={styles.chartHeaderRow}>
+            <Text style={styles.chartHeaderTitle}>Activité / jour</Text>
+            <View style={styles.chartLegendRow}>
+              <View style={styles.chartLegendItem}>
+                <View style={[styles.chartLegendDot, { backgroundColor: "#2563EB" }]} />
+                <Text style={styles.chartLegendText}>Portes</Text>
+              </View>
+              <View style={styles.chartLegendItem}>
+                <View style={[styles.chartLegendDot, { backgroundColor: "#10B981" }]} />
+                <Text style={styles.chartLegendText}>RDV</Text>
+              </View>
+              <View style={styles.chartLegendItem}>
+                <View style={[styles.chartLegendDot, { backgroundColor: "#F59E0B" }]} />
+                <Text style={styles.chartLegendText}>Contrats</Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.giftedChartWrap}>
+            <LineChart
+              key={`activity-chart-${chartKey}`}
+              data={portesChartData}
+              data2={rdvChartData}
+              data3={contratsChartData}
+              curved
+              thickness={2.5}
+              color="#2563EB"
+              color2="#10B981"
+              color3="#F59E0B"
+              areaChart
+              startFillColor="rgba(37, 99, 235, 0.12)"
+              endFillColor="rgba(37, 99, 235, 0)"
+              startOpacity={0.15}
+              endOpacity={0}
+              startFillColor2="rgba(16, 185, 129, 0.12)"
+              endFillColor2="rgba(16, 185, 129, 0)"
+              startOpacity2={0.15}
+              endOpacity2={0}
+              startFillColor3="rgba(245, 158, 11, 0.12)"
+              endFillColor3="rgba(245, 158, 11, 0)"
+              startOpacity3={0.15}
+              endOpacity3={0}
+              maxValue={chartDomain.max}
+              noOfSections={2}
+              stepValue={chartDomain.step}
+              yAxisLabelWidth={32}
+              yAxisTextStyle={styles.yAxisLabel}
+              yAxisColor="transparent"
+              yAxisThickness={0}
+              xAxisColor="#E2E8F0"
+              xAxisThickness={1}
+              hideRules
+              rulesColor="transparent"
+              yAxisLabelTexts={chartDomain.labels}
+              xAxisLabelTextStyle={styles.axisLabel}
+              showYAxisIndices={false}
+              isAnimated
+              animateOnDataChange
+              animationDuration={350}
+              spacing={chartSpacing}
+              initialSpacing={12}
+              endSpacing={12}
+              dataPointsColor1="#2563EB"
+              dataPointsColor2="#10B981"
+              dataPointsColor3="#F59E0B"
+              dataPointsRadius1={3}
+              dataPointsRadius2={3}
+              dataPointsRadius3={3}
+            />
+          </View>
         </View>
       </View>
 
@@ -830,15 +909,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexShrink: 0,
     flexBasis: 140,
-    borderRadius: 18,
-    padding: 16,
-    minHeight: 120,
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
+    borderRadius: 16,
+    padding: 14,
+    minHeight: 110,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
   },
   kpiHeader: {
     flexDirection: "row",
@@ -948,7 +1024,7 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
   },
   axisLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: "#94A3B8",
   },
   giftedChartWrap: {
@@ -975,29 +1051,78 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#64748B",
   },
-  periodRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  periodChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+  overviewCard: {
+    borderRadius: 20,
     backgroundColor: "#FFFFFF",
+    padding: 20,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    gap: 20,
   },
-  periodChipActive: {
-    borderColor: "#2563EB",
-    backgroundColor: "#2563EB",
+  overviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
-  periodChipText: {
-    fontSize: 11,
+  overviewTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  overviewSubtitle: {
+    fontSize: 12,
+    color: "#94A3B8",
+    marginTop: 2,
+  },
+  segmentedControl: {
+    flexDirection: "row",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 12,
+    padding: 3,
+    gap: 2,
+  },
+  segmentBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  segmentBtnActive: {
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  segmentText: {
+    fontSize: 12,
     fontWeight: "600",
-    color: "#475569",
+    color: "#94A3B8",
   },
-  periodChipTextActive: {
-    color: "#FFFFFF",
+  segmentTextActive: {
+    color: "#2563EB",
+  },
+  overviewDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+  },
+  chartSection: {
+    gap: 12,
+  },
+  chartHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  chartHeaderTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
   },
   loadingText: {
     fontSize: 12,
@@ -1044,23 +1169,22 @@ const styles = StyleSheet.create({
   },
   chartLegendRow: {
     flexDirection: "row",
-    gap: 16,
-    justifyContent: "center",
+    gap: 12,
   },
   chartLegendItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   chartLegendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   chartLegendText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
-    color: "#64748B",
+    color: "#94A3B8",
   },
   weekNav: {
     flexDirection: "row",
