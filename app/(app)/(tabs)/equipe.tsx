@@ -5,7 +5,15 @@ import { authService } from "@/services/auth";
 import type { Commercial, Manager, Statistic } from "@/types/api";
 import { calculateRank } from "@/utils/business/ranks";
 import { Feather } from "@expo/vector-icons";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+} from "react";
 import {
   Animated,
   Easing,
@@ -20,8 +28,6 @@ import { LineChart } from "react-native-gifted-charts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type PeriodKey = "7d" | "30d" | "all";
-
-type TopPerformerScope = "period" | "all";
 
 const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
   { key: "7d", label: "7j" },
@@ -99,6 +105,48 @@ type TeamSnapshot = Commercial & {
   immeubleCount: number;
 };
 
+type FeatherIconName = ComponentProps<typeof Feather>["name"];
+
+const getPositionAccent = (
+  position: number,
+): {
+  icon: FeatherIconName;
+  bgColor: string;
+  iconColor: string;
+  textColor: string;
+} => {
+  if (position === 1) {
+    return {
+      icon: "award",
+      bgColor: "#FCD34D",
+      iconColor: "#92400E",
+      textColor: "#78350F",
+    };
+  }
+  if (position === 2) {
+    return {
+      icon: "star",
+      bgColor: "#E2E8F0",
+      iconColor: "#475569",
+      textColor: "#334155",
+    };
+  }
+  if (position === 3) {
+    return {
+      icon: "shield",
+      bgColor: "#F5D0AE",
+      iconColor: "#9A3412",
+      textColor: "#7C2D12",
+    };
+  }
+  return {
+    icon: "hash",
+    bgColor: "#E2E8F0",
+    iconColor: "#64748B",
+    textColor: "#475569",
+  };
+};
+
 const PeriodFilterChip = memo(function PeriodFilterChip({
   option,
   selected,
@@ -124,12 +172,30 @@ const PeriodFilterChip = memo(function PeriodFilterChip({
 
 const TeamListItem = memo(function TeamListItem({
   commercial,
+  position,
 }: {
   commercial: TeamSnapshot;
+  position: number;
 }) {
+  const positionAccent = getPositionAccent(position);
   return (
     <View style={styles.listCard}>
       <View style={styles.listHeader}>
+        <View
+          style={[
+            styles.positionBadge,
+            { backgroundColor: positionAccent.bgColor },
+          ]}
+        >
+          <Feather
+            name={positionAccent.icon}
+            size={11}
+            color={positionAccent.iconColor}
+          />
+          <Text style={[styles.positionBadgeText, { color: positionAccent.textColor }]}>
+            {position}
+          </Text>
+        </View>
         <View style={styles.listAvatar}>
           <Text style={styles.listInitials}>
             {commercial.prenom?.charAt(0)}
@@ -147,8 +213,10 @@ const TeamListItem = memo(function TeamListItem({
             {commercial.immeubleCount > 1 ? "s" : ""}
           </Text>
         </View>
-        <View style={styles.rankPill}>
-          <Text style={styles.rankPillText}>{commercial.rank.name}</Text>
+        <View style={styles.listHeaderRight}>
+          <View style={styles.rankPill}>
+            <Text style={styles.rankPillText}>{commercial.rank.name}</Text>
+          </View>
         </View>
       </View>
       <View style={styles.listStats}>
@@ -184,7 +252,6 @@ export default function EquipeScreen() {
   const { width } = useWindowDimensions();
   const isTablet = width >= 768;
   const [period, setPeriod] = useState<PeriodKey>("7d");
-  const [topScope, setTopScope] = useState<TopPerformerScope>("period");
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const contentOpacity = useRef(new Animated.Value(0)).current;
@@ -264,8 +331,6 @@ export default function EquipeScreen() {
   const handlePeriodChange = useCallback((nextPeriod: PeriodKey) => {
     setPeriod(nextPeriod);
   }, []);
-  const selectTopScopePeriod = useCallback(() => setTopScope("period"), []);
-  const selectTopScopeAll = useCallback(() => setTopScope("all"), []);
 
   const timelineBuckets = useMemo(() => {
     const sorted = (teamTimeline ?? [])
@@ -414,26 +479,18 @@ export default function EquipeScreen() {
     });
   }, [period, team]);
 
-  const allTimeSnapshots = useMemo<TeamSnapshot[]>(() => {
-    return team.map((commercial) => {
-      const totals = sumStats(commercial.statistics || []);
-      const { rank, points } = calculateRank(
-        totals.contratsSignes,
-        totals.rendezVousPris,
-        totals.immeublesVisites,
-      );
-      const zones = commercial.zones || [];
-      const immeubles = commercial.immeubles || [];
-      return {
-        ...commercial,
-        stats: totals,
-        rank,
-        points,
-        zoneCount: zones.length,
-        immeubleCount: immeubles.length,
-      };
-    });
-  }, [team]);
+  const orderedTeamSnapshots = useMemo(
+    () =>
+      teamSnapshots
+        .slice()
+        .sort(
+          (a, b) =>
+            b.points - a.points ||
+            b.stats.contratsSignes - a.stats.contratsSignes ||
+            b.stats.rendezVousPris - a.stats.rendezVousPris,
+        ),
+    [teamSnapshots],
+  );
 
   const teamTotals = useMemo(() => {
     return teamSnapshots.reduce(
@@ -453,14 +510,6 @@ export default function EquipeScreen() {
       { ...INITIAL_STATS },
     );
   }, [teamSnapshots]);
-
-  const topPerformer = useMemo(() => {
-    const source = topScope === "all" ? allTimeSnapshots : teamSnapshots;
-    if (!source.length) return null;
-    return source.reduce((best, current) =>
-      current.points > best.points ? current : best,
-    );
-  }, [allTimeSnapshots, teamSnapshots, topScope]);
 
   useEffect(() => {
     if (isScreenLoading) {
@@ -571,7 +620,7 @@ export default function EquipeScreen() {
           />
         </View>
 
-        <View style={[styles.kpiRow, styles.compactStackSpacing]}>
+        <View style={[styles.kpiRow, styles.spacingAfterFilters]}>
           <Animated.View
             style={[
               styles.skeletonKpiCard,
@@ -674,82 +723,6 @@ export default function EquipeScreen() {
           </View>
         </View>
 
-        {topPerformer ? (
-          <View style={[styles.sectionCard, styles.sectionSpacing]}>
-            <View style={styles.sectionHeaderTopRow}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionIconGold}>
-                  <Feather name="award" size={18} color="#FFFFFF" />
-                </View>
-                <View>
-                  <Text style={styles.sectionTitle}>Top performer</Text>
-                  <Text style={styles.sectionSubtitle}>
-                    {topScope === "all"
-                      ? "Meilleur commercial (toujours)"
-                      : "Meilleur commercial (période)"}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.topScopeRow}>
-                <Pressable
-                  style={[
-                    styles.topScopeChip,
-                    topScope === "period" && styles.topScopeChipActive,
-                  ]}
-                  onPress={selectTopScopePeriod}
-                >
-                  <Text
-                    style={[
-                      styles.topScopeChipText,
-                      topScope === "period" && styles.topScopeChipTextActive,
-                    ]}
-                  >
-                    Période
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.topScopeChip,
-                    topScope === "all" && styles.topScopeChipActive,
-                  ]}
-                  onPress={selectTopScopeAll}
-                >
-                  <Text
-                    style={[
-                      styles.topScopeChipText,
-                      topScope === "all" && styles.topScopeChipTextActive,
-                    ]}
-                  >
-                    Toujours
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-            <View style={styles.topRow}>
-              <View style={styles.topAvatar}>
-                <Text style={styles.topInitials}>
-                  {topPerformer.prenom?.charAt(0)}
-                  {topPerformer.nom?.charAt(0)}
-                </Text>
-              </View>
-              <View style={styles.topInfo}>
-                <Text style={styles.topName}>
-                  {topPerformer.prenom} {topPerformer.nom}
-                </Text>
-                <Text style={styles.topMeta}>
-                  {topPerformer.rank.name} • {topPerformer.points} pts
-                </Text>
-              </View>
-              <View style={styles.topBadge}>
-                <Feather name="award" size={14} color="#2563EB" />
-                <Text style={styles.topBadgeText}>
-                  {topPerformer.stats.contratsSignes} contrats
-                </Text>
-              </View>
-            </View>
-          </View>
-        ) : null}
-
         <View style={[styles.performanceCard, styles.sectionSpacing]}>
           <View style={styles.performanceHeader}>
             <View>
@@ -850,12 +823,12 @@ export default function EquipeScreen() {
             <View>
               <Text style={styles.sectionTitle}>Équipe commerciale</Text>
               <Text style={styles.sectionSubtitle}>
-                {teamSnapshots.length} commerciaux
+                {orderedTeamSnapshots.length} commerciaux
               </Text>
             </View>
           </View>
 
-          {teamSnapshots.length === 0 ? (
+          {orderedTeamSnapshots.length === 0 ? (
             <View style={styles.emptyInline}>
               <Text style={styles.emptyInlineText}>
                 Aucun commercial assigné.
@@ -863,8 +836,12 @@ export default function EquipeScreen() {
             </View>
           ) : (
             <View style={styles.list}>
-              {teamSnapshots.map((commercial) => (
-                <TeamListItem key={commercial.id} commercial={commercial} />
+              {orderedTeamSnapshots.map((commercial, index) => (
+                <TeamListItem
+                  key={commercial.id}
+                  commercial={commercial}
+                  position={index + 1}
+                />
               ))}
             </View>
           )}
@@ -1134,25 +1111,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  sectionHeaderTopRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 12,
-  },
   sectionIcon: {
     width: 38,
     height: 38,
     borderRadius: 14,
     backgroundColor: "#EFF6FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sectionIconGold: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
-    backgroundColor: "#F59E0B",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1165,76 +1128,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#94A3B8",
     marginTop: 2,
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  topAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#EFF6FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  topInitials: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#2563EB",
-  },
-  topInfo: {
-    flex: 1,
-  },
-  topName: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-  topMeta: {
-    fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
-  },
-  topBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: "#EFF6FF",
-  },
-  topBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#2563EB",
-  },
-  topScopeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  topScopeChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  topScopeChipActive: {
-    backgroundColor: "#EFF6FF",
-    borderColor: "#BFDBFE",
-  },
-  topScopeChipText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#64748B",
-  },
-  topScopeChipTextActive: {
-    color: "#2563EB",
   },
   list: {
     gap: 12,
@@ -1270,6 +1163,11 @@ const styles = StyleSheet.create({
   listInfo: {
     flex: 1,
   },
+  listHeaderRight: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+    marginLeft: 6,
+  },
   listName: {
     fontSize: 14,
     fontWeight: "700",
@@ -1290,6 +1188,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#2563EB",
+  },
+  positionBadge: {
+    minWidth: 44,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    gap: 4,
+  },
+  positionBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   listStats: {
     flexDirection: "row",
