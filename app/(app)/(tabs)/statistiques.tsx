@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -44,6 +45,7 @@ export default function StatistiquesScreen() {
   const [role, setRole] = useState<string | null>(null);
   const periodLabel = "7 derniers jours";
   const [chartKey, setChartKey] = useState(0);
+  const [activeChart, setActiveChart] = useState<"portes" | "rdv" | "contrats">("portes");
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const skeletonPulse = useRef(new Animated.Value(0)).current;
   const wasFocusedRef = useRef(false);
@@ -540,139 +542,146 @@ export default function StatistiquesScreen() {
       <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
         <View style={styles.sectionHeaderRow}>
           <View>
-            <Text style={styles.sectionTitle}>Portes / jour</Text>
+            <Text style={styles.sectionTitle}>Activité / jour</Text>
             <Text style={styles.sectionSubtitle}>{periodLabel} · {rangeLabel}</Text>
           </View>
         </View>
-        <View style={styles.giftedChartWrap}>
-          <LineChart
-            key={`portes-chart-${chartKey}`}
-            data={portesChartData}
-            areaChart
-            curved
-            thickness={2}
-            color="#2563EB"
-            startFillColor="rgba(37, 99, 235, 0.22)"
-            endFillColor="rgba(37, 99, 235, 0)"
-            startOpacity={0.25}
-            endOpacity={0}
-            maxValue={chartDomain.y[1]}
-            noOfSections={2}
-            stepValue={yAxisStep}
-            yAxisLabelWidth={32}
-            yAxisTextStyle={styles.yAxisLabel}
-            yAxisColor="transparent"
-            yAxisThickness={0}
-            xAxisColor="transparent"
-            xAxisThickness={0}
-            hideRules
-            rulesColor="transparent"
-            yAxisLabelTexts={yAxisLabels}
-            xAxisLabelTextStyle={styles.axisLabel}
-            showYAxisIndices={false}
-            isAnimated
-            animateOnDataChange
-            animationDuration={350}
-            spacing={lineChartSpacing}
-            initialSpacing={12}
-            endSpacing={12}
-            hideDataPoints
-            focusEnabled
-            showStripOnFocus={false}
-            stripColor="transparent"
-            stripWidth={0}
-            pointerConfig={{
-              pointerStripUptoDataPoint: false,
-              pointerStripColor: "transparent",
-              pointerStripWidth: 0,
-              pointerColor: "#2563EB",
-              radius: 4,
-              pointerLabelWidth: 110,
-              pointerLabelHeight: 40,
-              autoAdjustPointerLabelPosition: true,
-              shiftPointerLabelY: -40,
-               pointerLabelComponent: renderPortesPointerLabel,
-             }}
-           />
-        </View>
-      </View>
-
-      <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
-        <View style={styles.sectionHeaderRow}>
-          <View>
-            <Text style={styles.sectionTitle}>Rendez-vous / jour</Text>
-            <Text style={styles.sectionSubtitle}>{periodLabel} · {rangeLabel}</Text>
-          </View>
+        <View style={styles.chartToggleRow}>
+          <Pressable
+            style={[styles.chartToggle, activeChart === "portes" && styles.chartToggleActive]}
+            onPress={() => setActiveChart("portes")}
+          >
+            <View style={[styles.chartToggleDot, { backgroundColor: "#2563EB" }]} />
+            <Text style={[styles.chartToggleText, activeChart === "portes" && styles.chartToggleTextActive]}>Portes</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.chartToggle, activeChart === "rdv" && styles.chartToggleActive]}
+            onPress={() => setActiveChart("rdv")}
+          >
+            <View style={[styles.chartToggleDot, { backgroundColor: "#10B981" }]} />
+            <Text style={[styles.chartToggleText, activeChart === "rdv" && styles.chartToggleTextActive]}>RDV</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.chartToggle, activeChart === "contrats" && styles.chartToggleActive]}
+            onPress={() => setActiveChart("contrats")}
+          >
+            <View style={[styles.chartToggleDot, { backgroundColor: "#F59E0B" }]} />
+            <Text style={[styles.chartToggleText, activeChart === "contrats" && styles.chartToggleTextActive]}>Contrats</Text>
+          </Pressable>
         </View>
         <View style={styles.giftedChartWrap}>
-          <BarChart
-            data={rdvChartData}
-            barWidth={16}
-            spacing={barChartSpacing}
-            initialSpacing={10}
-            endSpacing={10}
-            height={180}
-            maxValue={chartDomain.y[1]}
-            noOfSections={2}
-            stepValue={yAxisStep}
-            yAxisLabelWidth={32}
-            yAxisTextStyle={styles.yAxisLabel}
-            yAxisColor="transparent"
-            yAxisThickness={0}
-            xAxisColor="transparent"
-            xAxisThickness={0}
-            xAxisLabelTextStyle={styles.axisLabel}
-            showYAxisIndices={false}
-            isAnimated
-            animationDuration={350}
-            frontColor="#10B981"
-            hideRules
-            rulesColor="transparent"
-            yAxisLabelTexts={yAxisLabels}
-          />
-        </View>
-      </View>
-
-      <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
-        <View style={styles.sectionHeaderRow}>
-          <View>
-            <Text style={styles.sectionTitle}>Contrats signés / jour</Text>
-            <Text style={styles.sectionSubtitle}>{periodLabel} · {rangeLabel}</Text>
-          </View>
-        </View>
-        <View style={styles.giftedChartWrap}>
-          <LineChart
-            data={contratsChartData}
-            areaChart
-            curved
-            thickness={2}
-            color="#F59E0B"
-            startFillColor="rgba(245, 158, 11, 0.18)"
-            endFillColor="rgba(245, 158, 11, 0)"
-            startOpacity={0.25}
-            endOpacity={0}
-            maxValue={chartDomain.y[1]}
-            noOfSections={2}
-            stepValue={yAxisStep}
-            yAxisLabelWidth={32}
-            yAxisTextStyle={styles.yAxisLabel}
-            yAxisColor="transparent"
-            yAxisThickness={0}
-            xAxisColor="transparent"
-            xAxisThickness={0}
-            hideRules
-            rulesColor="transparent"
-            yAxisLabelTexts={yAxisLabels}
-            xAxisLabelTextStyle={styles.axisLabel}
-            showYAxisIndices={false}
-            spacing={contratsLineSpacing}
-            initialSpacing={12}
-            endSpacing={12}
-            hideDataPoints
-            isAnimated
-            animateOnDataChange
-            animationDuration={350}
-          />
+          {activeChart === "portes" && (
+            <LineChart
+              key={`portes-chart-${chartKey}`}
+              data={portesChartData}
+              areaChart
+              curved
+              thickness={2}
+              color="#2563EB"
+              startFillColor="rgba(37, 99, 235, 0.22)"
+              endFillColor="rgba(37, 99, 235, 0)"
+              startOpacity={0.25}
+              endOpacity={0}
+              maxValue={chartDomain.y[1]}
+              noOfSections={2}
+              stepValue={yAxisStep}
+              yAxisLabelWidth={32}
+              yAxisTextStyle={styles.yAxisLabel}
+              yAxisColor="transparent"
+              yAxisThickness={0}
+              xAxisColor="transparent"
+              xAxisThickness={0}
+              hideRules
+              rulesColor="transparent"
+              yAxisLabelTexts={yAxisLabels}
+              xAxisLabelTextStyle={styles.axisLabel}
+              showYAxisIndices={false}
+              isAnimated
+              animateOnDataChange
+              animationDuration={350}
+              spacing={lineChartSpacing}
+              initialSpacing={12}
+              endSpacing={12}
+              hideDataPoints
+              focusEnabled
+              showStripOnFocus={false}
+              stripColor="transparent"
+              stripWidth={0}
+              pointerConfig={{
+                pointerStripUptoDataPoint: false,
+                pointerStripColor: "transparent",
+                pointerStripWidth: 0,
+                pointerColor: "#2563EB",
+                radius: 4,
+                pointerLabelWidth: 110,
+                pointerLabelHeight: 40,
+                autoAdjustPointerLabelPosition: true,
+                shiftPointerLabelY: -40,
+                pointerLabelComponent: renderPortesPointerLabel,
+              }}
+            />
+          )}
+          {activeChart === "rdv" && (
+            <BarChart
+              data={rdvChartData}
+              barWidth={16}
+              spacing={barChartSpacing}
+              initialSpacing={10}
+              endSpacing={10}
+              height={180}
+              maxValue={chartDomain.y[1]}
+              noOfSections={2}
+              stepValue={yAxisStep}
+              yAxisLabelWidth={32}
+              yAxisTextStyle={styles.yAxisLabel}
+              yAxisColor="transparent"
+              yAxisThickness={0}
+              xAxisColor="transparent"
+              xAxisThickness={0}
+              xAxisLabelTextStyle={styles.axisLabel}
+              showYAxisIndices={false}
+              isAnimated
+              animationDuration={350}
+              frontColor="#10B981"
+              hideRules
+              rulesColor="transparent"
+              yAxisLabelTexts={yAxisLabels}
+            />
+          )}
+          {activeChart === "contrats" && (
+            <LineChart
+              data={contratsChartData}
+              areaChart
+              curved
+              thickness={2}
+              color="#F59E0B"
+              startFillColor="rgba(245, 158, 11, 0.18)"
+              endFillColor="rgba(245, 158, 11, 0)"
+              startOpacity={0.25}
+              endOpacity={0}
+              maxValue={chartDomain.y[1]}
+              noOfSections={2}
+              stepValue={yAxisStep}
+              yAxisLabelWidth={32}
+              yAxisTextStyle={styles.yAxisLabel}
+              yAxisColor="transparent"
+              yAxisThickness={0}
+              xAxisColor="transparent"
+              xAxisThickness={0}
+              hideRules
+              rulesColor="transparent"
+              yAxisLabelTexts={yAxisLabels}
+              xAxisLabelTextStyle={styles.axisLabel}
+              showYAxisIndices={false}
+              spacing={contratsLineSpacing}
+              initialSpacing={12}
+              endSpacing={12}
+              hideDataPoints
+              isAnimated
+              animateOnDataChange
+              animationDuration={350}
+            />
+          )}
         </View>
       </View>
 
@@ -993,5 +1002,37 @@ const styles = StyleSheet.create({
     height: 170,
     borderRadius: 14,
     backgroundColor: "#E2E8F0",
+  },
+  chartToggleRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  chartToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+  },
+  chartToggleActive: {
+    borderColor: "#2563EB",
+    backgroundColor: "#EFF6FF",
+  },
+  chartToggleDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  chartToggleText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  chartToggleTextActive: {
+    color: "#2563EB",
   },
 });
