@@ -1,8 +1,7 @@
-import { useProfileSheet } from "@/hooks/use-profile-sheet";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
+import { useProfileSheet } from "@/hooks/use-profile-sheet";
 import { authService } from "@/services/auth";
 import type { Commercial, Manager } from "@/types/api";
-import { Feather } from "@expo/vector-icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -132,7 +131,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    elevation: 0,
   },
   content: {
     flexDirection: "row",
