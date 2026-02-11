@@ -482,7 +482,6 @@ function ImmeubleDetailsView({
   } | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [isFabOpen, setIsFabOpen] = useState(false);
-  const [showFabHints, setShowFabHints] = useState(false);
   const immeubleIdRef = useRef<number | null>(null);
   const DateTimePicker = useMemo<DateTimePickerType>(() => {
     try {
@@ -501,14 +500,13 @@ function ImmeubleDetailsView({
   const floorPlanPulse = useRef(new Animated.Value(0)).current;
   const [isReady, setIsReady] = useState(false);
   const fabAnim = useRef(new Animated.Value(0)).current;
-  const fabHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fabHintOpacity = useRef(new Animated.Value(0)).current;
   const progressFill = useRef(new Animated.Value(0)).current;
   const progressAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
   const lastProgressTargetRef = useRef(0);
   const doorPagerRef = useRef<FlatList<Porte>>(null);
   const filteredPortesRef = useRef<Porte[]>([]);
   const currentPorteRef = useRef<Porte | undefined>(undefined);
+  const pendingFloorPlanDoorIdRef = useRef<number | null>(null);
   const { error: recordingError } = useRecording({
     enabled: true,
     immeubleId: immeuble.id,
@@ -601,9 +599,6 @@ function ImmeubleDetailsView({
     return () => {
       if (toastTimeoutRef.current) {
         clearTimeout(toastTimeoutRef.current);
-      }
-      if (fabHintTimeoutRef.current) {
-        clearTimeout(fabHintTimeoutRef.current);
       }
     };
   }, []);
@@ -701,7 +696,13 @@ function ImmeubleDetailsView({
     [onDirtyChange],
   );
 
-  const getTodayDate = () => new Date().toISOString().split("T")[0];
+  const formatDateForInput = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+  const getTodayDate = () => formatDateForInput(new Date());
   const getNowTime = () => {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, "0")}:${String(
@@ -740,7 +741,10 @@ function ImmeubleDetailsView({
   };
 
   const openEditSheet = useCallback(
-    (porte: Porte, mode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | "ARGUMENTE") => {
+    (
+      porte: Porte,
+      mode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | "ARGUMENTE",
+    ) => {
       setEditPorte(porte);
       setEditMode(mode);
       setArgumenteCommentError(false);
@@ -825,7 +829,9 @@ function ImmeubleDetailsView({
       );
       closeEditSheet();
       if (currentIndex < filteredPortes.length - 1) {
-        setCurrentIndex((prev) => Math.min(prev + 1, filteredPortes.length - 1));
+        setCurrentIndex((prev) =>
+          Math.min(prev + 1, filteredPortes.length - 1),
+        );
       }
       return;
     }
@@ -884,6 +890,25 @@ function ImmeubleDetailsView({
     filteredPortesRef.current = filteredPortes;
     currentPorteRef.current = currentPorte;
   }, [currentPorte, filteredPortes]);
+
+  useEffect(() => {
+    const pendingDoorId = pendingFloorPlanDoorIdRef.current;
+    if (pendingDoorId === null) {
+      return;
+    }
+    const targetIndex = filteredPortes.findIndex((porte) => porte.id === pendingDoorId);
+    if (targetIndex === -1) {
+      return;
+    }
+    pendingFloorPlanDoorIdRef.current = null;
+    setCurrentIndex(targetIndex);
+    requestAnimationFrame(() => {
+      doorPagerRef.current?.scrollToIndex({
+        index: targetIndex,
+        animated: true,
+      });
+    });
+  }, [filteredPortes]);
 
   useEffect(() => {
     if (currentIndex >= filteredPortes.length) {
@@ -1306,9 +1331,6 @@ function ImmeubleDetailsView({
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }).start();
-      if (next) {
-        triggerFabHints();
-      }
       return next;
     });
   };
@@ -1320,37 +1342,11 @@ function ImmeubleDetailsView({
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start(() => setIsFabOpen(false));
-    fabHintOpacity.stopAnimation();
-    fabHintOpacity.setValue(0);
-    setShowFabHints(false);
   };
 
   const handleFabAction = (action: () => void) => {
     closeFab();
     action();
-  };
-
-  const triggerFabHints = () => {
-    if (fabHintTimeoutRef.current) {
-      clearTimeout(fabHintTimeoutRef.current);
-    }
-    setShowFabHints(true);
-    fabHintOpacity.stopAnimation();
-    fabHintOpacity.setValue(0);
-    Animated.timing(fabHintOpacity, {
-      toValue: 1,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-    fabHintTimeoutRef.current = setTimeout(() => {
-      Animated.timing(fabHintOpacity, {
-        toValue: 0,
-        duration: 380,
-        useNativeDriver: true,
-      }).start(() => {
-        setShowFabHints(false);
-      });
-    }, 1400);
   };
 
   const advanceToNextDoor = useCallback((porteId: number, portes: Porte[]) => {
@@ -1455,6 +1451,30 @@ function ImmeubleDetailsView({
     [],
   );
 
+  const handleFloorPlanDoorPress = useCallback(
+    (porte: Porte) => {
+      floorPlanSheetRef.current?.dismiss();
+      setShowFloorPlan(false);
+      const targetIndex = filteredPortes.findIndex((item) => item.id === porte.id);
+      if (targetIndex >= 0) {
+        setCurrentIndex(targetIndex);
+        requestAnimationFrame(() => {
+          doorPagerRef.current?.scrollToIndex({
+            index: targetIndex,
+            animated: true,
+          });
+        });
+        return;
+      }
+
+      pendingFloorPlanDoorIdRef.current = porte.id;
+      setPendingStatusFilter(null);
+      setStatusFilters([]);
+      showToast("Filtre retire", "La porte selectionnee est maintenant affichee");
+    },
+    [filteredPortes, showToast],
+  );
+
   const renderFloorPlanSection = useCallback(
     ({ item }: { item: [number, Porte[]] }) => {
       const [etage, portes] = item;
@@ -1471,8 +1491,9 @@ function ImmeubleDetailsView({
               const chipText = isVisited ? "#FFFFFF" : "#64748B";
 
               return (
-                <View
+                <Pressable
                   key={porte.id}
+                  onPress={() => handleFloorPlanDoorPress(porte)}
                   style={[
                     styles.floorPlanDoorChip,
                     {
@@ -1488,14 +1509,14 @@ function ImmeubleDetailsView({
                     {porte.nomPersonnalise || porte.numero}
                   </Text>
                   {isActive && <View style={styles.floorPlanActiveIndicator} />}
-                </View>
+                </Pressable>
               );
             })}
           </View>
         </View>
       );
     },
-    [currentPorteId],
+    [currentPorteId, handleFloorPlanDoorPress],
   );
 
   return (
@@ -1701,7 +1722,7 @@ function ImmeubleDetailsView({
             onChange={(_event: unknown, selected?: Date) => {
               setShowDatePicker(false);
               if (selected) {
-                const value = selected.toISOString().split("T")[0];
+                const value = formatDateForInput(selected);
                 setEditForm((prev) => ({ ...prev, rdvDate: value }));
               }
             }}
@@ -1823,7 +1844,7 @@ function ImmeubleDetailsView({
                     />
                   </Pressable>
                 </Animated.View>
-                {showFabHints ? (
+                {isFabOpen ? (
                   <Animated.View
                     style={[
                       styles.fabHintWrap,
@@ -1832,7 +1853,7 @@ function ImmeubleDetailsView({
                           { translateX: hintTranslateX },
                           { translateY: hintTranslateY },
                         ],
-                        opacity: Animated.multiply(opacity, fabHintOpacity),
+                        opacity,
                       },
                     ]}
                     pointerEvents="none"
