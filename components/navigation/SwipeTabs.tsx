@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { TabView } from "react-native-tab-view";
 import DashboardScreen from "@/app/(app)/(tabs)/dashboard";
@@ -37,6 +37,24 @@ export default function SwipeTabs({
   const [isManager, setIsManager] = useState(false);
   const tabRoutes = useMemo(() => buildRoutes(isManager), [isManager]);
   const [swipeEnabled, setSwipeEnabled] = useState(true);
+  const pendingImmeubleIdRef = useRef<number | null>(null);
+  const [autoSelectImmeubleId, setAutoSelectImmeubleId] = useState<number | null>(null);
+
+  const handleNavigateToImmeuble = useCallback(
+    (immeubleId: number) => {
+      const immeublesTabIdx = tabRoutes.findIndex((r) => r.key === "immeubles");
+      if (immeublesTabIdx < 0) return;
+      pendingImmeubleIdRef.current = immeubleId;
+      setAutoSelectImmeubleId(immeubleId);
+      onIndexChange(immeublesTabIdx);
+    },
+    [onIndexChange, tabRoutes],
+  );
+
+  const handleAutoSelectConsumed = useCallback(() => {
+    pendingImmeubleIdRef.current = null;
+    setAutoSelectImmeubleId(null);
+  }, []);
 
   useEffect(() => {
     const loadRole = async () => {
@@ -59,6 +77,8 @@ export default function SwipeTabs({
             onSwipeLockChange={handleSwipeLockChange}
             onHamburgerVisibilityChange={onRailVisibilityChange}
             onHeaderVisibilityChange={onHeaderVisibilityChange}
+            autoSelectImmeubleId={autoSelectImmeubleId}
+            onAutoSelectConsumed={handleAutoSelectConsumed}
           />
         );
       }
@@ -69,11 +89,11 @@ export default function SwipeTabs({
         return <EquipeScreen />;
       }
       if (route.key === "statistiques") {
-        return <StatistiquesScreen />;
+        return <StatistiquesScreen onNavigateToImmeuble={handleNavigateToImmeuble} />;
       }
       return <DashboardScreen />;
     },
-    [handleSwipeLockChange, index, onHeaderVisibilityChange],
+    [autoSelectImmeubleId, handleAutoSelectConsumed, handleNavigateToImmeuble, handleSwipeLockChange, index, onHeaderVisibilityChange, onRailVisibilityChange],
   );
 
   return (

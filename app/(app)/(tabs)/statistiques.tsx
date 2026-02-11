@@ -17,10 +17,28 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Calendar } from "react-native-calendars";
 import { BarChart, LineChart } from "react-native-gifted-charts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Pie, PolarChart } from "victory-native";
+
+const DAY_LABELS_SHORT = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+
+type RdvItem = {
+  porteId: number;
+  immeubleId: number;
+  adresse: string;
+  numero: string;
+  nomPersonnalise?: string;
+  etage: number;
+  statut: string;
+  rdvDate: string;
+  rdvTime?: string;
+  commentaire?: string;
+};
+
+type StatistiquesScreenProps = {
+  onNavigateToImmeuble?: (immeubleId: number) => void;
+};
 
 const MONTH_NAMES = [
   "janvier",
@@ -37,7 +55,9 @@ const MONTH_NAMES = [
   "decembre",
 ];
 
-export default function StatistiquesScreen() {
+export default function StatistiquesScreen({
+  onNavigateToImmeuble,
+}: StatistiquesScreenProps = {}) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const isFocused = useIsFocused();
@@ -83,6 +103,86 @@ export default function StatistiquesScreen() {
     refetch: refetchTimeline,
   } = useCommercialTimeline(commercialId, startDate, endDate);
   const workspaceState = useWorkspaceProfile(userId, role);
+
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDay, setSelectedDay] = useState(todayKey);
+
+  const allRdvPortes = useMemo<RdvItem[]>(() => {
+    const items: RdvItem[] = [];
+    const immeubles = workspaceState.data?.immeubles ?? [];
+    for (const imm of immeubles) {
+      for (const porte of imm.portes ?? []) {
+        if (porte.rdvDate) {
+          items.push({
+            porteId: porte.id,
+            immeubleId: imm.id,
+            adresse: imm.adresse,
+            numero: porte.numero,
+            nomPersonnalise: porte.nomPersonnalise ?? undefined,
+            etage: porte.etage,
+            statut: typeof porte.statut === "string" ? porte.statut : "",
+            rdvDate: porte.rdvDate,
+            rdvTime: porte.rdvTime ?? undefined,
+            commentaire: porte.commentaire ?? undefined,
+          });
+        }
+      }
+    }
+    return items.sort((a, b) => {
+      const dc = a.rdvDate.localeCompare(b.rdvDate);
+      if (dc !== 0) return dc;
+      return (a.rdvTime ?? "").localeCompare(b.rdvTime ?? "");
+    });
+  }, [workspaceState.data]);
+
+  const weekDays = useMemo(() => {
+    const today = new Date(`${todayKey}T12:00:00`);
+    const dow = today.getDay();
+    const mondayDelta = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayDelta + weekOffset * 7);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      return d.toISOString().slice(0, 10);
+    });
+  }, [todayKey, weekOffset]);
+
+  const weekLabel = useMemo(() => {
+    if (!weekDays.length) return "";
+    const s = weekDays[0];
+    const e = weekDays[6];
+    const sd = new Date(`${s}T12:00:00`);
+    const ed = new Date(`${e}T12:00:00`);
+    const sDay = String(sd.getDate()).padStart(2, "0");
+    const eDay = String(ed.getDate()).padStart(2, "0");
+    const sMonth = MONTH_NAMES[sd.getMonth()] ?? "";
+    const eMonth = MONTH_NAMES[ed.getMonth()] ?? "";
+    if (sMonth === eMonth) return `${sDay} - ${eDay} ${sMonth}`;
+    return `${sDay} ${sMonth} - ${eDay} ${eMonth}`;
+  }, [weekDays]);
+
+  const rdvByDay = useMemo(() => {
+    const map = new Map<string, RdvItem[]>();
+    for (const item of allRdvPortes) {
+      const dayKey = item.rdvDate.slice(0, 10);
+      const arr = map.get(dayKey) ?? [];
+      arr.push(item);
+      map.set(dayKey, arr);
+    }
+    return map;
+  }, [allRdvPortes]);
+
+  const selectedDayRdvs = useMemo(
+    () => rdvByDay.get(selectedDay) ?? [],
+    [rdvByDay, selectedDay],
+  );
+
+  useEffect(() => {
+    if (weekDays.includes(selectedDay)) return;
+    const firstWithRdv = weekDays.find((d) => rdvByDay.has(d));
+    setSelectedDay(firstWithRdv ?? weekDays[0] ?? todayKey);
+  }, [weekDays, selectedDay, rdvByDay, todayKey]);
 
   useEffect(() => {
     const unsubscribe = dataSyncService.subscribe((event) => {
@@ -256,48 +356,6 @@ export default function StatistiquesScreen() {
       percent: total ? Math.round((item.value / total) * 100) : 0,
     }));
   }, [pieData]);
-
-  const markedDates = useMemo(() => {
-    const marks: Record<
-      string,
-      { customStyles?: { container?: object; text?: object } }
-    > = {};
-    timelineBuckets.forEach((item) => {
-      if (item.rdvPris > 0) {
-        marks[item.date] = {
-          customStyles: {
-            container: {
-              backgroundColor: "#DBEAFE",
-              borderRadius: 8,
-            },
-            text: {
-              color: "#1D4ED8",
-              fontWeight: "700",
-            },
-          },
-        };
-      }
-    });
-    return marks;
-  }, [timelineBuckets]);
-
-  const calendarTheme = useMemo(
-    () => ({
-      backgroundColor: "#FFFFFF",
-      calendarBackground: "#FFFFFF",
-      textSectionTitleColor: "#64748B",
-      selectedDayBackgroundColor: "#2563EB",
-      selectedDayTextColor: "#FFFFFF",
-      todayTextColor: "#2563EB",
-      dayTextColor: "#0F172A",
-      monthTextColor: "#0F172A",
-      arrowColor: "#2563EB",
-      textDayFontSize: 13,
-      textMonthFontSize: 16,
-      textDayHeaderFontSize: 11,
-    }),
-    [],
-  );
 
   const axisLabels = useMemo(() => {
     if (!timelineBuckets.length) return [];
@@ -688,15 +746,97 @@ export default function StatistiquesScreen() {
       <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
         <View style={styles.sectionHeaderRow}>
           <View>
-            <Text style={styles.sectionTitle}>Calendrier RDV</Text>
-            <Text style={styles.sectionSubtitle}>Jours avec rendez-vous</Text>
+            <Text style={styles.sectionTitle}>Rendez-vous</Text>
+            <Text style={styles.sectionSubtitle}>{weekLabel}</Text>
+          </View>
+          <View style={styles.weekNav}>
+            <Pressable onPress={() => setWeekOffset((w) => w - 1)} style={styles.weekNavBtn}>
+              <Feather name="chevron-left" size={18} color="#2563EB" />
+            </Pressable>
+            {weekOffset !== 0 && (
+              <Pressable onPress={() => { setWeekOffset(0); setSelectedDay(todayKey); }} style={styles.weekNavBtn}>
+                <Feather name="rotate-ccw" size={14} color="#2563EB" />
+              </Pressable>
+            )}
+            <Pressable onPress={() => setWeekOffset((w) => w + 1)} style={styles.weekNavBtn}>
+              <Feather name="chevron-right" size={18} color="#2563EB" />
+            </Pressable>
           </View>
         </View>
-        <Calendar
-          markedDates={markedDates}
-          markingType="custom"
-          theme={calendarTheme}
-        />
+
+        <View style={styles.dayPillRow}>
+          {weekDays.map((day) => {
+            const isToday = day === todayKey;
+            const isSelected = day === selectedDay;
+            const hasRdv = rdvByDay.has(day);
+            const d = new Date(`${day}T12:00:00`);
+            return (
+              <Pressable
+                key={day}
+                onPress={() => setSelectedDay(day)}
+                style={[
+                  styles.dayPill,
+                  isSelected && styles.dayPillActive,
+                  isToday && !isSelected && styles.dayPillToday,
+                ]}
+              >
+                <Text style={[styles.dayPillLabel, isSelected && styles.dayPillLabelActive]}>
+                  {DAY_LABELS_SHORT[d.getDay()]}
+                </Text>
+                <Text style={[styles.dayPillDate, isSelected && styles.dayPillDateActive]}>
+                  {String(d.getDate()).padStart(2, "0")}
+                </Text>
+                {hasRdv ? (
+                  <View style={[styles.dayPillDot, isSelected && styles.dayPillDotActive]} />
+                ) : (
+                  <View style={styles.dayPillDotSpacer} />
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {selectedDayRdvs.length === 0 ? (
+          <View style={styles.rdvEmpty}>
+            <Feather name="calendar" size={28} color="#CBD5E1" />
+            <Text style={styles.rdvEmptyText}>Aucun rendez-vous</Text>
+          </View>
+        ) : (
+          <View style={styles.rdvList}>
+            {selectedDayRdvs.map((item) => (
+              <Pressable
+                key={`${item.porteId}-${item.rdvDate}`}
+                style={styles.rdvCard}
+                onPress={() => onNavigateToImmeuble?.(item.immeubleId)}
+              >
+                <View style={styles.rdvTimeCol}>
+                  <View style={styles.rdvTimeBadge}>
+                    <Feather name="clock" size={11} color="#2563EB" />
+                    <Text style={styles.rdvTimeText}>{item.rdvTime || "--:--"}</Text>
+                  </View>
+                </View>
+                <View style={styles.rdvInfoCol}>
+                  <Text style={styles.rdvPorteLabel} numberOfLines={1}>
+                    Porte {item.numero}{item.nomPersonnalise ? ` · ${item.nomPersonnalise}` : ""}
+                  </Text>
+                  <Text style={styles.rdvEtageLabel}>
+                    {item.etage === 0 ? "RDC" : `${item.etage}${item.etage === 1 ? "er" : "ème"} étage`}
+                  </Text>
+                  <View style={styles.rdvAddressRow}>
+                    <Feather name="map-pin" size={11} color="#94A3B8" />
+                    <Text style={styles.rdvAddressText} numberOfLines={1}>{item.adresse}</Text>
+                  </View>
+                  {item.commentaire ? (
+                    <Text style={styles.rdvComment} numberOfLines={2}>{item.commentaire}</Text>
+                  ) : null}
+                </View>
+                <View style={styles.rdvChevron}>
+                  <Feather name="chevron-right" size={16} color="#CBD5E1" />
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
 
       <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
@@ -774,7 +914,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   kpiCard: {
-    flexBasis: "48%",
+    flexGrow: 1,
+    flexShrink: 0,
+    flexBasis: 140,
     borderRadius: 18,
     padding: 16,
     minHeight: 120,
@@ -1034,5 +1176,145 @@ const styles = StyleSheet.create({
   },
   chartToggleTextActive: {
     color: "#2563EB",
+  },
+  weekNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  weekNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayPillRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 4,
+  },
+  dayPill: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: "#F8FAFC",
+    gap: 2,
+  },
+  dayPillActive: {
+    backgroundColor: "#2563EB",
+  },
+  dayPillToday: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  dayPillLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+  },
+  dayPillLabelActive: {
+    color: "#FFFFFF",
+  },
+  dayPillDate: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  dayPillDateActive: {
+    color: "#FFFFFF",
+  },
+  dayPillDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#2563EB",
+  },
+  dayPillDotActive: {
+    backgroundColor: "#FFFFFF",
+  },
+  dayPillDotSpacer: {
+    width: 5,
+    height: 5,
+  },
+  rdvEmpty: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 28,
+    gap: 8,
+  },
+  rdvEmptyText: {
+    fontSize: 13,
+    color: "#94A3B8",
+  },
+  rdvList: {
+    gap: 8,
+  },
+  rdvCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  rdvTimeCol: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rdvTimeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  rdvTimeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#2563EB",
+  },
+  rdvInfoCol: {
+    flex: 1,
+    gap: 2,
+  },
+  rdvPorteLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  rdvEtageLabel: {
+    fontSize: 12,
+    color: "#64748B",
+  },
+  rdvAddressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
+  },
+  rdvAddressText: {
+    fontSize: 11,
+    color: "#94A3B8",
+    flex: 1,
+  },
+  rdvComment: {
+    fontSize: 11,
+    color: "#64748B",
+    fontStyle: "italic",
+    marginTop: 4,
+  },
+  rdvChevron: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 24,
   },
 });
