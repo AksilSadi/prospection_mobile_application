@@ -2,26 +2,86 @@ import { useHamburgerMenu } from "@/hooks/use-hamburger-menu";
 import { authService } from "@/services/auth";
 import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
+
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const MAX_MENU_ITEMS = 6;
 
 type MenuItemProps = {
   icon: keyof typeof Feather.glyphMap;
   label: string;
   onPress: () => void;
   isActive: boolean;
+  animValue: Animated.Value;
 };
 
-const MenuItem = memo(function MenuItem({ icon, label, onPress, isActive }: MenuItemProps) {
+const MenuItem = memo(function MenuItem({
+  icon,
+  label,
+  onPress,
+  isActive,
+  animValue,
+}: MenuItemProps) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = useCallback(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+    }).start();
+  }, [scaleAnim]);
+
+  const handlePressOut = useCallback(() => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 4,
+      useNativeDriver: true,
+    }).start();
+  }, [scaleAnim]);
+
   return (
-    <Pressable style={styles.menuItem} onPress={onPress}>
-      <View style={[styles.menuIconContainer, isActive && styles.menuIconContainerActive]}>
-        <Feather name={icon} size={22} color={isActive ? "#2563EB" : "#64748B"} />
-      </View>
-      <Text style={[styles.menuItemText, isActive && styles.menuItemTextActive]}>{label}</Text>
-      {isActive && <View style={styles.activeIndicator} />}
-    </Pressable>
+    <Animated.View
+      style={{
+        opacity: animValue,
+        transform: [
+          {
+            translateX: animValue.interpolate({
+              inputRange: [0, 1],
+              outputRange: [-20, 0],
+            }),
+          },
+          { scale: scaleAnim },
+        ],
+      }}
+    >
+      <Pressable
+        style={[styles.menuItem, isActive && styles.menuItemActive]}
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        <View
+          style={[
+            styles.menuIconContainer,
+            isActive && styles.menuIconContainerActive,
+          ]}
+        >
+          <Feather
+            name={icon}
+            size={20}
+            color={isActive ? "#2563EB" : "#64748B"}
+          />
+        </View>
+        <Text
+          style={[styles.menuItemText, isActive && styles.menuItemTextActive]}
+        >
+          {label}
+        </Text>
+        {isActive && <View style={styles.activeBar} />}
+      </Pressable>
+    </Animated.View>
   );
 });
 
@@ -30,11 +90,17 @@ type HamburgerMenuOverlayProps = {
   onNavigate: (index: number) => void;
 };
 
-export default function HamburgerMenuOverlay({ currentIndex, onNavigate }: HamburgerMenuOverlayProps) {
+export default function HamburgerMenuOverlay({
+  currentIndex,
+  onNavigate,
+}: HamburgerMenuOverlayProps) {
   const { isVisible, close } = useHamburgerMenu();
   const insets = useSafeAreaInsets();
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const itemAnims = useRef(
+    Array.from({ length: MAX_MENU_ITEMS }, () => new Animated.Value(0)),
+  ).current;
 
   const [userName, setUserName] = useState<string>("");
   const [userRole, setUserRole] = useState<string>("");
@@ -45,46 +111,10 @@ export default function HamburgerMenuOverlay({ currentIndex, onNavigate }: Hambu
       const role = await authService.getUserRole();
       setUserRole(role === "manager" ? "Manager" : "Commercial");
       setIsManager(role === "manager");
-      // You could also fetch user name from profile here if needed
       setUserName("Pro-Win");
     };
     void loadUserInfo();
   }, []);
-
-  useEffect(() => {
-    if (isVisible) {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: -300,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [isVisible, slideAnim, fadeAnim]);
-
-  const handleNavigate = useCallback((index: number) => {
-    onNavigate(index);
-    close();
-  }, [close, onNavigate]);
 
   const menuItems = useMemo(
     () => [
@@ -131,52 +161,119 @@ export default function HamburgerMenuOverlay({ currentIndex, onNavigate }: Hambu
     [currentIndex, isManager],
   );
 
+  useEffect(() => {
+    if (isVisible) {
+      itemAnims.forEach((a) => a.setValue(0));
+
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        friction: 8,
+        tension: 65,
+        useNativeDriver: true,
+      }).start();
+
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 280,
+        useNativeDriver: true,
+      }).start();
+
+      Animated.stagger(
+        60,
+        itemAnims.slice(0, menuItems.length).map((anim) =>
+          Animated.spring(anim, {
+            toValue: 1,
+            friction: 8,
+            tension: 50,
+            useNativeDriver: true,
+          }),
+        ),
+      ).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: -300,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+      ]).start();
+
+      itemAnims.forEach((a) => a.setValue(0));
+    }
+  }, [isVisible, slideAnim, fadeAnim, itemAnims, menuItems.length]);
+
+  const handleNavigate = useCallback(
+    (index: number) => {
+      onNavigate(index);
+      close();
+    },
+    [close, onNavigate],
+  );
+
   if (!isVisible) return null;
 
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <BlurView intensity={80} tint="light" style={StyleSheet.absoluteFill} />
-      <Animated.View style={[styles.dim, { opacity: fadeAnim }]} pointerEvents="none" />
+      <BlurView intensity={60} tint="dark" style={StyleSheet.absoluteFill} />
+      <Animated.View
+        style={[styles.dim, { opacity: fadeAnim }]}
+        pointerEvents="none"
+      />
       <Pressable style={styles.backdrop} onPress={close} />
 
       <Animated.View
         style={[
           styles.panel,
           {
-            paddingTop: insets.top + 16,
-            paddingBottom: insets.bottom + 16,
+            paddingTop: insets.top + 12,
+            paddingBottom: insets.bottom + 12,
             transform: [{ translateX: slideAnim }],
           },
         ]}
       >
-        <View style={styles.header}>
-          <View style={styles.headerContent}>
+        <View style={styles.profileSection}>
+          <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Feather name="user" size={22} color="#2563EB" />
+              <Feather name="user" size={24} color="#2563EB" />
             </View>
-            <View style={styles.headerText}>
-              <Text style={styles.headerTitle}>{userName}</Text>
-              <Text style={styles.headerSubtitle}>{userRole}</Text>
+            <View style={styles.onlineIndicator} />
+          </View>
+          <View style={styles.profileInfo}>
+            <Text style={styles.profileName}>{userName}</Text>
+            <View style={styles.roleBadge}>
+              <View style={styles.roleDot} />
+              <Text style={styles.roleText}>{userRole}</Text>
             </View>
           </View>
           <Pressable style={styles.closeButton} onPress={close}>
-            <Feather name="x" size={20} color="#64748B" />
+            <Feather name="x" size={18} color="#64748B" />
           </Pressable>
         </View>
 
         <View style={styles.divider} />
 
-        <View style={styles.menuSection}>
-          <Text style={styles.sectionTitle}>Navigation</Text>
-          {menuItems.map((item) => (
+        <View style={styles.navigationSection}>
+          <Text style={styles.sectionLabel}>Navigation</Text>
+          {menuItems.map((item, index) => (
             <MenuItem
               key={item.key}
               icon={item.icon}
               label={item.label}
               isActive={item.isActive}
+              animValue={itemAnims[index]}
               onPress={() => handleNavigate(item.targetIndex)}
             />
           ))}
+        </View>
+
+        <View style={styles.footer}>
+          <View style={styles.footerDivider} />
+          <Text style={styles.versionText}>Pro-Win v1.0.0</Text>
         </View>
       </Animated.View>
     </View>
@@ -190,7 +287,7 @@ const styles = StyleSheet.create({
   },
   dim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15, 23, 42, 0.3)",
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -200,86 +297,119 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 280,
+    width: 288,
     backgroundColor: "#FFFFFF",
+    borderTopRightRadius: 24,
+    borderBottomRightRadius: 24,
     shadowColor: "#0F172A",
-    shadowOpacity: 0.24,
-    shadowRadius: 20,
-    shadowOffset: { width: 4, height: 0 },
-    elevation: 10,
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    shadowOffset: { width: 8, height: 0 },
+    elevation: 12,
   },
-  header: {
+
+  profileSection: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
+    paddingVertical: 16,
     gap: 12,
-    flex: 1,
+  },
+  avatarContainer: {
+    position: "relative",
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: "#EFF6FF",
-    borderWidth: 1.5,
+    borderWidth: 2,
     borderColor: "#DBEAFE",
     alignItems: "center",
     justifyContent: "center",
   },
-  headerText: {
+  onlineIndicator: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#10B981",
+    borderWidth: 2.5,
+    borderColor: "#FFFFFF",
+  },
+  profileInfo: {
     flex: 1,
   },
-  headerTitle: {
-    fontSize: 16,
+  profileName: {
+    fontSize: 17,
     fontWeight: "700",
     color: "#0F172A",
+    letterSpacing: -0.3,
   },
-  headerSubtitle: {
+  roleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 5,
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
+  roleDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#2563EB",
+  },
+  roleText: {
     fontSize: 12,
-    color: "#64748B",
-    marginTop: 2,
+    fontWeight: "600",
+    color: "#2563EB",
   },
   closeButton: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: "#F1F5F9",
+    borderRadius: 12,
+    backgroundColor: "#F8FAFC",
     alignItems: "center",
     justifyContent: "center",
   },
+
   divider: {
     height: 1,
     backgroundColor: "#E2E8F0",
-    marginHorizontal: 16,
-    marginBottom: 8,
+    marginHorizontal: 20,
   },
-  menuSection: {
+
+  navigationSection: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 20,
   },
-  sectionTitle: {
+  sectionLabel: {
     fontSize: 11,
     fontWeight: "700",
     color: "#94A3B8",
     textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 12,
-    marginLeft: 4,
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    marginLeft: 8,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 14,
-    marginBottom: 4,
+    marginBottom: 2,
     position: "relative",
+  },
+  menuItemActive: {
+    backgroundColor: "#EFF6FF",
   },
   menuIconContainer: {
     width: 40,
@@ -291,7 +421,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   menuIconContainerActive: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: "#DBEAFE",
   },
   menuItemText: {
     fontSize: 15,
@@ -301,13 +431,31 @@ const styles = StyleSheet.create({
   },
   menuItemTextActive: {
     color: "#2563EB",
+    fontWeight: "700",
   },
-  activeIndicator: {
+  activeBar: {
     width: 4,
     height: 24,
     borderRadius: 999,
     backgroundColor: "#2563EB",
     position: "absolute",
-    right: 0,
+    left: 0,
+  },
+
+  footer: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  footerDivider: {
+    height: 1,
+    backgroundColor: "#E2E8F0",
+    marginHorizontal: 4,
+    marginBottom: 12,
+  },
+  versionText: {
+    fontSize: 11,
+    color: "#94A3B8",
+    textAlign: "center",
+    marginTop: 12,
   },
 });
