@@ -378,8 +378,8 @@ export default function StatistiquesScreen({
   }, [timelineData, todayKey, periodDays, realRdvByDay, realContratsByDay]);
 
   const chartWidth = Math.min(width - 40, 520);
-  const pieSize = 240;
-  const pieRenderSize = Math.min(chartWidth, pieSize);
+  const pieSize = 160;
+  const pieRenderSize = Math.min(chartWidth * 0.4, pieSize);
   const formatDayLabel = useCallback((dateKey: string, withMonth = false) => {
     const date = new Date(`${dateKey}T00:00:00`);
     const day = String(date.getDate()).padStart(2, "0");
@@ -407,13 +407,17 @@ export default function StatistiquesScreen({
     [pieData],
   );
 
+  const pieTotal = useMemo(
+    () => (hasPieData ? pieData.reduce((sum, item) => sum + item.value, 0) : 0),
+    [pieData, hasPieData],
+  );
+
   const piePercentages = useMemo(() => {
-    const total = pieData.reduce((sum, item) => sum + item.value, 0);
     return pieData.map((item) => ({
       ...item,
-      percent: total ? Math.round((item.value / total) * 100) : 0,
+      percent: pieTotal ? Math.round((item.value / pieTotal) * 100) : 0,
     }));
-  }, [pieData]);
+  }, [pieData, pieTotal]);
 
   const axisLabels = useMemo(() => {
     if (!timelineBuckets.length) return [];
@@ -733,6 +737,51 @@ export default function StatistiquesScreen({
             />
           </View>
         </View>
+
+        <View style={styles.overviewDivider} />
+
+        <View style={styles.pieSection}>
+          <Text style={styles.pieSectionTitle}>Répartition</Text>
+          <View style={styles.pieRow}>
+            <View style={styles.pieChartWrap}>
+              <View
+                style={[
+                  styles.chartSurface,
+                  { width: pieRenderSize, height: pieRenderSize },
+                ]}
+              >
+                <PolarChart
+                  data={pieData}
+                  labelKey="label"
+                  valueKey="value"
+                  colorKey="color"
+                  containerStyle={{ width: pieRenderSize, height: pieRenderSize }}
+                  canvasStyle={{ width: pieRenderSize, height: pieRenderSize }}
+                >
+                  <Pie.Chart innerRadius={60} size={pieRenderSize} />
+                </PolarChart>
+              </View>
+              {hasPieData && (
+                <View style={styles.pieCenterLabel}>
+                  <Text style={styles.pieCenterValue}>{pieTotal}</Text>
+                  <Text style={styles.pieCenterHint}>portes</Text>
+                </View>
+              )}
+            </View>
+            {hasPieData && (
+              <View style={styles.pieLegendCol}>
+                {piePercentages.map((item) => (
+                  <View key={item.label} style={styles.pieLegendRow}>
+                    <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                    <Text style={styles.pieLegendLabel}>{item.label}</Text>
+                    <Text style={styles.pieLegendValue}>{item.value}</Text>
+                    <Text style={styles.pieLegendPercent}>{item.percent}%</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
       </View>
 
       <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
@@ -831,49 +880,7 @@ export default function StatistiquesScreen({
         )}
       </View>
 
-      <View style={[styles.sectionCard, styles.sectionCardTopSpacing]}>
-        <View style={styles.sectionHeaderRow}>
-          <View>
-            <Text style={styles.sectionTitle}>Répartition des statuts</Text>
-            <Text style={styles.sectionSubtitle}>
-              Contrats, RDV, refus, absents
-            </Text>
-          </View>
-        </View>
-        <View style={styles.chartCard}>
-          <View
-            style={[
-              styles.chartSurface,
-              { width: pieRenderSize, height: pieRenderSize },
-            ]}
-          >
-            <PolarChart
-              data={pieData}
-              labelKey="label"
-              valueKey="value"
-              colorKey="color"
-              containerStyle={{ width: pieRenderSize, height: pieRenderSize }}
-              canvasStyle={{ width: pieRenderSize, height: pieRenderSize }}
-            >
-              <Pie.Chart innerRadius={72} size={pieRenderSize} />
-            </PolarChart>
-          </View>
-          {hasPieData && (
-            <View style={styles.pieLegend}>
-              {piePercentages.map((item) => (
-                <View key={item.label} style={styles.legendItem}>
-                  <View
-                    style={[styles.legendDot, { backgroundColor: item.color }]}
-                  />
-                  <Text style={styles.legendLabel}>
-                    {item.label} · {item.percent}%
-                  </Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      </View>
+
       </Animated.View>
     </ScrollView>
   );
@@ -1011,9 +1018,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#E2E8F0",
     marginHorizontal: 12,
   },
-  chartCard: {
-    alignItems: "center",
-  },
+
   chartSurface: {
     alignSelf: "center",
     backgroundColor: "#FFFFFF",
@@ -1031,25 +1036,71 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
 
-  pieLegend: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  pieSection: {
     gap: 10,
-    justifyContent: "center",
   },
-  legendItem: {
+  pieSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  pieRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 20,
+  },
+  pieChartWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pieCenterLabel: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pieCenterValue: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  pieCenterHint: {
+    fontSize: 11,
+    color: "#94A3B8",
+    marginTop: -2,
+  },
+  pieLegendCol: {
+    flex: 1,
+    gap: 10,
+  },
+  pieLegendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  legendLabel: {
-    fontSize: 11,
+  pieLegendLabel: {
+    flex: 1,
+    fontSize: 13,
     color: "#64748B",
+  },
+  pieLegendValue: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0F172A",
+    minWidth: 24,
+    textAlign: "right",
+  },
+  pieLegendPercent: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#94A3B8",
+    minWidth: 36,
+    textAlign: "right",
   },
   overviewCard: {
     borderRadius: 20,
