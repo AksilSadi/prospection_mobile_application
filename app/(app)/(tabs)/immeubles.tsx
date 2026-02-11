@@ -1,4 +1,4 @@
-﻿import AddImmeubleSheet from "@/components/immeubles/AddImmeubleSheet";
+import AddImmeubleSheet from "@/components/immeubles/AddImmeubleSheet";
 import ImmeubleDetailsView from "@/components/immeubles/ImmeubleDetailsScreen";
 import { useCreateImmeuble } from "@/hooks/api/use-create-immeuble";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
@@ -23,6 +23,8 @@ type ImmeublesScreenProps = {
   onSwipeLockChange?: (locked: boolean) => void;
   onHamburgerVisibilityChange?: (visible: boolean) => void;
   onHeaderVisibilityChange?: (visible: boolean) => void;
+  autoSelectImmeubleId?: number | null;
+  onAutoSelectConsumed?: () => void;
 };
 
 type ListRow = { _type: "controls" } | Immeuble[];
@@ -54,6 +56,8 @@ export default function ImmeublesScreen({
   onSwipeLockChange,
   onHamburgerVisibilityChange,
   onHeaderVisibilityChange,
+  autoSelectImmeubleId,
+  onAutoSelectConsumed,
 }: ImmeublesScreenProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -322,6 +326,18 @@ export default function ImmeublesScreen({
     },
     [onHamburgerVisibilityChange, onHeaderVisibilityChange, onSwipeLockChange],
   );
+
+  useEffect(() => {
+    if (autoSelectImmeubleId == null) return;
+    if (!immeubles.length) return;
+    const exists = immeubles.some((imm) => imm.id === autoSelectImmeubleId);
+    if (!exists) {
+      onAutoSelectConsumed?.();
+      return;
+    }
+    handleOpenImmeuble(autoSelectImmeubleId);
+    onAutoSelectConsumed?.();
+  }, [autoSelectImmeubleId, handleOpenImmeuble, immeubles, onAutoSelectConsumed]);
 
   const totalPortes = useMemo(() => {
     return immeubles.reduce(
