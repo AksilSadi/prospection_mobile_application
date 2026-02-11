@@ -17,7 +17,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { BarChart, LineChart } from "react-native-gifted-charts";
+import { LineChart } from "react-native-gifted-charts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Pie, PolarChart } from "victory-native";
 
@@ -65,7 +65,6 @@ export default function StatistiquesScreen({
   const [role, setRole] = useState<string | null>(null);
   const periodLabel = "7 derniers jours";
   const [chartKey, setChartKey] = useState(0);
-  const [activeChart, setActiveChart] = useState<"portes" | "rdv" | "contrats">("portes");
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const skeletonPulse = useRef(new Animated.Value(0)).current;
   const wasFocusedRef = useRef(false);
@@ -293,6 +292,26 @@ export default function StatistiquesScreen({
     };
   }, [isLoading, skeletonPulse]);
 
+  const { realRdvByDay, realContratsByDay } = useMemo(() => {
+    const rdvMap = new Map<string, number>();
+    const contratsMap = new Map<string, number>();
+    const immeubles = workspaceState.data?.immeubles ?? [];
+    for (const imm of immeubles) {
+      for (const porte of imm.portes ?? []) {
+        const st = typeof porte.statut === "string" ? porte.statut : "";
+        const dateKey = porte.derniereVisite?.slice(0, 10);
+        if (!dateKey) continue;
+        if (st === "RENDEZ_VOUS_PRIS") {
+          rdvMap.set(dateKey, (rdvMap.get(dateKey) ?? 0) + 1);
+        }
+        if (st === "CONTRAT_SIGNE") {
+          contratsMap.set(dateKey, (contratsMap.get(dateKey) ?? 0) + 1);
+        }
+      }
+    }
+    return { realRdvByDay: rdvMap, realContratsByDay: contratsMap };
+  }, [workspaceState.data]);
+
   const timelineBuckets = useMemo(() => {
     const days = 7;
     const end = new Date(`${todayKey}T00:00:00.000Z`);
@@ -312,12 +331,12 @@ export default function StatistiquesScreen({
       const point = byDay.get(key);
       return {
         date: key,
-        rdvPris: point?.rdvPris || 0,
+        rdvPris: realRdvByDay.get(key) ?? (point?.rdvPris || 0),
         portes: point?.portesProspectees || 0,
-        contrats: point?.contratsSignes || 0,
+        contrats: realContratsByDay.get(key) ?? (point?.contratsSignes || 0),
       };
     });
-  }, [timelineData, todayKey]);
+  }, [timelineData, todayKey, realRdvByDay, realContratsByDay]);
 
   const chartWidth = Math.min(width - 40, 520);
   const pieSize = 240;
@@ -366,27 +385,26 @@ export default function StatistiquesScreen({
     });
   }, [timelineBuckets]);
 
-  const maxPortes = useMemo(() => {
-    return timelineBuckets.reduce((max, item) => Math.max(max, item.portes), 0);
-  }, [timelineBuckets]);
-
   const chartDomain = useMemo(() => {
-    const maxVal = Math.max(1, maxPortes);
+    const maxVal = Math.max(
+      1,
+      timelineBuckets.reduce(
+        (m, item) => Math.max(m, item.portes, item.rdvPris, item.contrats),
+        0,
+      ),
+    );
     const exponent = Math.floor(Math.log10(maxVal));
     const base = maxVal / Math.pow(10, exponent);
     const stepBase = base <= 1 ? 1 : base <= 2 ? 2 : base <= 5 ? 5 : 10;
     const step = stepBase * Math.pow(10, exponent);
     const roundedMax = Math.max(step * 2, Math.ceil(maxVal / step) * step);
-    return { y: [0, roundedMax] as [number, number] };
-  }, [maxPortes]);
-
-  const yAxisStep = useMemo(() => {
-    return Math.max(1, Math.round(chartDomain.y[1] / 2)); 
-  }, [chartDomain]);
-
-  const yAxisLabels = useMemo(() => {     
-    return [chartDomain.y[1], yAxisStep, 0].map((val) => String(val));
-  }, [chartDomain, yAxisStep]);
+    const yStep = Math.max(1, Math.round(roundedMax / 2));
+    return {
+      max: roundedMax,
+      step: yStep,
+      labels: [roundedMax, yStep, 0].map((v) => String(v)),
+    };
+  }, [timelineBuckets]);
 
   const rangeLabel = useMemo(() => {
     if (!timelineBuckets.length) return "—";
@@ -399,20 +417,16 @@ export default function StatistiquesScreen({
   }, [formatDayLabel, timelineBuckets]);
 
   const { portesChartData, rdvChartData, contratsChartData } = useMemo(() => {
-    const portes: { value: number; label: string; dataPointText: string }[] = [];
-    const rdvPoints: { value: number; label: string }[] = [];
-    const contratsPoints: { value: number; label: string }[] = [];
+    const portes: { value: number; label: string }[] = [];
+    const rdvPoints: { value: number }[] = [];
+    const contratsPoints: { value: number }[] = [];
 
     for (let index = 0; index < timelineBuckets.length; index += 1) {
       const item = timelineBuckets[index];
       const label = axisLabels[index] ?? "";
-      portes.push({
-        value: item.portes,
-        label,
-        dataPointText: String(item.portes),
-      });
-      rdvPoints.push({ value: item.rdvPris, label });
-      contratsPoints.push({ value: item.contrats, label });
+      portes.push({ value: item.portes, label });
+      rdvPoints.push({ value: item.rdvPris });
+      contratsPoints.push({ value: item.contrats });
     }
 
     return {
@@ -422,43 +436,13 @@ export default function StatistiquesScreen({
     };
   }, [axisLabels, timelineBuckets]);
 
-  const renderPortesPointerLabel = useCallback(
-    (items: { value?: number }[]) => {
-      const item = items?.[0];
-      return (
-        <View style={styles.tooltipBubble}>
-          <Text style={styles.tooltipValue}>{item?.value ?? 0} portes</Text>
-        </View>
-      );
-    },
-    [],
-  );
-
-  const lineChartSpacing = useMemo(
+  const chartSpacing = useMemo(
     () =>
       Math.max(
         28,
         Math.floor((chartWidth - 80) / Math.max(1, portesChartData.length - 1)),
       ),
     [chartWidth, portesChartData.length],
-  );
-
-  const barChartSpacing = useMemo(
-    () =>
-      Math.max(
-        22,
-        Math.floor((chartWidth - 80) / Math.max(1, rdvChartData.length - 1)),
-      ),
-    [chartWidth, rdvChartData.length],
-  );
-
-  const contratsLineSpacing = useMemo(
-    () =>
-      Math.max(
-        28,
-        Math.floor((chartWidth - 80) / Math.max(1, contratsChartData.length - 1)),
-      ),
-    [chartWidth, contratsChartData.length],
   );
 
   useEffect(() => {
@@ -604,142 +588,71 @@ export default function StatistiquesScreen({
             <Text style={styles.sectionSubtitle}>{periodLabel} · {rangeLabel}</Text>
           </View>
         </View>
-        <View style={styles.chartToggleRow}>
-          <Pressable
-            style={[styles.chartToggle, activeChart === "portes" && styles.chartToggleActive]}
-            onPress={() => setActiveChart("portes")}
-          >
-            <View style={[styles.chartToggleDot, { backgroundColor: "#2563EB" }]} />
-            <Text style={[styles.chartToggleText, activeChart === "portes" && styles.chartToggleTextActive]}>Portes</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.chartToggle, activeChart === "rdv" && styles.chartToggleActive]}
-            onPress={() => setActiveChart("rdv")}
-          >
-            <View style={[styles.chartToggleDot, { backgroundColor: "#10B981" }]} />
-            <Text style={[styles.chartToggleText, activeChart === "rdv" && styles.chartToggleTextActive]}>RDV</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.chartToggle, activeChart === "contrats" && styles.chartToggleActive]}
-            onPress={() => setActiveChart("contrats")}
-          >
-            <View style={[styles.chartToggleDot, { backgroundColor: "#F59E0B" }]} />
-            <Text style={[styles.chartToggleText, activeChart === "contrats" && styles.chartToggleTextActive]}>Contrats</Text>
-          </Pressable>
+        <View style={styles.chartLegendRow}>
+          <View style={styles.chartLegendItem}>
+            <View style={[styles.chartLegendDot, { backgroundColor: "#2563EB" }]} />
+            <Text style={styles.chartLegendText}>Portes</Text>
+          </View>
+          <View style={styles.chartLegendItem}>
+            <View style={[styles.chartLegendDot, { backgroundColor: "#10B981" }]} />
+            <Text style={styles.chartLegendText}>RDV</Text>
+          </View>
+          <View style={styles.chartLegendItem}>
+            <View style={[styles.chartLegendDot, { backgroundColor: "#F59E0B" }]} />
+            <Text style={styles.chartLegendText}>Contrats</Text>
+          </View>
         </View>
         <View style={styles.giftedChartWrap}>
-          {activeChart === "portes" && (
-            <LineChart
-              key={`portes-chart-${chartKey}`}
-              data={portesChartData}
-              areaChart
-              curved
-              thickness={2}
-              color="#2563EB"
-              startFillColor="rgba(37, 99, 235, 0.22)"
-              endFillColor="rgba(37, 99, 235, 0)"
-              startOpacity={0.25}
-              endOpacity={0}
-              maxValue={chartDomain.y[1]}
-              noOfSections={2}
-              stepValue={yAxisStep}
-              yAxisLabelWidth={32}
-              yAxisTextStyle={styles.yAxisLabel}
-              yAxisColor="transparent"
-              yAxisThickness={0}
-              xAxisColor="transparent"
-              xAxisThickness={0}
-              hideRules
-              rulesColor="transparent"
-              yAxisLabelTexts={yAxisLabels}
-              xAxisLabelTextStyle={styles.axisLabel}
-              showYAxisIndices={false}
-              isAnimated
-              animateOnDataChange
-              animationDuration={350}
-              spacing={lineChartSpacing}
-              initialSpacing={12}
-              endSpacing={12}
-              hideDataPoints
-              focusEnabled
-              showStripOnFocus={false}
-              stripColor="transparent"
-              stripWidth={0}
-              pointerConfig={{
-                pointerStripUptoDataPoint: false,
-                pointerStripColor: "transparent",
-                pointerStripWidth: 0,
-                pointerColor: "#2563EB",
-                radius: 4,
-                pointerLabelWidth: 110,
-                pointerLabelHeight: 40,
-                autoAdjustPointerLabelPosition: true,
-                shiftPointerLabelY: -40,
-                pointerLabelComponent: renderPortesPointerLabel,
-              }}
-            />
-          )}
-          {activeChart === "rdv" && (
-            <BarChart
-              data={rdvChartData}
-              barWidth={16}
-              spacing={barChartSpacing}
-              initialSpacing={10}
-              endSpacing={10}
-              height={180}
-              maxValue={chartDomain.y[1]}
-              noOfSections={2}
-              stepValue={yAxisStep}
-              yAxisLabelWidth={32}
-              yAxisTextStyle={styles.yAxisLabel}
-              yAxisColor="transparent"
-              yAxisThickness={0}
-              xAxisColor="transparent"
-              xAxisThickness={0}
-              xAxisLabelTextStyle={styles.axisLabel}
-              showYAxisIndices={false}
-              isAnimated
-              animationDuration={350}
-              frontColor="#10B981"
-              hideRules
-              rulesColor="transparent"
-              yAxisLabelTexts={yAxisLabels}
-            />
-          )}
-          {activeChart === "contrats" && (
-            <LineChart
-              data={contratsChartData}
-              areaChart
-              curved
-              thickness={2}
-              color="#F59E0B"
-              startFillColor="rgba(245, 158, 11, 0.18)"
-              endFillColor="rgba(245, 158, 11, 0)"
-              startOpacity={0.25}
-              endOpacity={0}
-              maxValue={chartDomain.y[1]}
-              noOfSections={2}
-              stepValue={yAxisStep}
-              yAxisLabelWidth={32}
-              yAxisTextStyle={styles.yAxisLabel}
-              yAxisColor="transparent"
-              yAxisThickness={0}
-              xAxisColor="transparent"
-              xAxisThickness={0}
-              hideRules
-              rulesColor="transparent"
-              yAxisLabelTexts={yAxisLabels}
-              xAxisLabelTextStyle={styles.axisLabel}
-              showYAxisIndices={false}
-              spacing={contratsLineSpacing}
-              initialSpacing={12}
-              endSpacing={12}
-              hideDataPoints
-              isAnimated
-              animateOnDataChange
-              animationDuration={350}
-            />
-          )}
+          <LineChart
+            key={`activity-chart-${chartKey}`}
+            data={portesChartData}
+            data2={rdvChartData}
+            data3={contratsChartData}
+            curved
+            thickness={2.5}
+            color="#2563EB"
+            color2="#10B981"
+            color3="#F59E0B"
+            areaChart
+            startFillColor="rgba(37, 99, 235, 0.12)"
+            endFillColor="rgba(37, 99, 235, 0)"
+            startOpacity={0.15}
+            endOpacity={0}
+            startFillColor2="rgba(16, 185, 129, 0.12)"
+            endFillColor2="rgba(16, 185, 129, 0)"
+            startOpacity2={0.15}
+            endOpacity2={0}
+            startFillColor3="rgba(245, 158, 11, 0.12)"
+            endFillColor3="rgba(245, 158, 11, 0)"
+            startOpacity3={0.15}
+            endOpacity3={0}
+            maxValue={chartDomain.max}
+            noOfSections={2}
+            stepValue={chartDomain.step}
+            yAxisLabelWidth={32}
+            yAxisTextStyle={styles.yAxisLabel}
+            yAxisColor="transparent"
+            yAxisThickness={0}
+            xAxisColor="#E2E8F0"
+            xAxisThickness={1}
+            hideRules
+            rulesColor="transparent"
+            yAxisLabelTexts={chartDomain.labels}
+            xAxisLabelTextStyle={styles.axisLabel}
+            showYAxisIndices={false}
+            isAnimated
+            animateOnDataChange
+            animationDuration={350}
+            spacing={chartSpacing}
+            initialSpacing={12}
+            endSpacing={12}
+            dataPointsColor1="#2563EB"
+            dataPointsColor2="#10B981"
+            dataPointsColor3="#F59E0B"
+            dataPointsRadius1={3}
+            dataPointsRadius2={3}
+            dataPointsRadius3={3}
+          />
         </View>
       </View>
 
@@ -1041,23 +954,7 @@ const styles = StyleSheet.create({
   giftedChartWrap: {
     paddingTop: 8,
   },
-  tooltipBubble: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  tooltipValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#0F172A",
-    textAlign: "center",
-  },
+
   pieLegend: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -1145,37 +1042,25 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: "#E2E8F0",
   },
-  chartToggleRow: {
+  chartLegendRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 16,
+    justifyContent: "center",
   },
-  chartToggle: {
+  chartLegendItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    backgroundColor: "#FFFFFF",
   },
-  chartToggleActive: {
-    borderColor: "#2563EB",
-    backgroundColor: "#EFF6FF",
+  chartLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
-  chartToggleDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  chartToggleText: {
+  chartLegendText: {
     fontSize: 12,
     fontWeight: "600",
     color: "#64748B",
-  },
-  chartToggleTextActive: {
-    color: "#2563EB",
   },
   weekNav: {
     flexDirection: "row",
