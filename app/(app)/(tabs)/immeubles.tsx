@@ -60,8 +60,10 @@ export default function ImmeublesScreen({
   onAutoSelectConsumed,
 }: ImmeublesScreenProps) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height: screenHeight } = useWindowDimensions();
+  const isLandscape = width > screenHeight;
   const isTablet = width >= 768;
+  const columnsPerRow = isLandscape ? 3 : 2;
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -245,17 +247,17 @@ export default function ImmeublesScreen({
     ]).start();
   }, [detailsOpacity, detailsTranslate, selectedImmeubleId]);
 
-  const immeublePairs = useMemo(() => {
-    const pairs: Immeuble[][] = [];
-    for (let i = 0; i < immeublesEnCours.length; i += 2) {
-      pairs.push(immeublesEnCours.slice(i, i + 2));
+  const immeubleRows = useMemo(() => {
+    const rows: Immeuble[][] = [];
+    for (let i = 0; i < immeublesEnCours.length; i += columnsPerRow) {
+      rows.push(immeublesEnCours.slice(i, i + columnsPerRow));
     }
-    return pairs;
-  }, [immeublesEnCours]);
+    return rows;
+  }, [immeublesEnCours, columnsPerRow]);
 
   const listData = useMemo<ListRow[]>(
-    () => [{ _type: "controls" }, ...immeublePairs],
-    [immeublePairs],
+    () => [{ _type: "controls" }, ...immeubleRows],
+    [immeubleRows],
   );
 
   const getRowKey = useCallback((row: ListRow, index: number) => {
@@ -705,7 +707,9 @@ export default function ImmeublesScreen({
                     </Animated.View>
                   );
                 })}
-                {row.length === 1 && <View style={styles.cardPlaceholder} />}
+                {row.length < columnsPerRow && Array.from({ length: columnsPerRow - row.length }).map((_, i) => (
+                  <View key={`placeholder-${i}`} style={styles.cardPlaceholder} />
+                ))}
               </View>
             )
           }
@@ -971,11 +975,9 @@ const styles = StyleSheet.create({
   },
   cardWrap: {
     flex: 1,
-    maxWidth: 380,
   },
   card: {
     flex: 1,
-    maxWidth: 380,
     backgroundColor: "#FFFFFF",
     borderRadius: 22,
     padding: 16,
@@ -989,7 +991,6 @@ const styles = StyleSheet.create({
   },
   cardPlaceholder: {
     flex: 1,
-    maxWidth: 380,
   },
   cardHeader: {
     flexDirection: "row",

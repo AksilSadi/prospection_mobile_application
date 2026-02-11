@@ -64,7 +64,8 @@ export default function StatistiquesScreen({
   onNavigateToImmeuble,
 }: StatistiquesScreenProps = {}) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width, height: screenHeight } = useWindowDimensions();
+  const isLandscape = width > screenHeight;
   const isFocused = useIsFocused();
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -377,9 +378,11 @@ export default function StatistiquesScreen({
     return weeks;
   }, [timelineData, todayKey, periodDays, realRdvByDay, realContratsByDay]);
 
-  const chartWidth = Math.min(width - 40, 520);
-  const pieSize = 160;
-  const pieRenderSize = Math.min(chartWidth * 0.4, pieSize);
+  const contentWidth = width - (isLandscape ? 120 : 40);
+  const chartWidth = isLandscape ? Math.min(contentWidth - 40, 900) : Math.min(contentWidth, 520);
+  const chartHeight = isLandscape ? 220 : 180;
+  const pieSize = isLandscape ? 180 : 160;
+  const pieRenderSize = Math.min(isLandscape ? contentWidth * 0.25 : contentWidth * 0.4, pieSize);
   const formatDayLabel = useCallback((dateKey: string, withMonth = false) => {
     const date = new Date(`${dateKey}T00:00:00`);
     const day = String(date.getDate()).padStart(2, "0");
@@ -501,10 +504,10 @@ export default function StatistiquesScreen({
   const chartSpacing = useMemo(
     () =>
       Math.max(
-        28,
+        isLandscape ? 16 : 28,
         Math.floor((chartWidth - 80) / Math.max(1, portesChartData.length - 1)),
       ),
-    [chartWidth, portesChartData.length],
+    [chartWidth, portesChartData.length, isLandscape],
   );
 
   useEffect(() => {
@@ -690,6 +693,8 @@ export default function StatistiquesScreen({
               data={portesChartData}
               data2={rdvChartData}
               data3={contratsChartData}
+              height={chartHeight}
+              width={chartWidth}
               curved
               thickness={2.5}
               color="#2563EB"
@@ -758,7 +763,7 @@ export default function StatistiquesScreen({
                   containerStyle={{ width: pieRenderSize, height: pieRenderSize }}
                   canvasStyle={{ width: pieRenderSize, height: pieRenderSize }}
                 >
-                  <Pie.Chart innerRadius={60} size={pieRenderSize} />
+                  <Pie.Chart innerRadius={pieRenderSize * 0.36} size={pieRenderSize} />
                 </PolarChart>
               </View>
               {hasPieData && (
