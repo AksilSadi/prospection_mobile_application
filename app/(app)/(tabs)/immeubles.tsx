@@ -68,10 +68,10 @@ export default function ImmeublesScreen({
   const [role, setRole] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const searchInputRef = useRef<TextInput | null>(null);
   const filterChipAnimsRef = useRef(new Map<string, Animated.Value>()).current;
-  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [filtersVisible, setFiltersVisible] = useState(true);
   const [progressFilter, setProgressFilter] = useState("incomplete");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [selectedImmeubleId, setSelectedImmeubleId] = useState<number | null>(
@@ -94,6 +94,11 @@ export default function ImmeublesScreen({
     filterChipAnimsRef.set(key, next);
     return next;
   };
+
+  useEffect(() => {
+    if (!showFilters) return;
+    FILTER_CHIPS.forEach((chip) => getFilterChipAnim(chip.key).setValue(1));
+  }, [showFilters]);
 
   const handleFilterToggle = () => {
     if (showFilters) {
@@ -589,10 +594,17 @@ export default function ImmeublesScreen({
                       </Pressable>
                     )}
                     <Pressable
-                      style={styles.filterButton}
+                      style={[
+                        styles.filterButton,
+                        showFilters && styles.filterButtonActive,
+                      ]}
                       onPress={handleFilterToggle}
                     >
-                      <Feather name="sliders" size={16} color="#2563EB" />
+                      <Feather
+                        name="sliders"
+                        size={16}
+                        color={showFilters ? "#FFFFFF" : "#2563EB"}
+                      />
                     </Pressable>
                   </View>
                   {isSearchFocused && (
