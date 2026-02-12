@@ -25,6 +25,8 @@ type WeeklyData = {
 };
 
 // Simple custom bar chart component
+const BAR_AREA_HEIGHT = 140;
+
 const SimpleBarChart = memo(function SimpleBarChart({
   data,
   color = "#2563EB",
@@ -37,13 +39,13 @@ const SimpleBarChart = memo(function SimpleBarChart({
   return (
     <View style={styles.chartContainer}>
       {data.map((item, index) => {
-        const barHeight = (item.doors / maxValue) * 140;
+        const barHeight = Math.max((item.doors / maxValue) * BAR_AREA_HEIGHT, 4);
+        const topSpace = BAR_AREA_HEIGHT - barHeight;
         return (
           <View key={index} style={styles.barColumn}>
-            <View style={styles.barValueContainer}>
-              <Text style={[styles.barValue, { color }]}>{item.doors}</Text>
-            </View>
+            <Text style={[styles.barValue, { color }]}>{item.doors}</Text>
             <View style={styles.barWrapper}>
+              <View style={{ height: topSpace }} />
               <View
                 style={[
                   styles.bar,
@@ -357,16 +359,48 @@ export default function DashboardScreen() {
 
             {/* Pagination Indicators */}
             <View style={styles.paginationContainer}>
-              {[0, 1].map((index) => (
-                <Pressable
-                  key={index}
-                  onPress={() => handlePaginationPress(index)}
-                  style={[
-                    styles.paginationDot,
-                    activeChartIndex === index && styles.paginationDotActive,
-                  ]}
+              <Pressable
+                onPress={() => handlePaginationPress(0)}
+                style={[
+                  styles.paginationPill,
+                  activeChartIndex === 0 && styles.paginationPillActive,
+                ]}
+              >
+                <Feather
+                  name="bar-chart-2"
+                  size={14}
+                  color={activeChartIndex === 0 ? "#2563EB" : "#94A3B8"}
                 />
-              ))}
+                <Text
+                  style={[
+                    styles.paginationLabel,
+                    activeChartIndex === 0 && styles.paginationLabelActive,
+                  ]}
+                >
+                  Portes
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handlePaginationPress(1)}
+                style={[
+                  styles.paginationPill,
+                  activeChartIndex === 1 && styles.paginationPillActive,
+                ]}
+              >
+                <Feather
+                  name="file-text"
+                  size={14}
+                  color={activeChartIndex === 1 ? "#10B981" : "#94A3B8"}
+                />
+                <Text
+                  style={[
+                    styles.paginationLabel,
+                    activeChartIndex === 1 && styles.paginationLabelActive,
+                  ]}
+                >
+                  Contrats
+                </Text>
+              </Pressable>
             </View>
           </View>
         </Animated.View>
@@ -698,7 +732,7 @@ const styles = StyleSheet.create({
   },
   chartCard: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 40,
+    borderRadius: 20,
     padding: 20,
     marginTop: 20,
     shadowColor: "#0F172A",
@@ -716,16 +750,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginTop: 16,
+    backgroundColor: "#F1F5F9",
+    borderRadius: 12,
+    padding: 4,
+    alignSelf: "center",
   },
-  paginationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#E2E8F0",
+  paginationPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
-  paginationDotActive: {
-    width: 24,
-    backgroundColor: "#2563EB",
+  paginationPillActive: {
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  paginationLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  paginationLabelActive: {
+    color: "#0F172A",
   },
   chartHeader: {
     flexDirection: "row",
