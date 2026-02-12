@@ -467,7 +467,7 @@ export default function StatistiquesScreen({
     return {
       max: roundedMax,
       step: yStep,
-      labels: [roundedMax, yStep, 0].map((v) => String(v)),
+      labels: [0, yStep, roundedMax].map((v) => String(v)),
     };
   }, [timelineBuckets]);
 

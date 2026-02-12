@@ -41,6 +41,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type DateTimePickerType = ComponentType<any> | null;
 
+type EditMode =
+  | "RENDEZ_VOUS_PRIS"
+  | "CONTRAT_SIGNE"
+  | "ARGUMENTE"
+  | "COMMENTAIRE";
+
 type StatusOption = {
   value: string;
   label: string;
@@ -291,6 +297,7 @@ type DoorPagerItemProps = {
   width: number;
   visibleStatusOptions: StatusOption[];
   onStatusSelect: (statut: string, target?: Porte) => Promise<void>;
+  onQuickComment: (target?: Porte) => void;
 };
 
 const DoorPagerItem = memo(
@@ -299,6 +306,7 @@ const DoorPagerItem = memo(
     width,
     visibleStatusOptions,
     onStatusSelect,
+    onQuickComment,
   }: DoorPagerItemProps) {
     const status = getDisplayStatus(item) ?? DEFAULT_STATUS_OPTION;
 
@@ -373,6 +381,22 @@ const DoorPagerItem = memo(
               );
             })}
           </View>
+
+          <Pressable
+            style={styles.quickCommentButton}
+            onPress={() => onQuickComment(item)}
+          >
+            <View style={styles.quickCommentIconWrap}>
+              <Feather name="message-circle" size={14} color="#1D4ED8" />
+            </View>
+            <View style={styles.quickCommentTextWrap}>
+              <Text style={styles.quickCommentTitle}>Commentaire rapide</Text>
+              <Text style={styles.quickCommentSubtitle}>
+                Ajouter une note avec ou sans statut
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={16} color="#94A3B8" />
+          </Pressable>
         </View>
       </View>
     );
@@ -382,7 +406,8 @@ const DoorPagerItem = memo(
       prev.item === next.item &&
       prev.width === next.width &&
       prev.visibleStatusOptions === next.visibleStatusOptions &&
-      prev.onStatusSelect === next.onStatusSelect
+      prev.onStatusSelect === next.onStatusSelect &&
+      prev.onQuickComment === next.onQuickComment
     );
   },
 );
@@ -394,6 +419,7 @@ type DoorPagerProps = {
   onMomentumScrollEnd: (event: any) => void;
   visibleStatusOptions: StatusOption[];
   onStatusSelect: (statut: string, target?: Porte) => Promise<void>;
+  onQuickComment: (target?: Porte) => void;
 };
 
 const DoorPager = memo(function DoorPager({
@@ -403,6 +429,7 @@ const DoorPager = memo(function DoorPager({
   onMomentumScrollEnd,
   visibleStatusOptions,
   onStatusSelect,
+  onQuickComment,
 }: DoorPagerProps) {
   const keyExtractor = useCallback((item: Porte) => String(item.id), []);
 
@@ -422,9 +449,10 @@ const DoorPager = memo(function DoorPager({
         width={width}
         visibleStatusOptions={visibleStatusOptions}
         onStatusSelect={onStatusSelect}
+        onQuickComment={onQuickComment}
       />
     ),
-    [onStatusSelect, visibleStatusOptions, width],
+    [onQuickComment, onStatusSelect, visibleStatusOptions, width],
   );
 
   return (
@@ -534,9 +562,7 @@ function ImmeubleDetailsView({
     () => (isTablet ? ["45%", "70%"] : ["40%", "65%"]),
     [isTablet],
   );
-  const [editMode, setEditMode] = useState<
-    "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | "ARGUMENTE" | null
-  >(null);
+  const [editMode, setEditMode] = useState<EditMode | null>(null);
   const [editPorte, setEditPorte] = useState<Porte | null>(null);
   const [editForm, setEditForm] = useState({
     rdvDate: "",
@@ -545,7 +571,7 @@ function ImmeubleDetailsView({
     commentaire: "",
     nomPersonnalise: "",
   });
-  const [argumenteCommentError, setArgumenteCommentError] = useState(false);
+  const [commentError, setCommentError] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const openDatePicker = useCallback(() => setShowDatePicker(true), []);
@@ -753,11 +779,11 @@ function ImmeubleDetailsView({
   const openEditSheet = useCallback(
     (
       porte: Porte,
-      mode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | "ARGUMENTE",
+      mode: EditMode,
     ) => {
       setEditPorte(porte);
       setEditMode(mode);
-      setArgumenteCommentError(false);
+      setCommentError(false);
       setEditForm({
         rdvDate: porte.rdvDate || getTodayDate(),
         rdvTime: porte.rdvTime || getNowTime(),
@@ -773,17 +799,17 @@ function ImmeubleDetailsView({
     editSheetRef.current?.dismiss();
     setEditPorte(null);
     setEditMode(null);
-    setArgumenteCommentError(false);
+    setCommentError(false);
   }, []);
 
   const handleCommentChange = useCallback(
     (value: string) => {
       setEditForm((prev) => ({ ...prev, commentaire: value }));
-      if (argumenteCommentError && value.trim().length > 0) {
-        setArgumenteCommentError(false);
+      if (commentError && value.trim().length > 0) {
+        setCommentError(false);
       }
     },
-    [argumenteCommentError],
+    [commentError],
   );
 
   const renderSheetBackdrop = useCallback(
@@ -801,18 +827,22 @@ function ImmeubleDetailsView({
 
   const saveEditSheet = async () => {
     if (!editPorte || !editMode || savingPorte) return;
-    if (editMode === "ARGUMENTE" && !editForm.commentaire.trim()) {
-      setArgumenteCommentError(true);
+    const trimmedComment = editForm.commentaire.trim();
+    const isCommentOnly = editMode === "COMMENTAIRE";
+    if ((editMode === "ARGUMENTE" || isCommentOnly) && !trimmedComment) {
+      setCommentError(true);
       return;
     }
 
     const payload: UpdatePorteInput = {
       id: editPorte.id,
-      statut: editMode,
-      commentaire: editForm.commentaire.trim() || null,
+      commentaire: trimmedComment || null,
       nomPersonnalise: editForm.nomPersonnalise.trim() || null,
-      derniereVisite: new Date().toISOString(),
     };
+    if (!isCommentOnly) {
+      payload.statut = editMode;
+      payload.derniereVisite = new Date().toISOString();
+    }
     if (editMode === "RENDEZ_VOUS_PRIS") {
       payload.rdvDate = editForm.rdvDate || getTodayDate();
       payload.rdvTime = editForm.rdvTime || null;
@@ -822,13 +852,13 @@ function ImmeubleDetailsView({
     }
 
     updateLocalPorte(editPorte.id, {
-      statut: editMode,
+      statut: isCommentOnly ? editPorte.statut : editMode,
       commentaire: payload.commentaire || null,
       nomPersonnalise: payload.nomPersonnalise || null,
       rdvDate: payload.rdvDate ?? editPorte.rdvDate,
       rdvTime: payload.rdvTime ?? editPorte.rdvTime,
       nbContrats: payload.nbContrats ?? editPorte.nbContrats,
-      derniereVisite: payload.derniereVisite,
+      derniereVisite: payload.derniereVisite ?? editPorte.derniereVisite,
     });
 
     if (!isOnline) {
@@ -854,9 +884,15 @@ function ImmeubleDetailsView({
 
     showToast(
       `Porte ${editPorte.nomPersonnalise || editPorte.numero}`,
-      editMode === "RENDEZ_VOUS_PRIS"
+      isCommentOnly
+        ? "Commentaire enregistre"
+        : editMode === "RENDEZ_VOUS_PRIS"
         ? "Rendez-vous enregistre"
-        : "Contrat signe",
+        : editMode === "CONTRAT_SIGNE"
+          ? "Contrat signe"
+          : editMode === "ARGUMENTE"
+            ? "Argument enregistre"
+            : "Statut mis a jour",
     );
     closeEditSheet();
     if (currentIndex < filteredPortes.length - 1) {
@@ -1416,6 +1452,15 @@ function ImmeubleDetailsView({
     [advanceToNextDoor, applyStatus, openEditSheet, resetStatus],
   );
 
+  const handleQuickComment = useCallback(
+    (target?: Porte) => {
+      const porte = target ?? currentPorteRef.current;
+      if (!porte) return;
+      openEditSheet(porte, "COMMENTAIRE");
+    },
+    [openEditSheet],
+  );
+
   const fabActions = useMemo<FabAction[]>(
     () => [
       {
@@ -1620,6 +1665,7 @@ function ImmeubleDetailsView({
                 onMomentumScrollEnd={handleDoorScrollEnd}
                 visibleStatusOptions={visibleStatusOptions}
                 onStatusSelect={handleStatusSelect}
+                onQuickComment={handleQuickComment}
               />
             </ScrollView>
           </Animated.View>
@@ -1631,7 +1677,7 @@ function ImmeubleDetailsView({
         editPorte={editPorte}
         editForm={editForm}
         setEditForm={setEditForm}
-        argumenteCommentError={argumenteCommentError}
+        commentError={commentError}
         onCommentChange={handleCommentChange}
         savingPorte={savingPorte}
         hasNativePicker={hasNativePicker}
@@ -2423,6 +2469,39 @@ const styles = StyleSheet.create({
   },
   statusCardWrap: {
     width: "48%",
+  },
+  quickCommentButton: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#DBEAFE",
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  quickCommentIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  quickCommentTextWrap: {
+    flex: 1,
+  },
+  quickCommentTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1E3A8A",
+  },
+  quickCommentSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: "#3B82F6",
   },
   statusIcon: {
     width: 34,

@@ -16,7 +16,12 @@ import {
 import type { Porte } from "@/types/api";
 
 type EditPorteSheetProps = {
-  editMode: "RENDEZ_VOUS_PRIS" | "CONTRAT_SIGNE" | "ARGUMENTE" | null;
+  editMode:
+    | "RENDEZ_VOUS_PRIS"
+    | "CONTRAT_SIGNE"
+    | "ARGUMENTE"
+    | "COMMENTAIRE"
+    | null;
   editPorte: Porte | null;
   editForm: {
     rdvDate: string;
@@ -34,7 +39,7 @@ type EditPorteSheetProps = {
       nomPersonnalise: string;
     }>
   >;
-  argumenteCommentError: boolean;
+  commentError: boolean;
   onCommentChange: (value: string) => void;
   savingPorte: boolean;
   hasNativePicker: boolean;
@@ -56,7 +61,7 @@ function EditPorteSheet({
   editPorte,
   editForm,
   setEditForm,
-  argumenteCommentError,
+  commentError,
   onCommentChange,
   savingPorte,
   hasNativePicker,
@@ -76,16 +81,17 @@ function EditPorteSheet({
 
   const isRdv = editMode === "RENDEZ_VOUS_PRIS";
   const isArgumente = editMode === "ARGUMENTE";
+  const isCommentOnly = editMode === "COMMENTAIRE";
 
   const heroStyle = isRdv
     ? styles.sheetHeroRdv
-    : isArgumente
+    : isArgumente || isCommentOnly
       ? styles.sheetHeroArgument
       : styles.sheetHeroContract;
 
   const heroIconStyle = isRdv
     ? styles.sheetHeroIconBlue
-    : isArgumente
+    : isArgumente || isCommentOnly
       ? styles.sheetHeroIconAmber
       : styles.sheetHeroIconGreen;
 
@@ -93,11 +99,23 @@ function EditPorteSheet({
     ? "calendar"
     : isArgumente
       ? "message-square"
-      : "award";
+      : isCommentOnly
+        ? "message-circle"
+        : "award";
 
-  const heroIconColor = isRdv ? "#1D4ED8" : isArgumente ? "#B45309" : "#047857";
+  const heroIconColor = isRdv
+    ? "#1D4ED8"
+    : isArgumente || isCommentOnly
+      ? "#B45309"
+      : "#047857";
 
-  const heroTitle = isRdv ? "Rendez-vous" : isArgumente ? "Argumente" : "Contrat signe";
+  const heroTitle = isRdv
+    ? "Rendez-vous"
+    : isArgumente
+      ? "Argumente"
+      : isCommentOnly
+        ? "Commentaire rapide"
+        : "Contrat signe";
 
   const commentSectionStyle = isArgumente
     ? [styles.sheetCard, styles.sheetCardArgument, isTablet && styles.sheetCardTablet]
@@ -333,34 +351,37 @@ function EditPorteSheet({
                 <Text
                   style={[
                     styles.sheetSectionSubtitle,
-                    isArgumente &&
-                      argumenteCommentError &&
+                    commentError &&
                       styles.sheetSectionSubtitleError,
                   ]}
                 >
-                  {isArgumente
-                    ? argumenteCommentError
-                      ? "Commentaire obligatoire"
-                      : "Decris l'argument principal avant validation"
-                    : "Notes rapides pour cette porte"}
+                  {commentError
+                    ? "Commentaire obligatoire"
+                    : isCommentOnly
+                      ? "Ajoute une note rapide, meme sans changer le statut"
+                      : "Commentaire optionnel pour ce statut"}
                 </Text>
               </View>
             </View>
-            {isArgumente && argumenteCommentError ? (
+            {commentError ? (
               <Text style={styles.sheetRequiredText}>Ce champ est obligatoire.</Text>
             ) : null}
             <TextInput
               placeholder={
                 isArgumente
                   ? "Ex: Interesse mais souhaite etre rappele le soir"
-                  : "Ajouter un commentaire..."
+                  : isCommentOnly
+                    ? "Ex: Interphone HS, repasser demain"
+                    : isRdv
+                      ? "Ex: Prefere etre contacte 30 min avant"
+                      : "Ex: Contrat signe avec le resident"
               }
               value={editForm.commentaire}
               onChangeText={onCommentChange}
               style={[
                 styles.sheetInput,
                 styles.sheetTextarea,
-                isArgumente && argumenteCommentError && styles.sheetInputError,
+                commentError && styles.sheetInputError,
               ]}
               multiline
             />
