@@ -1,4 +1,4 @@
-﻿import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
+import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
 import type { Commercial, Manager } from "@/types/api";
 import { calculateRank, RANKS } from "@/utils/business/ranks";
@@ -7,8 +7,8 @@ import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
-  Dimensions,
   Easing,
+  type LayoutChangeEvent,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,7 +17,6 @@ import {
 } from "react-native";
 import { ScrollView as GestureScrollView } from "react-native-gesture-handler";
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
 const DAY_NAMES = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 
 type WeeklyData = {
@@ -64,10 +63,16 @@ export default function DashboardScreen() {
   const [userId, setUserId] = useState<number | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [activeChartIndex, setActiveChartIndex] = useState(0);
+  const [chartSlideWidth, setChartSlideWidth] = useState(0);
   const chartScrollRef = useRef<GestureScrollView>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
   const conversionSheetRef = useRef<BottomSheet>(null);
   const contentOpacity = useRef(new Animated.Value(0)).current;
+
+  const handleChartCardLayout = useCallback((e: LayoutChangeEvent) => {
+    const cardInnerWidth = e.nativeEvent.layout.width - 40;
+    setChartSlideWidth(cardInnerWidth);
+  }, []);
 
   useEffect(() => {
     const loadIdentity = async () => {
@@ -139,17 +144,21 @@ export default function DashboardScreen() {
 
   const handleChartsMomentumEnd = useCallback((event: any) => {
     const scrollPosition = event.nativeEvent.contentOffset.x;
-    const index = Math.round(scrollPosition / (SCREEN_WIDTH - 52));
-    setActiveChartIndex(index);
-  }, []);
+    if (chartSlideWidth > 0) {
+      const index = Math.round(scrollPosition / chartSlideWidth);
+      setActiveChartIndex(index);
+    }
+  }, [chartSlideWidth]);
 
   const handlePaginationPress = useCallback((targetIndex: number) => {
-    chartScrollRef.current?.scrollTo({
-      x: targetIndex * (SCREEN_WIDTH - 72),
-      animated: true,
-    });
+    if (chartSlideWidth > 0) {
+      chartScrollRef.current?.scrollTo({
+        x: targetIndex * chartSlideWidth,
+        animated: true,
+      });
+    }
     setActiveChartIndex(targetIndex);
-  }, []);
+  }, [chartSlideWidth]);
 
   useEffect(() => {
     if (loading || !profile) {
@@ -297,7 +306,8 @@ export default function DashboardScreen() {
           </View>
 
           {/* Charts Slider */}
-          <View style={styles.chartCard}>
+          <View style={styles.chartCard} onLayout={handleChartCardLayout}>
+            {chartSlideWidth > 0 && (
             <GestureScrollView
               ref={chartScrollRef}
               horizontal
@@ -305,8 +315,7 @@ export default function DashboardScreen() {
               showsHorizontalScrollIndicator={false}
               onMomentumScrollEnd={handleChartsMomentumEnd}
             >
-              {/* Weekly Prospection Chart */}
-              <View style={[styles.chartSlide, { width: SCREEN_WIDTH - 72 }]}>
+              <View style={[styles.chartSlide, { width: chartSlideWidth }]}>
                 <View style={styles.chartHeader}>
                   <Feather name="bar-chart-2" size={20} color="#2563EB" />
                   <Text style={styles.chartTitle}>
@@ -316,8 +325,7 @@ export default function DashboardScreen() {
                 <SimpleBarChart data={weeklyData} />
               </View>
 
-              {/* Weekly Contracts Chart */}
-              <View style={[styles.chartSlide, { width: SCREEN_WIDTH - 72 }]}>
+              <View style={[styles.chartSlide, { width: chartSlideWidth }]}>
                 <View style={styles.chartHeader}>
                   <Feather name="file-text" size={20} color="#10B981" />
                   <View style={styles.chartTitleContainer}>
@@ -345,6 +353,7 @@ export default function DashboardScreen() {
                 <SimpleBarChart data={weeklyContracts} color="#10B981" />
               </View>
             </GestureScrollView>
+            )}
 
             {/* Pagination Indicators */}
             <View style={styles.paginationContainer}>

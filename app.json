@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "ProWin",
-    "slug": "prospection",
+    "slug": "pro-win",
     "version": "1.0.0",
     "orientation": "default",
     "scheme": "prospection",
@@ -13,7 +13,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
-    "assetBundlePatterns": ["assets/images/*"],
+    "assetBundlePatterns": [
+      "assets/images/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bitcode": false,
@@ -80,8 +82,15 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b421ecae-103c-4370-af42-f208c46d9d28"
+        "projectId": "231db6f8-a67e-4dd0-ae71-fbd7df3df24c"
       }
+    },
+    "owner": "hatimbenzahras-organization",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/231db6f8-a67e-4dd0-ae71-fbd7df3df24c"
     }
   }
 }
