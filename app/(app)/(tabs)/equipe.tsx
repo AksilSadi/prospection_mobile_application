@@ -1,7 +1,9 @@
 import { useCommercials } from "@/hooks/api/use-commercials";
+import { useApiCall } from "@/hooks/api/use-api-call";
 import { useTeamPerformanceTimeline } from "@/hooks/api/use-team-performance-timeline";
 import { useWorkspaceProfile } from "@/hooks/api/use-workspace-profile";
 import { authService } from "@/services/auth";
+import { api } from "@/services/api";
 import type { Commercial, Manager, Statistic } from "@/types/api";
 import { calculateRank } from "@/utils/business/ranks";
 import { Feather } from "@expo/vector-icons";
@@ -29,10 +31,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type PeriodKey = "7d" | "30d" | "all";
 
-const PERIOD_OPTIONS: { key: PeriodKey; label: string }[] = [
-  { key: "7d", label: "7j" },
-  { key: "30d", label: "30j" },
-  { key: "all", label: "Tout" },
+const PERIOD_OPTIONS: {
+  key: PeriodKey;
+  label: string;
+  icon: keyof typeof Feather.glyphMap;
+}[] = [
+  { key: "7d", label: "7j", icon: "calendar" },
+  { key: "30d", label: "30j", icon: "clock" },
+  { key: "all", label: "Tout", icon: "bar-chart-2" },
 ];
 
 const INITIAL_STATS = {
@@ -152,7 +158,7 @@ const PeriodFilterChip = memo(function PeriodFilterChip({
   selected,
   onPress,
 }: {
-  option: { key: PeriodKey; label: string };
+  option: { key: PeriodKey; label: string; icon: keyof typeof Feather.glyphMap };
   selected: boolean;
   onPress: (key: PeriodKey) => void;
 }) {
@@ -161,6 +167,15 @@ const PeriodFilterChip = memo(function PeriodFilterChip({
       style={[styles.periodChip, selected && styles.periodChipActive]}
       onPress={() => onPress(option.key)}
     >
+      <View
+        style={[styles.periodChipIconWrap, selected && styles.periodChipIconWrapActive]}
+      >
+        <Feather
+          name={option.icon}
+          size={12}
+          color={selected ? "#1E3A8A" : "#2563EB"}
+        />
+      </View>
       <Text
         style={[styles.periodChipText, selected && styles.periodChipTextActive]}
       >
@@ -180,7 +195,7 @@ const TeamListItem = memo(function TeamListItem({
   const positionAccent = getPositionAccent(position);
   return (
     <View style={styles.listCard}>
-      <View style={styles.listHeader}>
+        <View style={styles.listHeader}>
         <View
           style={[
             styles.positionBadge,
@@ -217,28 +232,44 @@ const TeamListItem = memo(function TeamListItem({
           <View style={styles.rankPill}>
             <Text style={styles.rankPillText}>{commercial.rank.name}</Text>
           </View>
+          <View style={styles.pointsPill}>
+            <Feather name="zap" size={10} color="#B45309" />
+            <Text style={styles.pointsPillText}>{commercial.points} pts</Text>
+          </View>
         </View>
       </View>
       <View style={styles.listStats}>
         <View style={styles.statItem}>
+          <View style={styles.statIconWrap}>
+            <Feather name="award" size={10} color="#16A34A" />
+          </View>
           <Text style={styles.statValue}>
             {commercial.stats.contratsSignes}
           </Text>
           <Text style={styles.statLabel}>Contrats</Text>
         </View>
         <View style={styles.statItem}>
+          <View style={styles.statIconWrap}>
+            <Feather name="calendar" size={10} color="#2563EB" />
+          </View>
           <Text style={styles.statValue}>
             {commercial.stats.rendezVousPris}
           </Text>
           <Text style={styles.statLabel}>RDV</Text>
         </View>
         <View style={styles.statItem}>
+          <View style={styles.statIconWrap}>
+            <Feather name="grid" size={10} color="#0EA5E9" />
+          </View>
           <Text style={styles.statValue}>
             {commercial.stats.nbPortesProspectes}
           </Text>
           <Text style={styles.statLabel}>Portes</Text>
         </View>
         <View style={styles.statItem}>
+          <View style={styles.statIconWrap}>
+            <Feather name="trending-up" size={10} color="#F59E0B" />
+          </View>
           <Text style={styles.statValue}>{commercial.points}</Text>
           <Text style={styles.statLabel}>Points</Text>
         </View>
@@ -300,6 +331,37 @@ export default function EquipeScreen() {
 
   const periodDays = useMemo(() => getPeriodDays(period), [period]);
 
+  const teamCommercialDetailsCacheKey = useMemo(
+    () => `team-commercial-details:${teamCommercialIds.join(",") || "none"}`,
+    [teamCommercialIds],
+  );
+
+  const fetchTeamCommercialDetails = useCallback(async () => {
+    if (!teamCommercialIds.length) return {} as Record<number, Commercial>;
+    const settled = await Promise.allSettled(
+      teamCommercialIds.map(async (commercialId) =>
+        api.commercials.getFullById(commercialId),
+      ),
+    );
+
+    return settled.reduce<Record<number, Commercial>>((acc, result) => {
+      if (result.status === "fulfilled") {
+        acc[result.value.id] = result.value;
+      }
+      return acc;
+    }, {});
+  }, [teamCommercialIds]);
+
+  const { data: teamCommercialDetails, loading: teamCommercialDetailsLoading } =
+    useApiCall<Record<number, Commercial>>(
+      fetchTeamCommercialDetails,
+      [teamCommercialDetailsCacheKey],
+    {
+      cacheKey: teamCommercialDetailsCacheKey,
+      cacheTimeMs: 45_000,
+    },
+    );
+
   const { timelineStartDate, timelineEndDate } = useMemo(() => {
     if (period === "all") {
       return {
@@ -326,7 +388,22 @@ export default function EquipeScreen() {
       timelineEndDate,
     );
   const isScreenLoading =
-    loading || allCommercialsLoading || teamTimelineLoading;
+    loading ||
+    allCommercialsLoading ||
+    teamTimelineLoading ||
+    teamCommercialDetailsLoading;
+
+  const periodStartKey = useMemo(() => {
+    const days = getPeriodDays(period);
+    if (!days) return null;
+    const end = new Date();
+    end.setHours(12, 0, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - (days - 1));
+    return toDayKey(start);
+  }, [period]);
+
+  const periodEndKey = useMemo(() => toDayKey(new Date()), []);
 
   const handlePeriodChange = useCallback((nextPeriod: PeriodKey) => {
     setPeriod(nextPeriod);
@@ -434,7 +511,7 @@ export default function EquipeScreen() {
     return {
       max: roundedMax,
       step: Math.max(1, Math.ceil(roundedMax / 2)),
-      labels: [roundedMax, Math.max(1, Math.ceil(roundedMax / 2)), 0].map(
+      labels: [0, Math.max(1, Math.ceil(roundedMax / 2)), roundedMax].map(
         (value) => String(value),
       ),
     };
@@ -459,17 +536,55 @@ export default function EquipeScreen() {
 
   const teamSnapshots = useMemo<TeamSnapshot[]>(() => {
     return team.map((commercial) => {
-      const stats = filterStatsByPeriod(commercial.statistics || [], period);
-      const totals = sumStats(stats);
+      const detailedCommercial = teamCommercialDetails?.[commercial.id] ?? commercial;
+      const immeubles = detailedCommercial.immeubles || [];
+      const totals = { ...INITIAL_STATS };
+      const visitedImmeubles = new Set<number>();
+
+      for (const immeuble of immeubles) {
+        for (const porte of immeuble.portes || []) {
+          const statut = typeof porte.statut === "string" ? porte.statut : "";
+          if (!statut || statut === "NON_VISITE") continue;
+
+          const visitDay = porte.derniereVisite?.slice(0, 10);
+          if (period !== "all") {
+            if (!visitDay || !periodStartKey) continue;
+            if (visitDay < periodStartKey || visitDay > periodEndKey) continue;
+          }
+
+          visitedImmeubles.add(immeuble.id);
+          totals.nbPortesProspectes = (totals.nbPortesProspectes || 0) + 1;
+
+          if (statut === "CONTRAT_SIGNE") {
+            totals.contratsSignes += Math.max(1, porte.nbContrats || 1);
+          } else if (statut === "RENDEZ_VOUS_PRIS") {
+            totals.rendezVousPris += 1;
+          } else if (statut === "REFUS") {
+            totals.refus += 1;
+          } else if (statut === "ABSENT") {
+            totals.absents = (totals.absents || 0) + 1;
+          } else if (statut === "ARGUMENTE") {
+            totals.argumentes = (totals.argumentes || 0) + 1;
+          }
+        }
+      }
+
+      if ((totals.nbPortesProspectes || 0) === 0) {
+        const fallbackStats = filterStatsByPeriod(commercial.statistics || [], period);
+        const fallbackTotals = sumStats(fallbackStats);
+        Object.assign(totals, fallbackTotals);
+      }
+
+      totals.nbImmeublesProspectes = visitedImmeubles.size;
+      totals.immeublesVisites = visitedImmeubles.size;
       const { rank, points } = calculateRank(
         totals.contratsSignes,
         totals.rendezVousPris,
         totals.immeublesVisites,
       );
-      const zones = commercial.zones || [];
-      const immeubles = commercial.immeubles || [];
+      const zones = detailedCommercial.zones || [];
       return {
-        ...commercial,
+        ...detailedCommercial,
         stats: totals,
         rank,
         points,
@@ -477,7 +592,7 @@ export default function EquipeScreen() {
         immeubleCount: immeubles.length,
       };
     });
-  }, [period, team]);
+  }, [period, periodEndKey, periodStartKey, team, teamCommercialDetails]);
 
   const orderedTeamSnapshots = useMemo(
     () =>
@@ -887,12 +1002,26 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   periodChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#E2E8F0",
     backgroundColor: "#FFFFFF",
+  },
+  periodChipIconWrap: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EFF6FF",
+  },
+  periodChipIconWrapActive: {
+    backgroundColor: "#DBEAFE",
   },
   periodChipActive: {
     borderColor: "#2563EB",
@@ -908,7 +1037,7 @@ const styles = StyleSheet.create({
   },
   skeletonChip: {
     height: 30,
-    width: 58,
+    width: 82,
     borderRadius: 999,
     backgroundColor: "#E2E8F0",
   },
@@ -1166,6 +1295,7 @@ const styles = StyleSheet.create({
   listHeaderRight: {
     alignItems: "flex-end",
     justifyContent: "center",
+    gap: 6,
     marginLeft: 6,
   },
   listName: {
@@ -1188,6 +1318,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: "#2563EB",
+  },
+  pointsPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#FFF7ED",
+  },
+  pointsPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#9A3412",
   },
   positionBadge: {
     minWidth: 44,
@@ -1216,6 +1360,15 @@ const styles = StyleSheet.create({
   statItem: {
     flex: 1,
     alignItems: "center",
+    gap: 2,
+  },
+  statIconWrap: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
   },
   statValue: {
     fontSize: 13,
