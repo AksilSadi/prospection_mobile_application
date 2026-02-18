@@ -14,7 +14,9 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionDetails, setConnectionDetails] = useState<TokenResponse | null>(null);
+  const [isLiveKitConnected, setIsLiveKitConnected] = useState(false);
   const wasOnlineRef = useRef(getIsOnline());
+  const consecutiveErrorsRef = useRef(0);
 
   const startAudioPublishing = useCallback(async () => {
     if (!userId || !userType || !enabled || isConnecting || isConnected) return;
@@ -44,10 +46,12 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
       const details = await AudioMonitoringService.generateUserToken(userType);
       setConnectionDetails(details);
       setIsConnected(true);
+      consecutiveErrorsRef.current = 0;
     } catch (err: any) {
       if (__DEV__) {
         console.error("[Audio] Erreur connexion audio", err);
       }
+      consecutiveErrorsRef.current += 1;
       setError(null);
       setIsConnected(false);
     } finally {
@@ -66,7 +70,9 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
     await startAudioPublishing();
   }, [stopAudioPublishing, startAudioPublishing]);
 
-  useTimeout(startAudioPublishing, 600, {
+  const retryDelay = Math.min(600 * Math.pow(2, consecutiveErrorsRef.current), 60000);
+
+  useTimeout(startAudioPublishing, retryDelay, {
     autoStart: !!userId && !!userType && enabled && !isConnected && !isConnecting,
   });
 
@@ -79,8 +85,6 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
       }
       if (!online) {
         wasOnlineRef.current = false;
-        setIsConnected(false);
-        setConnectionDetails(null);
         return;
       }
       const cameBackOnline = !wasOnlineRef.current && online;
@@ -92,6 +96,27 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
     return unsubscribe;
   }, [enabled, restartAudioPublishing]);
 
+  const onLiveKitConnected = useCallback(() => {
+    if (__DEV__) console.log("[Audio] LiveKit connected");
+    setIsLiveKitConnected(true);
+    consecutiveErrorsRef.current = 0;
+  }, []);
+
+  const onLiveKitDisconnected = useCallback(() => {
+    if (__DEV__) console.log("[Audio] LiveKit disconnected");
+    setIsLiveKitConnected(false);
+  }, []);
+
+  const onLiveKitError = useCallback((err: any) => {
+    const msg = String(err?.message ?? err ?? "");
+    if (__DEV__) console.error("[Audio] LiveKit error:", msg);
+    if (msg.toLowerCase().includes("permission")) {
+      consecutiveErrorsRef.current += 1;
+      setConnectionDetails(null);
+      setIsConnected(false);
+    }
+  }, []);
+
   return {
     isConnected,
     isConnecting,
@@ -102,5 +127,8 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
     restartAudioPublishing,
     roomName: connectionDetails?.roomName,
     participantName: connectionDetails?.participantName,
+    onLiveKitConnected,
+    onLiveKitDisconnected,
+    onLiveKitError,
   };
 }

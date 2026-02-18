@@ -54,7 +54,12 @@ function AppContent() {
     };
   }, [router]);
 
-  const { connectionDetails } = useAutoAudio(userId, role, true);
+  const {
+    connectionDetails,
+    onLiveKitConnected,
+    onLiveKitDisconnected,
+    onLiveKitError,
+  } = useAutoAudio(userId, role, true);
   const isAudioConnected = !!connectionDetails;
   const audioSessionValue = {
     connectionDetails,
@@ -77,9 +82,9 @@ function AppContent() {
                 connect
                 audio
                 video={false}
-                onConnected={() => console.log("[LiveKit] connected")}
-                onDisconnected={() => console.log("[LiveKit] disconnected")}
-                onError={(err) => console.log("[LiveKit] error", err)}
+                onConnected={onLiveKitConnected}
+                onDisconnected={onLiveKitDisconnected}
+                onError={onLiveKitError}
               />
             </View>
           ) : null}
