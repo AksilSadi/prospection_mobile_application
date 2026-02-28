@@ -8,6 +8,8 @@ const STORAGE_KEYS = {
   refreshToken: 'refresh_token',
   expiresAt: 'token_expires_at',
   userId: 'user_id',
+  savedUsername: 'saved_username',
+  savedPassword: 'saved_password',
 };
 
 const LOGIN_MUTATION = `
@@ -57,6 +59,7 @@ export class AuthService {
       }
 
       await this.storeAuthData(authResponse);
+      await this.saveCredentials(credentials);
       graphqlClient.setAuthToken(authResponse.access_token);
 
       return authResponse;
@@ -87,7 +90,10 @@ export class AuthService {
       graphqlClient.setAuthToken(authResponse.access_token);
       return authResponse;
     } catch (error) {
-      console.error('Refresh token failed:', error);
+      console.warn('Refresh token failed, attempting auto-re-login...');
+      const reLoginResult = await this.autoReLogin();
+      if (reLoginResult) return reLoginResult;
+      console.error('Auto-re-login also failed, logging out');
       await this.logout();
       return null;
     }
@@ -95,7 +101,47 @@ export class AuthService {
 
   async logout(): Promise<void> {
     await this.clearAuthData();
+    await this.clearSavedCredentials();
     graphqlClient.clearAuthToken();
+  }
+
+  async saveCredentials(credentials: LoginCredentials): Promise<void> {
+    await SecureStore.setItemAsync(STORAGE_KEYS.savedUsername, credentials.username);
+    await SecureStore.setItemAsync(STORAGE_KEYS.savedPassword, credentials.password);
+  }
+
+  async getSavedCredentials(): Promise<LoginCredentials | null> {
+    const username = await SecureStore.getItemAsync(STORAGE_KEYS.savedUsername);
+    const password = await SecureStore.getItemAsync(STORAGE_KEYS.savedPassword);
+    if (!username || !password) return null;
+    return { username, password };
+  }
+
+  async clearSavedCredentials(): Promise<void> {
+    await SecureStore.deleteItemAsync(STORAGE_KEYS.savedUsername);
+    await SecureStore.deleteItemAsync(STORAGE_KEYS.savedPassword);
+  }
+
+  private async autoReLogin(): Promise<AuthResponse | null> {
+    const credentials = await this.getSavedCredentials();
+    if (!credentials) return null;
+
+    try {
+      const data = await graphqlClient.request<{ login: AuthResponse }>(LOGIN_MUTATION, {
+        loginInput: credentials,
+      });
+
+      const authResponse = data.login;
+      const hasAuthorizedGroup = authResponse.groups.some(group => ALLOWED_GROUPS.includes(group));
+      if (!hasAuthorizedGroup) return null;
+
+      await this.storeAuthData(authResponse);
+      graphqlClient.setAuthToken(authResponse.access_token);
+      return authResponse;
+    } catch (reLoginError) {
+      console.error('Auto-re-login failed:', reLoginError);
+      return null;
+    }
   }
 
   async isAuthenticated(): Promise<boolean> {
@@ -222,6 +268,8 @@ export class AuthService {
     await SecureStore.deleteItemAsync(STORAGE_KEYS.refreshToken);
     await SecureStore.deleteItemAsync(STORAGE_KEYS.expiresAt);
     await SecureStore.deleteItemAsync(STORAGE_KEYS.userId);
+    // Note: savedUsername/savedPassword are NOT cleared on logout
+    // so the user doesn't have to re-enter credentials next time
   }
 
   async getUserEmail(): Promise<string | null> {

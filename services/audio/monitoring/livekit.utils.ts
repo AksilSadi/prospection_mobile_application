@@ -8,12 +8,12 @@ export class LiveKitUtils {
     await room.connect(details.serverUrl, details.participantToken);
 
     const audioTrack = await createLocalAudioTrack({
-      echoCancellation: true,
+      echoCancellation: false,
       noiseSuppression: true,
       autoGainControl: true,
     });
 
-    await room.localParticipant.publishTrack(audioTrack);
+    await room.localParticipant.publishTrack(audioTrack, { audioBitrate: 64_000 });
     AudioEventLogger.logMicrophoneUnmuted("Track audio publie", `room=${details.roomName}`);
 
     room.on("disconnected", reason => {

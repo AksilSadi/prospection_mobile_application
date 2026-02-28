@@ -1,7 +1,7 @@
 import { authService } from "@/services/auth";
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -21,6 +21,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isAutoLogging, setIsAutoLogging] = useState(true);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const { width, height } = useWindowDimensions();
@@ -28,6 +29,28 @@ export default function LoginScreen() {
   const verticalSpacing = height * 0.04;
   const cardPadding = Math.min(30, width * 0.08);
 
+  const attemptAutoLogin = useCallback(async () => {
+    try {
+      const saved = await authService.getSavedCredentials();
+      if (!saved) {
+        setIsAutoLogging(false);
+        return;
+      }
+
+      setEmail(saved.username);
+      setPassword(saved.password);
+
+      await authService.login(saved);
+      router.replace("/(app)");
+    } catch {
+      // Auto-login failed — show the form with pre-filled fields
+      setIsAutoLogging(false);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    attemptAutoLogin();
+  }, [attemptAutoLogin]);
   const handleLogin = async () => {
     setError("");
 
@@ -54,6 +77,15 @@ export default function LoginScreen() {
       setIsLoading(false);
     }
   };
+
+  if (isAutoLogging) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { justifyContent: "center", alignItems: "center" }]}>
+        <ActivityIndicator size="large" color="#2563EB" />
+        <Text style={{ marginTop: 16, color: "#64748B", fontSize: 16 }}>Connexion automatique...</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>

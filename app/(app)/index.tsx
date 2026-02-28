@@ -9,9 +9,9 @@ import {
   useProfileSheet,
 } from "@/hooks/use-profile-sheet";
 import { authService } from "@/services/auth";
-import { LiveKitRoom } from "@livekit/react-native";
+import { AudioSession, LiveKitRoom } from "@livekit/react-native";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 function AppContent() {
@@ -54,6 +54,27 @@ function AppContent() {
     };
   }, [router]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    const setupAudioSession = async () => {
+      try {
+        await AudioSession.startAudioSession();
+      } catch (err) {
+        if (__DEV__ && mounted) {
+          console.error("[Audio] Impossible de demarrer la session audio", err);
+        }
+      }
+    };
+
+    void setupAudioSession();
+
+    return () => {
+      mounted = false;
+      void AudioSession.stopAudioSession();
+    };
+  }, []);
+
   const {
     connectionDetails,
     onLiveKitConnected,
@@ -65,6 +86,20 @@ function AppContent() {
     connectionDetails,
     isConnected: isAudioConnected,
   };
+
+  const roomOptions = useMemo(
+    () => ({
+      audioCaptureDefaults: {
+        echoCancellation: false,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      publishDefaults: {
+        audioBitrate: 64_000,
+      },
+    }),
+    [],
+  );
 
   return (
     <AudioSessionProvider value={audioSessionValue}>
@@ -82,6 +117,7 @@ function AppContent() {
                 connect
                 audio
                 video={false}
+                options={roomOptions}
                 onConnected={onLiveKitConnected}
                 onDisconnected={onLiveKitDisconnected}
                 onError={onLiveKitError}
