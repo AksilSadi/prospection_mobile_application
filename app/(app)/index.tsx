@@ -9,7 +9,7 @@ import {
   useProfileSheet,
 } from "@/hooks/use-profile-sheet";
 import { authService } from "@/services/auth";
-import { AudioSession, LiveKitRoom } from "@livekit/react-native";
+import { AudioSession, AndroidAudioTypePresets, LiveKitRoom } from "@livekit/react-native";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -59,6 +59,13 @@ function AppContent() {
 
     const setupAudioSession = async () => {
       try {
+        // Configure Android audio pipeline for voice communication
+        // MUST be called before startAudioSession()
+        AudioSession.configureAudio({
+          android: {
+            audioTypeOptions: AndroidAudioTypePresets.communication,
+          },
+        });
         await AudioSession.startAudioSession();
       } catch (err) {
         if (__DEV__ && mounted) {
