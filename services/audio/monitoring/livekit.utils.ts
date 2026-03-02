@@ -1,4 +1,4 @@
-import { Room, createLocalAudioTrack } from "livekit-client";
+import { Room, createLocalAudioTrack, AudioPresets } from "livekit-client";
 import { AudioEventLogger } from "../audio.logger";
 import type { TokenResponse } from "./monitoring.types";
 
@@ -9,11 +9,16 @@ export class LiveKitUtils {
 
     const audioTrack = await createLocalAudioTrack({
       echoCancellation: false,
-      noiseSuppression: true,
-      autoGainControl: true,
+      noiseSuppression: false,
+      autoGainControl: false,
+      voiceIsolation: false,
     });
 
-    await room.localParticipant.publishTrack(audioTrack, { audioBitrate: 64_000 });
+    await room.localParticipant.publishTrack(audioTrack, {
+      audioPreset: AudioPresets.musicHighQuality,
+      dtx: false,
+      red: true,
+    });
     AudioEventLogger.logMicrophoneUnmuted("Track audio publie", `room=${details.roomName}`);
 
     room.on("disconnected", reason => {
