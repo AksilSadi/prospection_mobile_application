@@ -12,3 +12,37 @@ export type StartRecordingInput = {
   immeubleId?: number | null;
   audioOnly?: boolean;
 };
+
+export type RequestRecordingUploadInput = {
+  roomName: string;
+  immeubleId?: number | null;
+  participantIdentity?: string | null;
+  mimeType?: string;
+  duration?: number | null;
+  fileSize?: number | null;
+};
+
+export type RecordingUploadDetails = {
+  uploadUrl: string;
+  s3Key: string;
+  expiresIn: number;
+};
+
+export type ConfirmRecordingUploadInput = {
+  s3Key: string;
+  duration?: number | null;
+};
+
+export type RecordingItem = {
+  key: string;
+  url?: string | null;
+  size?: number | null;
+  lastModified?: string | null;
+};
+
+export type LocalRecordingState = {
+  isRecording: boolean;
+  isUploading: boolean;
+  fileUri: string | null;
+  durationMs: number;
+};

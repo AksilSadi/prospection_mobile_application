@@ -1,5 +1,12 @@
 import { graphqlClient } from "@/services/core/graphql";
-import type { RecordingResult, StartRecordingInput } from "./recording.types";
+import type {
+  RecordingResult,
+  StartRecordingInput,
+  RequestRecordingUploadInput,
+  RecordingUploadDetails,
+  ConfirmRecordingUploadInput,
+  RecordingItem,
+} from "./recording.types";
 
 const START_RECORDING = `
   mutation StartRecording($input: StartRecordingInput!) {
@@ -19,6 +26,27 @@ const STOP_RECORDING = `
   }
 `;
 
+const REQUEST_RECORDING_UPLOAD = `
+  mutation RequestRecordingUpload($input: RequestRecordingUploadInput!) {
+    requestRecordingUpload(input: $input) {
+      uploadUrl
+      s3Key
+      expiresIn
+    }
+  }
+`;
+
+const CONFIRM_RECORDING_UPLOAD = `
+  mutation ConfirmRecordingUpload($input: ConfirmRecordingUploadInput!) {
+    confirmRecordingUpload(input: $input) {
+      key
+      url
+      size
+      lastModified
+    }
+  }
+`;
+
 export class RecordingService {
   static async startRecording(input: StartRecordingInput): Promise<RecordingResult> {
     const data = await graphqlClient.request<{ startRecording: RecordingResult }>(
@@ -34,5 +62,23 @@ export class RecordingService {
       { input: { egressId } },
     );
     return data.stopRecording;
+  }
+
+  static async requestRecordingUpload(
+    input: RequestRecordingUploadInput,
+  ): Promise<RecordingUploadDetails> {
+    const data = await graphqlClient.request<{
+      requestRecordingUpload: RecordingUploadDetails;
+    }>(REQUEST_RECORDING_UPLOAD, { input });
+    return data.requestRecordingUpload;
+  }
+
+  static async confirmRecordingUpload(
+    input: ConfirmRecordingUploadInput,
+  ): Promise<RecordingItem> {
+    const data = await graphqlClient.request<{
+      confirmRecordingUpload: RecordingItem;
+    }>(CONFIRM_RECORDING_UPLOAD, { input });
+    return data.confirmRecordingUpload;
   }
 }

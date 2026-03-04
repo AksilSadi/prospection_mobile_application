@@ -1,4 +1,3 @@
-import ConnectivityBanner from "@/components/network/ConnectivityBanner";
 import { enableOfflineQueueAutoSync } from "@/services/offline/offline-queue.service";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { registerGlobals } from "@livekit/react-native";
@@ -19,7 +18,6 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <Stack screenOptions={{ headerShown: false }} />
-        <ConnectivityBanner />
         <StatusBar style="light" translucent backgroundColor="transparent" />
       </BottomSheetModalProvider>
     </GestureHandlerRootView>

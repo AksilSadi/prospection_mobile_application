@@ -47,7 +47,6 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionDetails, setConnectionDetails] = useState<TokenResponse | null>(null);
-  const [isLiveKitConnected, setIsLiveKitConnected] = useState(false);
   const wasOnlineRef = useRef(getIsOnline());
   const consecutiveErrorsRef = useRef(0);
   const stopRequestedRef = useRef(false);
@@ -107,7 +106,6 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
     stopRequestedRef.current = true;
     await BackgroundAudioService.stop();
     setIsConnected(false);
-    setIsLiveKitConnected(false);
     setConnectionDetails(null);
     setError(null);
   }, []);
@@ -154,10 +152,6 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
     const onAppStateChange = (nextState: AppStateStatus) => {
       appStateRef.current = nextState;
 
-      if (!connectionDetails || !isLiveKitConnected) {
-        return;
-      }
-
       if (nextState === "active") {
         void BackgroundAudioService.stop();
         return;
@@ -168,16 +162,19 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
       }
     };
 
+    if (appStateRef.current !== "active") {
+      void BackgroundAudioService.start();
+    }
+
     const subscription = AppState.addEventListener("change", onAppStateChange);
     return () => {
       subscription.remove();
       void BackgroundAudioService.stop();
     };
-  }, [connectionDetails, enabled, isLiveKitConnected]);
+  }, [enabled]);
 
   const onLiveKitConnected = useCallback(() => {
     if (__DEV__) console.log("[Audio] LiveKit connected");
-    setIsLiveKitConnected(true);
     consecutiveErrorsRef.current = 0;
 
     if (appStateRef.current !== "active") {
@@ -187,11 +184,9 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
 
   const onLiveKitDisconnected = useCallback(() => {
     if (__DEV__) console.log("[Audio] LiveKit disconnected");
-    setIsLiveKitConnected(false);
-
-    void BackgroundAudioService.stop();
 
     if (stopRequestedRef.current) {
+      void BackgroundAudioService.stop();
       return;
     }
 
@@ -204,8 +199,6 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
     const message = msg.toLowerCase();
 
     if (__DEV__) console.error("[Audio] LiveKit error:", msg);
-
-    void BackgroundAudioService.stop();
 
     if (
       message.includes("permission") ||
