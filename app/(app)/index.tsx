@@ -126,6 +126,7 @@ function AppContent() {
           {connectionDetails ? (
             <View style={styles.livekitHost}>
               <LiveKitRoom
+                key={`${connectionDetails.roomName}:${connectionDetails.participantToken}`}
                 serverUrl={connectionDetails.serverUrl}
                 token={connectionDetails.participantToken}
                 connect

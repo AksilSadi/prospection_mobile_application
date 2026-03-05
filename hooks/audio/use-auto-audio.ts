@@ -11,6 +11,15 @@ import {
 
 const LIVEKIT_CONNECTION_ERROR = "could not establish pc connection";
 
+function isRecoverableLiveKitOfferError(message: string): boolean {
+  return (
+    message.includes("unable to set offer") ||
+    message.includes("local fingerprint does not match identity") ||
+    message.includes("failed to apply the description") ||
+    message.includes("error_content")
+  );
+}
+
 function normalizeServerUrl(url: string): string {
   const raw = String(url ?? "").trim();
   if (!raw) {
@@ -51,10 +60,14 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
   const consecutiveErrorsRef = useRef(0);
   const stopRequestedRef = useRef(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const isStartingRef = useRef(false);
 
   const startAudioPublishing = useCallback(async () => {
-    if (!userId || !userType || !enabled || isConnecting || isConnected) return;
+    if (!userId || !userType || !enabled || isConnected || isStartingRef.current) {
+      return;
+    }
 
+    isStartingRef.current = true;
     stopRequestedRef.current = false;
 
     if (!getIsOnline()) {
@@ -98,12 +111,14 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
       setIsConnected(false);
       setConnectionDetails(null);
     } finally {
+      isStartingRef.current = false;
       setIsConnecting(false);
     }
-  }, [userId, userType, enabled, isConnecting, isConnected]);
+  }, [userId, userType, enabled, isConnected]);
 
   const stopAudioPublishing = useCallback(async () => {
     stopRequestedRef.current = true;
+    isStartingRef.current = false;
     await BackgroundAudioService.stop();
     setIsConnected(false);
     setConnectionDetails(null);
@@ -197,10 +212,12 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
   const onLiveKitError = useCallback((err: unknown) => {
     const msg = getErrorMessage(err);
     const message = msg.toLowerCase();
+    const hasRecoverableOfferError = isRecoverableLiveKitOfferError(message);
 
     if (__DEV__) console.error("[Audio] LiveKit error:", msg);
 
     if (
+      hasRecoverableOfferError ||
       message.includes("permission") ||
       message.includes("service not found") ||
       message.includes("handshake") ||

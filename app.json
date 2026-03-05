@@ -59,6 +59,7 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "./plugins/with-foreground-service-type",
       "expo-router",
       [
         "expo-splash-screen",

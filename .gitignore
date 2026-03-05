@@ -48,3 +48,6 @@ build/
 .env
 .env.*
 .DS_Store
+
+# APK builds
+*.apk
