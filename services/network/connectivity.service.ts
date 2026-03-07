@@ -2,8 +2,9 @@ import NetInfo from "@react-native-community/netinfo";
 
 type ConnectivityListener = (isOnline: boolean) => void;
 
-let isOnline = true;
+let isOnline = false;
 let isInitialized = false;
+let isConnectivityReady = false;
 const listeners = new Set<ConnectivityListener>();
 
 function notify(nextIsOnline: boolean): void {
@@ -13,9 +14,13 @@ function notify(nextIsOnline: boolean): void {
 }
 
 function handleStateChange(nextIsOnline: boolean): void {
-  if (nextIsOnline === isOnline) return;
+  const wasReady = isConnectivityReady;
+  const hasChanged = nextIsOnline !== isOnline;
   isOnline = nextIsOnline;
-  notify(nextIsOnline);
+  isConnectivityReady = true;
+  if (!wasReady || hasChanged) {
+    notify(nextIsOnline);
+  }
 }
 
 export function ensureConnectivityMonitoring(): void {
@@ -35,12 +40,16 @@ export function ensureConnectivityMonitoring(): void {
 
 export function subscribeConnectivity(listener: ConnectivityListener): () => void {
   listeners.add(listener);
-  listener(isOnline);
+  listener(getIsOnline());
   return () => {
     listeners.delete(listener);
   };
 }
 
 export function getIsOnline(): boolean {
-  return isOnline;
+  return isConnectivityReady ? isOnline : false;
+}
+
+export function isConnectivityInitialized(): boolean {
+  return isConnectivityReady;
 }

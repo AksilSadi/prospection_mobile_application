@@ -19,6 +19,7 @@ export async function uploadRecording(
 ): Promise<RecordingItem> {
   const { fileUri, roomName, durationMs, fileSize, immeubleId, participantIdentity } =
     input;
+  const durationSeconds = Math.max(1, Math.round(durationMs / 1000));
 
   if (__DEV__) console.log("[Upload] Starting upload. room:", roomName, "file:", fileUri, "size:", fileSize, "duration:", durationMs, "ms");
 
@@ -27,7 +28,7 @@ export async function uploadRecording(
     immeubleId,
     participantIdentity,
     mimeType: "audio/mp4",
-    duration: Math.round(durationMs / 1000),
+    duration: durationSeconds,
     fileSize,
   };
 
@@ -47,17 +48,21 @@ export async function uploadRecording(
   if (__DEV__) console.log("[Upload] S3 response status:", uploadResult.status);
 
   if (uploadResult.status < 200 || uploadResult.status >= 300) {
-    throw new Error(`S3 upload failed with status ${uploadResult.status}`);
+    throw new Error(`ERROR 102 CONTACT ADMIN`);
   }
 
   if (__DEV__) console.log("[Upload] Confirming upload...");
   const confirmed = await RecordingService.confirmRecordingUpload({
     s3Key,
-    duration: Math.round(durationMs / 1000),
+    duration: durationSeconds,
   });
   if (__DEV__) console.log("[Upload] Confirmed. Deleting local file...");
 
-  await FileSystem.deleteAsync(fileUri, { idempotent: true });
+  try {
+    await FileSystem.deleteAsync(fileUri, { idempotent: true });
+  } catch (deleteErr) {
+    if (__DEV__) console.warn("[Upload] Failed to delete local file (upload succeeded):", deleteErr);
+  }
   if (__DEV__) console.log("[Upload] Done. key:", confirmed.key);
 
   return confirmed;

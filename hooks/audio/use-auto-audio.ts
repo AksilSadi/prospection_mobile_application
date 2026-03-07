@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, type AppStateStatus, PermissionsAndroid, Platform } from "react-native";
-import { AudioMonitoringService, BackgroundAudioService } from "@/services/audio";
+import { PermissionsAndroid, Platform } from "react-native";
+import { AudioMonitoringService } from "@/services/audio";
 import { useTimeout } from "@/hooks/utils/async/use-timeout";
 import type { TokenResponse } from "@/services/audio/monitoring/monitoring.types";
 import {
@@ -56,10 +56,10 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionDetails, setConnectionDetails] = useState<TokenResponse | null>(null);
+  const [isOnline, setIsOnline] = useState(getIsOnline());
   const wasOnlineRef = useRef(getIsOnline());
   const consecutiveErrorsRef = useRef(0);
   const stopRequestedRef = useRef(false);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const isStartingRef = useRef(false);
 
   const startAudioPublishing = useCallback(async () => {
@@ -73,6 +73,7 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
     if (!getIsOnline()) {
       setIsConnected(false);
       setConnectionDetails(null);
+      isStartingRef.current = false;
       return;
     }
 
@@ -119,7 +120,6 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
   const stopAudioPublishing = useCallback(async () => {
     stopRequestedRef.current = true;
     isStartingRef.current = false;
-    await BackgroundAudioService.stop();
     setIsConnected(false);
     setConnectionDetails(null);
     setError(null);
@@ -130,26 +130,39 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
     await startAudioPublishing();
   }, [stopAudioPublishing, startAudioPublishing]);
 
-  const retryDelay = Math.min(600 * Math.pow(2, consecutiveErrorsRef.current), 60000);
+  const retryDelay = Math.min(3000 * Math.pow(2, consecutiveErrorsRef.current), 60000);
 
   useTimeout(startAudioPublishing, retryDelay, {
     autoStart:
-      !!userId && !!userType && enabled && !stopRequestedRef.current && !isConnected && !isConnecting,
+      !!userId &&
+      !!userType &&
+      enabled &&
+      isOnline &&
+      !stopRequestedRef.current &&
+      !isConnected &&
+      !isConnecting,
   });
 
   useEffect(() => {
     ensureConnectivityMonitoring();
     const unsubscribe = subscribeConnectivity((online) => {
+      setIsOnline(online);
+
       if (!enabled) {
         wasOnlineRef.current = online;
         return;
       }
+
       if (!online) {
         wasOnlineRef.current = false;
+        setConnectionDetails(null);
+        setIsConnected(false);
         return;
       }
+
       const cameBackOnline = !wasOnlineRef.current && online;
       wasOnlineRef.current = online;
+
       if (cameBackOnline) {
         stopRequestedRef.current = false;
         void restartAudioPublishing();
@@ -158,50 +171,15 @@ export function useAutoAudio(userId: number | null, userType: string | null, ena
     return unsubscribe;
   }, [enabled, restartAudioPublishing]);
 
-  useEffect(() => {
-    if (!enabled) {
-      void BackgroundAudioService.stop();
-      return;
-    }
-
-    const onAppStateChange = (nextState: AppStateStatus) => {
-      appStateRef.current = nextState;
-
-      if (nextState === "active") {
-        void BackgroundAudioService.stop();
-        return;
-      }
-
-      if (nextState === "background" || nextState === "inactive") {
-        void BackgroundAudioService.start();
-      }
-    };
-
-    if (appStateRef.current !== "active") {
-      void BackgroundAudioService.start();
-    }
-
-    const subscription = AppState.addEventListener("change", onAppStateChange);
-    return () => {
-      subscription.remove();
-      void BackgroundAudioService.stop();
-    };
-  }, [enabled]);
-
   const onLiveKitConnected = useCallback(() => {
     if (__DEV__) console.log("[Audio] LiveKit connected");
     consecutiveErrorsRef.current = 0;
-
-    if (appStateRef.current !== "active") {
-      void BackgroundAudioService.start();
-    }
   }, []);
 
   const onLiveKitDisconnected = useCallback(() => {
     if (__DEV__) console.log("[Audio] LiveKit disconnected");
 
     if (stopRequestedRef.current) {
-      void BackgroundAudioService.stop();
       return;
     }
 

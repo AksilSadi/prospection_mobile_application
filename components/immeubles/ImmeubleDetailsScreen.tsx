@@ -535,7 +535,7 @@ function ImmeubleDetailsView({
   const filteredPortesRef = useRef<Porte[]>([]);
   const currentPorteRef = useRef<Porte | undefined>(undefined);
   const pendingFloorPlanDoorIdRef = useRef<number | null>(null);
-  const { error: recordingError } = useRecording({
+  useRecording({
     enabled: true,
     immeubleId: immeuble.id,
   });
@@ -660,10 +660,7 @@ function ImmeubleDetailsView({
     editSheetRef.current?.present();
   }, [editMode, editPorte]);
 
-  useEffect(() => {
-    if (!recordingError) return;
-    console.log("[Recording] start failed", recordingError);
-  }, [recordingError]);
+
 
   const triggerFloorPlan = useCallback(() => {
     setShowFloorPlan(true);
