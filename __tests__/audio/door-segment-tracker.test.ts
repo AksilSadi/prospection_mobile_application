@@ -164,6 +164,38 @@ describe("DoorSegmentTracker", () => {
       expect(tracker.getSegments()[0].endTime).toBe(5);
     });
 
+    it("stores statut when provided", () => {
+      const { tracker, advance } = createTracker(0);
+      tracker.start();
+      tracker.markDoorStart(PORTE_101);
+      advance(10_000);
+      tracker.markDoorEnd(101, "CONTRAT_SIGNE");
+
+      const seg = tracker.getSegments()[0];
+      expect(seg.statut).toBe("CONTRAT_SIGNE");
+    });
+
+    it("leaves statut undefined when not provided", () => {
+      const { tracker, advance } = createTracker(0);
+      tracker.start();
+      tracker.markDoorStart(PORTE_101);
+      advance(10_000);
+      tracker.markDoorEnd(101);
+
+      const seg = tracker.getSegments()[0];
+      expect(seg.statut).toBeUndefined();
+    });
+
+    it("does not store statut on discarded segments (< 5s)", () => {
+      const { tracker, advance } = createTracker(0);
+      tracker.start();
+      tracker.markDoorStart(PORTE_101);
+      advance(3_000);
+      tracker.markDoorEnd(101, "REFUS");
+
+      expect(tracker.getSegments()).toHaveLength(0);
+    });
+
     it("is a no-op if porteId has no open segment", () => {
       const { tracker } = createTracker(0);
       tracker.start();
