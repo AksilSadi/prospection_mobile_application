@@ -3,6 +3,7 @@ import { RecordingService } from "./recording.service";
 import type {
   RequestRecordingUploadInput,
   RecordingItem,
+  DoorSegment,
 } from "./recording.types";
 
 export type UploadRecordingInput = {
@@ -12,6 +13,7 @@ export type UploadRecordingInput = {
   fileSize: number;
   immeubleId?: number | null;
   participantIdentity?: string | null;
+  doorSegments?: DoorSegment[];
 };
 
 export async function uploadRecording(
@@ -52,9 +54,16 @@ export async function uploadRecording(
   }
 
   if (__DEV__) console.log("[Upload] Confirming upload...");
+  const closedSegments = input.doorSegments
+    ?.filter((s): s is DoorSegment & { endTime: number } => s.endTime !== null && s.endTime - s.startTime >= 5)
+    ?? [];
+  if (__DEV__ && closedSegments.length > 0) {
+    console.log("[Upload] Door segments:", closedSegments.length, JSON.stringify(closedSegments));
+  }
   const confirmed = await RecordingService.confirmRecordingUpload({
     s3Key,
     duration: durationSeconds,
+    doorSegments: closedSegments.length > 0 ? closedSegments : undefined,
   });
   if (__DEV__) console.log("[Upload] Confirmed. Deleting local file...");
 

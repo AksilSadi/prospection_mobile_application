@@ -31,6 +31,7 @@ export type RecordingUploadDetails = {
 export type ConfirmRecordingUploadInput = {
   s3Key: string;
   duration?: number | null;
+  doorSegments?: DoorSegment[];
 };
 
 export type RecordingItem = {
@@ -38,6 +39,15 @@ export type RecordingItem = {
   url?: string | null;
   size?: number | null;
   lastModified?: string | null;
+};
+
+export type DoorSegment = {
+  porteId: number;
+  numero: string;
+  etage: number;
+  startTime: number;
+  endTime: number | null;
+  statut?: string | null;
 };
 
 export type LocalRecordingState = {

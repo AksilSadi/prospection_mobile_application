@@ -535,7 +535,7 @@ function ImmeubleDetailsView({
   const filteredPortesRef = useRef<Porte[]>([]);
   const currentPorteRef = useRef<Porte | undefined>(undefined);
   const pendingFloorPlanDoorIdRef = useRef<number | null>(null);
-  useRecording({
+  const { markDoorStart, markDoorEnd } = useRecording({
     enabled: true,
     immeubleId: immeuble.id,
   });
@@ -824,6 +824,7 @@ function ImmeubleDetailsView({
 
   const saveEditSheet = async () => {
     if (!editPorte || !editMode || savingPorte) return;
+    markDoorEnd(editPorte.id, editMode);
     const trimmedComment = editForm.commentaire.trim();
     const isCommentOnly = editMode === "COMMENTAIRE";
     if ((editMode === "ARGUMENTE" || isCommentOnly) && !trimmedComment) {
@@ -918,11 +919,14 @@ function ImmeubleDetailsView({
     (event: any) => {
       const offsetX = event.nativeEvent.contentOffset.x;
       const nextIndex = Math.round(offsetX / Math.max(1, width));
-      setCurrentIndex((prev) =>
-        Math.max(0, Math.min(nextIndex, filteredPortes.length - 1)),
-      );
+      const clampedIndex = Math.max(0, Math.min(nextIndex, filteredPortes.length - 1));
+      const nextPorte = filteredPortes[clampedIndex];
+      if (nextPorte) {
+        markDoorStart(nextPorte);
+      }
+      setCurrentIndex(clampedIndex);
     },
-    [filteredPortes.length, width],
+    [filteredPortes, width, markDoorStart],
   );
 
   const currentPorte = filteredPortes[currentIndex];
@@ -933,6 +937,16 @@ function ImmeubleDetailsView({
     filteredPortesRef.current = filteredPortes;
     currentPorteRef.current = currentPorte;
   }, [currentPorte, filteredPortes]);
+
+  const initialDoorMarkedRef = useRef(false);
+  useEffect(() => {
+    if (initialDoorMarkedRef.current) return;
+    const firstPorte = filteredPortes[0];
+    if (firstPorte) {
+      initialDoorMarkedRef.current = true;
+      markDoorStart(firstPorte);
+    }
+  }, [filteredPortes, markDoorStart]);
 
   useEffect(() => {
     const pendingDoorId = pendingFloorPlanDoorIdRef.current;
@@ -1289,6 +1303,7 @@ function ImmeubleDetailsView({
 
   const applyStatus = useCallback(
     async (porte: Porte, statut: string, extra?: { nbRepassages?: number }) => {
+      markDoorEnd(porte.id, statut);
       const displayKey =
         statut === "ABSENT" && typeof extra?.nbRepassages === "number"
           ? extra.nbRepassages >= 2
@@ -1324,7 +1339,7 @@ function ImmeubleDetailsView({
         showToast("Erreur", "Mise a jour impossible");
       }
     },
-    [isOnline, showToast, updateLocalPorte, updatePorte],
+    [isOnline, markDoorEnd, showToast, updateLocalPorte, updatePorte],
   );
 
   const resetStatus = useCallback(

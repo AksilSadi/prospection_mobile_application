@@ -12,6 +12,10 @@ import {
 import {
   enqueueUpload,
 } from "@/services/audio/recordings/upload-queue.service";
+import {
+  DoorSegmentTracker,
+  type PorteRef,
+} from "@/services/audio/recordings/door-segment-tracker";
 
 type UseRecordingOptions = {
   enabled: boolean;
@@ -37,6 +41,7 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
   const stopInFlightRef = useRef(false);
   const enabledRef = useRef(enabled);
   const recordingContextRef = useRef<RecordingContext | null>(null);
+  const trackerRef = useRef(new DoorSegmentTracker());
 
   useEffect(() => {
     return () => {
@@ -59,6 +64,27 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
+
+  // ── Door segment markers ──────────────────────────────────────────
+
+  const markDoorStart = useCallback((porte: PorteRef) => {
+    if (!isRecordingRef.current) return;
+    trackerRef.current.markDoorStart(porte);
+    if (__DEV__) {
+      const seg = trackerRef.current.openSegment;
+      console.log("[useRecording] DOOR_START porteId:", porte.id, "at:", seg?.startTime.toFixed(1), "s");
+    }
+  }, []);
+
+  const markDoorEnd = useCallback((porteId: number, statut?: string) => {
+    if (!isRecordingRef.current) return;
+    trackerRef.current.markDoorEnd(porteId, statut);
+    if (__DEV__) {
+      console.log("[useRecording] DOOR_END porteId:", porteId, "statut:", statut, "segments:", trackerRef.current.segmentCount);
+    }
+  }, []);
+
+  // ── Auth context resolution ───────────────────────────────────────
 
   const resolveContextFromAuth = useCallback(async (): Promise<RecordingContext | null> => {
     try {
@@ -93,6 +119,8 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
 
     return recordingContextRef.current;
   }, [resolveContextFromAuth]);
+
+  // ── Background service ────────────────────────────────────────────
 
   const startBackgroundRecordingService = useCallback(async (): Promise<boolean> => {
     if (Platform.OS !== "android") {
@@ -134,6 +162,8 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
     }
   }, []);
 
+  // ── Start / Stop ─────────────────────────────────────────────────
+
   const startRecording = useCallback(async () => {
     if (!enabled || isRecordingRef.current || isStartingRef.current) {
       if (__DEV__) console.log("[useRecording] startRecording skipped. enabled:", enabled, "isRecording:", isRecordingRef.current, "isStarting:", isStartingRef.current);
@@ -142,6 +172,8 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
 
     const opId = ++operationIdRef.current;
     if (__DEV__) console.log("[useRecording] === START RECORDING === opId:", opId, "immeubleId:", immeubleId);
+
+    trackerRef.current.start();
 
     let backgroundServiceRunning = false;
 
@@ -180,6 +212,7 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
             fileSize: result.fileSize,
             immeubleId: immeubleId ?? undefined,
             participantIdentity: ctx.participantName,
+            doorSegments: trackerRef.current.getClosedSegments(),
           };
           await writeRecordingRecovery(result.fileUri, input);
           try {
@@ -237,6 +270,10 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
 
     if (__DEV__) console.log("[useRecording] === STOP RECORDING === opId:", opId, "localActive:", isLocalRecording());
 
+    trackerRef.current.closeAll();
+    const finalSegments = trackerRef.current.getClosedSegments();
+    if (__DEV__) console.log("[useRecording] Final door segments:", finalSegments.length);
+
     try {
       if (mountedRef.current) setIsStopping(true);
 
@@ -266,6 +303,7 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
           fileSize: result.fileSize,
           immeubleId: immeubleId ?? undefined,
           participantIdentity: ctx.participantName,
+          doorSegments: finalSegments,
         };
 
         await writeRecordingRecovery(result.fileUri, input);
@@ -327,5 +365,7 @@ export function useRecording({ enabled, immeubleId }: UseRecordingOptions) {
     isUploading,
     startRecording,
     stopRecording,
+    markDoorStart,
+    markDoorEnd,
   };
 }
